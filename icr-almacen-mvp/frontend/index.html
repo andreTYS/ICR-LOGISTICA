@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ICR Almacén — Panel de Inventario</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="login-screen" class="login-screen">
+    <form id="login-form" class="login-card">
+      <div class="brand" style="margin-bottom:22px;justify-content:center;">
+        <span class="brand-mark">IC</span>
+        <div>
+          <div class="brand-name" style="color:#1f2a44">ICR Almacén</div>
+          <div class="brand-sub" style="color:#667085">Módulo de Inventario · MVP</div>
+        </div>
+      </div>
+      <label>Correo
+        <input name="email" type="email" required placeholder="almacen@icr.pe" autocomplete="username" />
+      </label>
+      <label>Contraseña
+        <input name="password" type="password" required placeholder="••••••••" autocomplete="current-password" />
+      </label>
+      <button class="btn primary" type="submit" style="width:100%;margin-top:6px;">
+        <span class="btn-label">Ingresar</span>
+      </button>
+      <div id="login-error" class="login-error hidden"></div>
+      <p class="login-hint">Usuarios de prueba: almacen@icr.pe / almacen123 · supervisor@icr.pe / supervisor123</p>
+    </form>
+  </div>
+
+  <div class="shell hidden" id="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">IC</span>
+        <div>
+          <div class="brand-name">ICR Almacén</div>
+          <div class="brand-sub">Módulo de Inventario · MVP</div>
+        </div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="dashboard">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 10.5 10 4l7 6.5M5 9v7h10V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Panel</span>
+        </button>
+        <button class="nav-item" data-view="stock">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M8 4v12" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span>Stock</span>
+        </button>
+        <button class="nav-item" data-view="receive">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Ingreso</span>
+        </button>
+        <button class="nav-item" data-view="remove">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 17V7m0 0-4 4m4-4 4 4M4 6V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Salida</span>
+        </button>
+        <button class="nav-item" data-view="transfer">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 7h11m0 0-3-3m3 3-3 3M17 13H6m0 0 3 3m-3-3 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Transferencia</span>
+        </button>
+        <button class="nav-item" data-view="products">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 3 5.5v9L10 18l7-3.5v-9L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 5.5 10 9l7-3.5M10 9v9" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span>Productos</span>
+        </button>
+        <button class="nav-item" data-view="movements">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Movimientos</span>
+        </button>
+        <button class="nav-item" data-view="alerts">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Alertas</span>
+          <span id="alerts-badge" class="nav-badge hidden">0</span>
+        </button>
+      </nav>
+      <div class="sidebar-user">
+        <div class="user-row">
+          <span id="user-avatar" class="user-avatar">—</span>
+          <div>
+            <div id="user-name">—</div>
+            <div id="user-role" class="user-role"></div>
+          </div>
+        </div>
+        <button id="logout-btn" class="logout-btn">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1 id="view-title">Panel general</h1>
+          <p id="view-subtitle" class="view-subtitle">Resumen del estado del almacén</p>
+        </div>
+        <div id="toast" class="toast hidden"></div>
+      </header>
+
+      <!-- ============ DASHBOARD ============ -->
+      <section class="view active" id="view-dashboard">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-blue">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 3 5.5v9L10 18l7-3.5v-9L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <div class="kpi-value" id="kpi-products">—</div>
+              <div class="kpi-label">Productos activos</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-navy">
+              <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+            </div>
+            <div>
+              <div class="kpi-value" id="kpi-warehouses">—</div>
+              <div class="kpi-label">Almacenes activos</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-gold">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div class="kpi-value" id="kpi-movements">—</div>
+              <div class="kpi-label">Movimientos (24h)</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-card-alert" id="kpi-alerts-card">
+            <div class="kpi-icon kpi-icon-danger">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div class="kpi-value" id="kpi-alerts">—</div>
+              <div class="kpi-label">Alertas de stock bajo</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-columns">
+          <div class="dash-panel">
+            <div class="dash-panel-header">
+              <h2>Últimos movimientos</h2>
+              <button class="link-btn" data-goto="movements">Ver todos →</button>
+            </div>
+            <table class="data-table compact">
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Cantidad</th></tr></thead>
+              <tbody id="dash-movements-body"><tr><td colspan="4" class="skeleton-row">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="dash-panel">
+            <div class="dash-panel-header">
+              <h2>Stock bajo mínimo</h2>
+              <button class="link-btn" data-goto="alerts">Ver todas →</button>
+            </div>
+            <table class="data-table compact">
+              <thead><tr><th>SKU</th><th>Producto</th><th>Nivel</th></tr></thead>
+              <tbody id="dash-alerts-body"><tr><td colspan="3" class="skeleton-row">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ STOCK ============ -->
+      <section class="view" id="view-stock">
+        <div class="filters">
+          <input id="stock-sku" placeholder="Filtrar por SKU o nombre..." />
+          <select id="stock-warehouse"><option value="">Todos los almacenes</option></select>
+          <button class="btn" onclick="loadStock()">Buscar</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SKU</th><th>Producto</th><th>Almacén</th><th>Ubicación</th>
+              <th>Físico</th><th>Reservado</th><th>Disponible</th><th>P. reorden</th>
+            </tr>
+          </thead>
+          <tbody id="stock-body"></tbody>
+        </table>
+      </section>
+
+      <!-- ============ INGRESO ============ -->
+      <section class="view" id="view-receive">
+        <form class="panel-form" id="form-receive">
+          <div class="grid-2">
+            <label>SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+            </label>
+            <label>Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            </label>
+            <label>Almacén destino
+              <select name="warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label>Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" />
+            </label>
+            <label>Tipo de documento
+              <select name="tipo_documento">
+                <option value="">— sin documento —</option>
+                <option>FACTURA</option><option>GUIA</option><option>ORDEN_COMPRA</option>
+              </select>
+            </label>
+            <label>N° de documento
+              <input name="numero_documento" placeholder="ej. F001-0001" />
+            </label>
+          </div>
+          <button class="btn primary" type="submit"><span class="btn-label">Registrar ingreso</span></button>
+        </form>
+        <div id="receive-result" class="result-box"></div>
+      </section>
+
+      <!-- ============ SALIDA ============ -->
+      <section class="view" id="view-remove">
+        <form class="panel-form" id="form-remove">
+          <div class="grid-2">
+            <label>SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+            </label>
+            <label>Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            </label>
+            <label>Almacén origen
+              <select name="warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label>Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" />
+            </label>
+            <label>Código de proyecto (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" />
+            </label>
+            <label>RUC de cliente (opcional)
+              <input name="cliente_ruc" placeholder="ej. 20605309489" />
+            </label>
+          </div>
+          <button class="btn primary" type="submit"><span class="btn-label">Registrar salida</span></button>
+        </form>
+        <div id="remove-result" class="result-box"></div>
+      </section>
+
+      <!-- ============ TRANSFERENCIA ============ -->
+      <section class="view" id="view-transfer">
+        <form class="panel-form" id="form-transfer">
+          <div class="grid-2">
+            <label>SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+            </label>
+            <label>Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            </label>
+            <label>Almacén origen
+              <select name="from_warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label>Ubicación origen (opcional)
+              <input name="from_location_code" placeholder="ej. A-01-R01-N01" />
+            </label>
+            <label>Almacén destino
+              <select name="to_warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label>Ubicación destino (opcional)
+              <input name="to_location_code" placeholder="ej. A-01-R01-N01" />
+            </label>
+          </div>
+          <button class="btn primary" type="submit"><span class="btn-label">Registrar transferencia</span></button>
+        </form>
+        <div id="transfer-result" class="result-box"></div>
+      </section>
+
+      <!-- ============ PRODUCTOS ============ -->
+      <section class="view" id="view-products">
+        <form class="panel-form" id="form-product">
+          <div class="grid-2">
+            <label>SKU
+              <input name="sku" required placeholder="ej. PANEL-JA-550" />
+            </label>
+            <label>Nombre
+              <input name="nombre" required placeholder="ej. Panel Solar 550W" />
+            </label>
+            <label>Marca
+              <input name="marca" />
+            </label>
+            <label>Modelo
+              <input name="modelo" />
+            </label>
+            <label>Unidad de medida
+              <input name="unidad_medida" value="UND" />
+            </label>
+            <label>Tipo de control
+              <select name="tipo_control">
+                <option value="NORMAL">NORMAL</option>
+                <option value="LOTE">LOTE</option>
+                <option value="SERIE">SERIE</option>
+                <option value="SERIE_LOTE">SERIE_LOTE</option>
+              </select>
+            </label>
+            <label>Stock mínimo
+              <input name="stock_minimo" type="number" value="0" />
+            </label>
+            <label>Punto de reorden
+              <input name="punto_reorden" type="number" value="0" />
+            </label>
+          </div>
+          <button class="btn primary" type="submit"><span class="btn-label">Registrar producto</span></button>
+        </form>
+        <div class="filters" style="margin-top:28px">
+          <input id="product-q" placeholder="Buscar producto por nombre o SKU..." />
+          <button class="btn" onclick="loadProducts()">Buscar</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>SKU</th><th>Nombre</th><th>Marca</th><th>Tipo control</th><th>P. reorden</th></tr></thead>
+          <tbody id="products-body"></tbody>
+        </table>
+      </section>
+
+      <!-- ============ MOVIMIENTOS ============ -->
+      <section class="view" id="view-movements">
+        <div class="filters">
+          <input id="mov-sku" placeholder="Filtrar por SKU..." />
+          <button class="btn" onclick="loadMovements()">Buscar</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Cantidad</th><th>Origen</th><th>Destino</th></tr>
+          </thead>
+          <tbody id="movements-body"></tbody>
+        </table>
+      </section>
+
+      <!-- ============ ALERTAS ============ -->
+      <section class="view" id="view-alerts">
+        <table class="data-table">
+          <thead><tr><th>SKU</th><th>Producto</th><th>Almacén</th><th>Nivel actual</th><th>Nivel mínimo</th><th>Estado</th></tr></thead>
+          <tbody id="alerts-body"></tbody>
+        </table>
+      </section>
+
+      <datalist id="sku-list"></datalist>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

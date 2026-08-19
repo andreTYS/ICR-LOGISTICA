@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16
+    container_name: icr_almacen_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: icr_almacen
+      POSTGRES_USER: icr_app
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - icr_almacen_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql:ro
+    networks:
+      - icr_internal
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: icr_almacen_backend
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: icr_app
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+      PGDATABASE: icr_almacen
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
+    depends_on:
+      - db
+    networks:
+      - icr_internal
+      - traefik_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.icr-almacen.rule=Host(`${DOMAIN:-almacen.icr.example.com}`)"
+      - "traefik.http.routers.icr-almacen.entrypoints=websecure"
+      - "traefik.http.routers.icr-almacen.tls.certresolver=letsencrypt"
+      - "traefik.http.services.icr-almacen.loadbalancer.server.port=4000"
+
+volumes:
+  icr_almacen_data:
+
+networks:
+  icr_internal:
+  traefik_public:
+    external: true
+    # Debe coincidir con el nombre de la red externa que ya usa Traefik en el VPS
