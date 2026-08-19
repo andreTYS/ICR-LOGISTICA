@@ -4,42 +4,56 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ICR Almacén — Panel de Inventario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<!-- Tailwind is pre-compiled into style.css at dev time (see frontend/twbuild/) — no CDN or build step needed at runtime. -->
 <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <div id="login-screen" class="login-screen">
-    <form id="login-form" class="login-card">
-      <div class="brand" style="margin-bottom:22px;justify-content:center;">
-        <span class="brand-mark">IC</span>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen" class="login-screen min-h-screen flex items-center justify-center bg-navy-950 bg-[radial-gradient(circle_at_15%_15%,rgba(0,183,194,0.25),transparent_45%),radial-gradient(circle_at_85%_85%,rgba(0,255,194,0.12),transparent_40%),linear-gradient(160deg,#00004C_0%,#000073_100%)] p-4">
+    <form id="login-form" class="w-full max-w-sm bg-white rounded-2xl shadow-2xl shadow-black/40 p-8 flex flex-col gap-5">
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <span class="w-11 h-11 rounded-xl bg-gradient-to-br from-accent to-accent-400 text-navy-950 font-extrabold flex items-center justify-center text-sm shadow-glow">IC</span>
         <div>
-          <div class="brand-name" style="color:#1f2a44">ICR Almacén</div>
-          <div class="brand-sub" style="color:#667085">Módulo de Inventario · MVP</div>
+          <div class="font-bold text-navy-950 leading-tight">ICR Almacén</div>
+          <div class="text-xs text-slate-500 leading-tight">Módulo de Inventario · MVP</div>
         </div>
       </div>
-      <label>Correo
-        <input name="email" type="email" required placeholder="almacen@icr.pe" autocomplete="username" />
+      <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
+        Correo
+        <input name="email" type="email" required placeholder="almacen@icr.pe" autocomplete="username"
+          class="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-800 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition" />
       </label>
-      <label>Contraseña
-        <input name="password" type="password" required placeholder="••••••••" autocomplete="current-password" />
+      <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
+        Contraseña
+        <input name="password" type="password" required placeholder="••••••••" autocomplete="current-password"
+          class="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-800 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition" />
       </label>
-      <button class="btn primary" type="submit" style="width:100%;margin-top:6px;">
+      <button type="submit" class="btn-loading relative w-full rounded-lg bg-navy-950 hover:bg-navy-900 text-white font-semibold text-sm py-2.5 mt-1 transition disabled:opacity-70">
         <span class="btn-label">Ingresar</span>
       </button>
-      <div id="login-error" class="login-error hidden"></div>
-      <p class="login-hint">Usuarios de prueba: almacen@icr.pe / almacen123 · supervisor@icr.pe / supervisor123</p>
+      <div id="login-error" class="hidden bg-rose-50 text-rose-600 text-sm px-3 py-2 rounded-lg"></div>
+      <p class="text-[11.5px] text-slate-400 text-center leading-snug">
+        Usuarios de prueba: almacen@icr.pe / almacen123 · supervisor@icr.pe / supervisor123
+      </p>
     </form>
   </div>
 
-  <div class="shell hidden" id="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark">IC</span>
-        <div>
-          <div class="brand-name">ICR Almacén</div>
-          <div class="brand-sub">Módulo de Inventario · MVP</div>
+  <!-- ============ APP SHELL ============ -->
+  <div class="hidden flex flex-col md:flex-row min-h-screen" id="app-shell">
+    <aside class="sidebar w-60 shrink-0 bg-gradient-to-b from-navy-950 to-navy-900 text-white flex flex-col p-4 md:p-5 gap-1">
+      <div class="flex items-center gap-2.5 mb-6 px-1">
+        <span class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent to-accent-400 text-navy-950 font-extrabold flex items-center justify-center text-[13px] shrink-0">IC</span>
+        <div class="brand-text">
+          <div class="font-bold text-[15px] leading-tight">ICR Almacén</div>
+          <div class="brand-sub text-[11px] text-white/50 leading-tight">Módulo de Inventario · MVP</div>
         </div>
       </div>
-      <nav>
+
+      <nav class="flex flex-col gap-1 flex-1 md:overflow-visible overflow-x-auto">
         <button class="nav-item active" data-view="dashboard">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 10.5 10 4l7 6.5M5 9v7h10V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Panel</span>
@@ -71,266 +85,298 @@
         <button class="nav-item" data-view="alerts">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <span>Alertas</span>
-          <span id="alerts-badge" class="nav-badge hidden">0</span>
+          <span id="alerts-badge" class="hidden nav-badge">0</span>
         </button>
       </nav>
-      <div class="sidebar-user">
-        <div class="user-row">
-          <span id="user-avatar" class="user-avatar">—</span>
-          <div>
-            <div id="user-name">—</div>
-            <div id="user-role" class="user-role"></div>
+
+      <div class="sidebar-user border-t border-white/10 pt-3.5 text-sm mt-2">
+        <div class="flex items-center gap-2.5 mb-3">
+          <span id="user-avatar" class="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-accent to-accent-400 text-navy-950 font-bold text-[12.5px] flex items-center justify-center shrink-0">—</span>
+          <div class="min-w-0">
+            <div id="user-name" class="font-semibold text-white truncate">—</div>
+            <div id="user-role" class="text-[11px] text-white/50 truncate"></div>
           </div>
         </div>
-        <button id="logout-btn" class="logout-btn">Cerrar sesión</button>
+        <button id="logout-btn" class="w-full rounded-md border border-white/20 text-white/80 hover:bg-white/10 hover:text-white text-xs py-1.5 transition">Cerrar sesión</button>
       </div>
     </aside>
 
-    <main>
-      <header class="topbar">
+    <main class="flex-1 px-5 py-6 md:px-9 md:py-7 max-w-[1180px]">
+      <header class="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 id="view-title">Panel general</h1>
-          <p id="view-subtitle" class="view-subtitle">Resumen del estado del almacén</p>
+          <h1 id="view-title" class="text-[22px] font-bold text-navy-950 m-0">Panel general</h1>
+          <p id="view-subtitle" class="text-[13px] text-slate-500 m-0 mt-0.5">Resumen del estado del almacén</p>
         </div>
-        <div id="toast" class="toast hidden"></div>
+        <div id="toast" class="hidden toast"></div>
       </header>
 
       <!-- ============ DASHBOARD ============ -->
       <section class="view active" id="view-dashboard">
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-icon kpi-icon-blue">
-              <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 3 5.5v9L10 18l7-3.5v-9L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-cyan-50 text-accent-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M10 2 3 5.5v9L10 18l7-3.5v-9L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
             </div>
             <div>
-              <div class="kpi-value" id="kpi-products">—</div>
-              <div class="kpi-label">Productos activos</div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-products">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Productos activos</div>
             </div>
           </div>
-          <div class="kpi-card">
-            <div class="kpi-icon kpi-icon-navy">
-              <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-navy-950/5 text-navy-950 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
             </div>
             <div>
-              <div class="kpi-value" id="kpi-warehouses">—</div>
-              <div class="kpi-label">Almacenes activos</div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-warehouses">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Almacenes activos</div>
             </div>
           </div>
-          <div class="kpi-card">
-            <div class="kpi-icon kpi-icon-gold">
-              <svg viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </div>
             <div>
-              <div class="kpi-value" id="kpi-movements">—</div>
-              <div class="kpi-label">Movimientos (24h)</div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-movements">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Movimientos (24h)</div>
             </div>
           </div>
-          <div class="kpi-card kpi-card-alert" id="kpi-alerts-card">
-            <div class="kpi-icon kpi-icon-danger">
-              <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <div class="kpi-card kpi-card-alert bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5" id="kpi-alerts-card">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </div>
             <div>
-              <div class="kpi-value" id="kpi-alerts">—</div>
-              <div class="kpi-label">Alertas de stock bajo</div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-alerts">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Alertas de stock bajo</div>
             </div>
           </div>
         </div>
 
-        <div class="dash-columns">
-          <div class="dash-panel">
-            <div class="dash-panel-header">
-              <h2>Últimos movimientos</h2>
-              <button class="link-btn" data-goto="movements">Ver todos →</button>
+        <div class="grid lg:grid-cols-2 gap-5">
+          <div class="bg-white border border-slate-200 rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-[14.5px] font-bold text-navy-950 m-0">Últimos movimientos</h2>
+              <button class="link-btn text-accent-600 hover:underline text-[12.5px] font-semibold" data-goto="movements">Ver todos →</button>
             </div>
-            <table class="data-table compact">
-              <thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Cantidad</th></tr></thead>
-              <tbody id="dash-movements-body"><tr><td colspan="4" class="skeleton-row">Cargando…</td></tr></tbody>
-            </table>
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse text-sm">
+                <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+                  <th class="text-left font-semibold px-3 py-2 rounded-l-lg">Fecha</th>
+                  <th class="text-left font-semibold px-3 py-2">Tipo</th>
+                  <th class="text-left font-semibold px-3 py-2">SKU</th>
+                  <th class="text-left font-semibold px-3 py-2 rounded-r-lg">Cantidad</th>
+                </tr></thead>
+                <tbody id="dash-movements-body"><tr><td colspan="4" class="px-3 py-6 text-center text-slate-400 italic text-sm">Cargando…</td></tr></tbody>
+              </table>
+            </div>
           </div>
-          <div class="dash-panel">
-            <div class="dash-panel-header">
-              <h2>Stock bajo mínimo</h2>
-              <button class="link-btn" data-goto="alerts">Ver todas →</button>
+          <div class="bg-white border border-slate-200 rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-[14.5px] font-bold text-navy-950 m-0">Stock bajo mínimo</h2>
+              <button class="link-btn text-accent-600 hover:underline text-[12.5px] font-semibold" data-goto="alerts">Ver todas →</button>
             </div>
-            <table class="data-table compact">
-              <thead><tr><th>SKU</th><th>Producto</th><th>Nivel</th></tr></thead>
-              <tbody id="dash-alerts-body"><tr><td colspan="3" class="skeleton-row">Cargando…</td></tr></tbody>
-            </table>
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse text-sm">
+                <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+                  <th class="text-left font-semibold px-3 py-2 rounded-l-lg">SKU</th>
+                  <th class="text-left font-semibold px-3 py-2">Producto</th>
+                  <th class="text-left font-semibold px-3 py-2 rounded-r-lg">Nivel</th>
+                </tr></thead>
+                <tbody id="dash-alerts-body"><tr><td colspan="3" class="px-3 py-6 text-center text-slate-400 italic text-sm">Cargando…</td></tr></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- ============ STOCK ============ -->
       <section class="view" id="view-stock">
-        <div class="filters">
-          <input id="stock-sku" placeholder="Filtrar por SKU o nombre..." />
-          <select id="stock-warehouse"><option value="">Todos los almacenes</option></select>
-          <button class="btn" onclick="loadStock()">Buscar</button>
+        <div class="flex flex-wrap gap-2.5 mb-4">
+          <input id="stock-sku" placeholder="Filtrar por SKU o nombre..." class="field flex-1 max-w-xs" />
+          <select id="stock-warehouse" class="field flex-1 max-w-xs"><option value="">Todos los almacenes</option></select>
+          <button class="btn-secondary" onclick="loadStock()">Buscar</button>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>SKU</th><th>Producto</th><th>Almacén</th><th>Ubicación</th>
-              <th>Físico</th><th>Reservado</th><th>Disponible</th><th>P. reorden</th>
-            </tr>
-          </thead>
-          <tbody id="stock-body"></tbody>
-        </table>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Ubicación</th>
+              <th class="text-left font-semibold px-3 py-2.5">Físico</th><th class="text-left font-semibold px-3 py-2.5">Reservado</th>
+              <th class="text-left font-semibold px-3 py-2.5">Disponible</th><th class="text-left font-semibold px-3 py-2.5">P. reorden</th>
+            </tr></thead>
+            <tbody id="stock-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ============ INGRESO ============ -->
       <section class="view" id="view-receive">
-        <form class="panel-form" id="form-receive">
-          <div class="grid-2">
-            <label>SKU del producto
-              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+        <form class="form-card" id="form-receive">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" class="field" />
             </label>
-            <label>Cantidad
-              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            <label class="field-label">Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required class="field" />
             </label>
-            <label>Almacén destino
-              <select name="warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            <label class="field-label">Almacén destino
+              <select name="warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
             </label>
-            <label>Ubicación (opcional)
-              <input name="location_code" placeholder="ej. A-01-R01-N01" />
+            <label class="field-label">Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
-            <label>Tipo de documento
-              <select name="tipo_documento">
+            <label class="field-label">Tipo de documento
+              <select name="tipo_documento" class="field">
                 <option value="">— sin documento —</option>
                 <option>FACTURA</option><option>GUIA</option><option>ORDEN_COMPRA</option>
               </select>
             </label>
-            <label>N° de documento
-              <input name="numero_documento" placeholder="ej. F001-0001" />
+            <label class="field-label">N° de documento
+              <input name="numero_documento" placeholder="ej. F001-0001" class="field" />
             </label>
           </div>
-          <button class="btn primary" type="submit"><span class="btn-label">Registrar ingreso</span></button>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar ingreso</span></button>
         </form>
         <div id="receive-result" class="result-box"></div>
       </section>
 
       <!-- ============ SALIDA ============ -->
       <section class="view" id="view-remove">
-        <form class="panel-form" id="form-remove">
-          <div class="grid-2">
-            <label>SKU del producto
-              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+        <form class="form-card" id="form-remove">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" class="field" />
             </label>
-            <label>Cantidad
-              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            <label class="field-label">Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required class="field" />
             </label>
-            <label>Almacén origen
-              <select name="warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            <label class="field-label">Almacén origen
+              <select name="warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
             </label>
-            <label>Ubicación (opcional)
-              <input name="location_code" placeholder="ej. A-01-R01-N01" />
+            <label class="field-label">Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
-            <label>Código de proyecto (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" />
+            <label class="field-label">Código de proyecto (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
             </label>
-            <label>RUC de cliente (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20605309489" />
+            <label class="field-label">RUC de cliente (opcional)
+              <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
             </label>
           </div>
-          <button class="btn primary" type="submit"><span class="btn-label">Registrar salida</span></button>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar salida</span></button>
         </form>
         <div id="remove-result" class="result-box"></div>
       </section>
 
       <!-- ============ TRANSFERENCIA ============ -->
       <section class="view" id="view-transfer">
-        <form class="panel-form" id="form-transfer">
-          <div class="grid-2">
-            <label>SKU del producto
-              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" />
+        <form class="form-card" id="form-transfer">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" class="field" />
             </label>
-            <label>Cantidad
-              <input name="quantity" type="number" min="0.01" step="0.01" required />
+            <label class="field-label">Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required class="field" />
             </label>
-            <label>Almacén origen
-              <select name="from_warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            <label class="field-label">Almacén origen
+              <select name="from_warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
             </label>
-            <label>Ubicación origen (opcional)
-              <input name="from_location_code" placeholder="ej. A-01-R01-N01" />
+            <label class="field-label">Ubicación origen (opcional)
+              <input name="from_location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
-            <label>Almacén destino
-              <select name="to_warehouse_code" required class="warehouse-select"><option value="">Selecciona un almacén…</option></select>
+            <label class="field-label">Almacén destino
+              <select name="to_warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
             </label>
-            <label>Ubicación destino (opcional)
-              <input name="to_location_code" placeholder="ej. A-01-R01-N01" />
+            <label class="field-label">Ubicación destino (opcional)
+              <input name="to_location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
           </div>
-          <button class="btn primary" type="submit"><span class="btn-label">Registrar transferencia</span></button>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar transferencia</span></button>
         </form>
         <div id="transfer-result" class="result-box"></div>
       </section>
 
       <!-- ============ PRODUCTOS ============ -->
       <section class="view" id="view-products">
-        <form class="panel-form" id="form-product">
-          <div class="grid-2">
-            <label>SKU
-              <input name="sku" required placeholder="ej. PANEL-JA-550" />
+        <form class="form-card" id="form-product">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU
+              <input name="sku" required placeholder="ej. PANEL-JA-550" class="field" />
             </label>
-            <label>Nombre
-              <input name="nombre" required placeholder="ej. Panel Solar 550W" />
+            <label class="field-label">Nombre
+              <input name="nombre" required placeholder="ej. Panel Solar 550W" class="field" />
             </label>
-            <label>Marca
-              <input name="marca" />
+            <label class="field-label">Marca
+              <input name="marca" class="field" />
             </label>
-            <label>Modelo
-              <input name="modelo" />
+            <label class="field-label">Modelo
+              <input name="modelo" class="field" />
             </label>
-            <label>Unidad de medida
-              <input name="unidad_medida" value="UND" />
+            <label class="field-label">Unidad de medida
+              <input name="unidad_medida" value="UND" class="field" />
             </label>
-            <label>Tipo de control
-              <select name="tipo_control">
+            <label class="field-label">Tipo de control
+              <select name="tipo_control" class="field">
                 <option value="NORMAL">NORMAL</option>
                 <option value="LOTE">LOTE</option>
                 <option value="SERIE">SERIE</option>
                 <option value="SERIE_LOTE">SERIE_LOTE</option>
               </select>
             </label>
-            <label>Stock mínimo
-              <input name="stock_minimo" type="number" value="0" />
+            <label class="field-label">Stock mínimo
+              <input name="stock_minimo" type="number" value="0" class="field" />
             </label>
-            <label>Punto de reorden
-              <input name="punto_reorden" type="number" value="0" />
+            <label class="field-label">Punto de reorden
+              <input name="punto_reorden" type="number" value="0" class="field" />
             </label>
           </div>
-          <button class="btn primary" type="submit"><span class="btn-label">Registrar producto</span></button>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar producto</span></button>
         </form>
-        <div class="filters" style="margin-top:28px">
-          <input id="product-q" placeholder="Buscar producto por nombre o SKU..." />
-          <button class="btn" onclick="loadProducts()">Buscar</button>
+        <div class="flex flex-wrap gap-2.5 mt-7 mb-4">
+          <input id="product-q" placeholder="Buscar producto por nombre o SKU..." class="field flex-1 max-w-xs" />
+          <button class="btn-secondary" onclick="loadProducts()">Buscar</button>
         </div>
-        <table class="data-table">
-          <thead><tr><th>SKU</th><th>Nombre</th><th>Marca</th><th>Tipo control</th><th>P. reorden</th></tr></thead>
-          <tbody id="products-body"></tbody>
-        </table>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Nombre</th>
+              <th class="text-left font-semibold px-3 py-2.5">Marca</th><th class="text-left font-semibold px-3 py-2.5">Tipo control</th>
+              <th class="text-left font-semibold px-3 py-2.5">P. reorden</th>
+            </tr></thead>
+            <tbody id="products-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ============ MOVIMIENTOS ============ -->
       <section class="view" id="view-movements">
-        <div class="filters">
-          <input id="mov-sku" placeholder="Filtrar por SKU..." />
-          <button class="btn" onclick="loadMovements()">Buscar</button>
+        <div class="flex flex-wrap gap-2.5 mb-4">
+          <input id="mov-sku" placeholder="Filtrar por SKU..." class="field flex-1 max-w-xs" />
+          <button class="btn-secondary" onclick="loadMovements()">Buscar</button>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Cantidad</th><th>Origen</th><th>Destino</th></tr>
-          </thead>
-          <tbody id="movements-body"></tbody>
-        </table>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">Tipo</th>
+              <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Cantidad</th>
+              <th class="text-left font-semibold px-3 py-2.5">Origen</th><th class="text-left font-semibold px-3 py-2.5">Destino</th>
+            </tr></thead>
+            <tbody id="movements-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ============ ALERTAS ============ -->
       <section class="view" id="view-alerts">
-        <table class="data-table">
-          <thead><tr><th>SKU</th><th>Producto</th><th>Almacén</th><th>Nivel actual</th><th>Nivel mínimo</th><th>Estado</th></tr></thead>
-          <tbody id="alerts-body"></tbody>
-        </table>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Nivel actual</th>
+              <th class="text-left font-semibold px-3 py-2.5">Nivel mínimo</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+            </tr></thead>
+            <tbody id="alerts-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <datalist id="sku-list"></datalist>

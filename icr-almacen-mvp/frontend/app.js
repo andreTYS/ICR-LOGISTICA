@@ -1,5 +1,24 @@
 const API = "/api";
 
+// -------- Estilos compartidos para filas/badges generados dinámicamente --------
+const TD = "px-3 py-2.5 text-sm text-slate-700";
+const TD_EMPTY = "px-3 py-6 text-center text-slate-400 italic text-sm";
+const TR = "even:bg-slate-50/70";
+const BADGE_TONES = {
+  ok: "bg-emerald-50 text-emerald-700",
+  low: "bg-rose-50 text-rose-700",
+  pendiente: "bg-rose-50 text-rose-700",
+  ingreso: "bg-emerald-50 text-emerald-700",
+  salida: "bg-rose-50 text-rose-700",
+  transferencia: "bg-cyan-50 text-accent-600",
+  ajuste: "bg-amber-50 text-amber-700",
+  devolucion: "bg-slate-100 text-slate-600",
+};
+function badge(text, tone) {
+  const cls = BADGE_TONES[(tone || "").toLowerCase()] || "bg-slate-100 text-slate-600";
+  return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${cls}">${text}</span>`;
+}
+
 // -------- Sesión --------
 function getToken() { return localStorage.getItem("icr_token"); }
 function getUser() { try { return JSON.parse(localStorage.getItem("icr_user")); } catch { return null; } }
@@ -172,24 +191,24 @@ async function loadDashboard() {
   const movBody = document.getElementById("dash-movements-body");
   const movRows = movR.data || [];
   movBody.innerHTML = movRows.length
-    ? movRows.map((m) => `<tr>
-        <td>${new Date(m.created_at).toLocaleString("es-PE")}</td>
-        <td>${movTypeBadge(m.tipo_movimiento)}</td>
-        <td>${m.sku}</td><td>${m.cantidad}</td>
+    ? movRows.map((m) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td>
+        <td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
       </tr>`).join("")
-    : `<tr><td colspan="4" class="empty-row">Sin movimientos todavía.</td></tr>`;
+    : `<tr><td colspan="4" class="${TD_EMPTY}">Sin movimientos todavía.</td></tr>`;
 
   const alertBody = document.getElementById("dash-alerts-body");
   if (!alertsAllowed) {
-    alertBody.innerHTML = `<tr><td colspan="3" class="empty-row">Tu rol no tiene permiso para ver alertas.</td></tr>`;
+    alertBody.innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Tu rol no tiene permiso para ver alertas.</td></tr>`;
   } else {
     const topAlerts = alerts.filter((a) => a.estado !== "RESUELTA").slice(0, 6);
     alertBody.innerHTML = topAlerts.length
-      ? topAlerts.map((a) => `<tr>
-          <td>${a.sku}</td><td>${a.producto_nombre}</td>
-          <td><span class="badge low">${a.nivel_actual} / ${a.nivel_minimo}</span></td>
+      ? topAlerts.map((a) => `<tr class="${TR}">
+          <td class="${TD}">${a.sku}</td><td class="${TD}">${a.producto_nombre}</td>
+          <td class="${TD}">${badge(`${a.nivel_actual} / ${a.nivel_minimo}`, "low")}</td>
         </tr>`).join("")
-      : `<tr><td colspan="3" class="empty-row">Sin alertas activas. 🎉</td></tr>`;
+      : `<tr><td colspan="3" class="${TD_EMPTY}">Sin alertas activas. 🎉</td></tr>`;
   }
 }
 
@@ -204,20 +223,13 @@ function updateAlertsBadge(count) {
 }
 
 function movTypeBadge(tipo) {
-  const map = {
-    INGRESO: "badge-mov ingreso",
-    SALIDA: "badge-mov salida",
-    TRANSFERENCIA: "badge-mov transferencia",
-    AJUSTE: "badge-mov ajuste",
-    DEVOLUCION: "badge-mov devolucion",
-  };
-  return `<span class="${map[tipo] || "badge-mov"}">${tipo}</span>`;
+  return badge(tipo, tipo);
 }
 
 // -------- Stock --------
 async function loadStock() {
   const body = document.getElementById("stock-body");
-  body.innerHTML = `<tr><td colspan="8" class="skeleton-row">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const sku = document.getElementById("stock-sku").value.trim();
   const warehouse = document.getElementById("stock-warehouse")?.value || "";
   const params = new URLSearchParams();
@@ -228,15 +240,15 @@ async function loadStock() {
   body.innerHTML = "";
   (r.data || []).forEach((row) => {
     const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
-    body.innerHTML += `<tr>
-      <td>${row.sku}</td><td>${row.producto_nombre}</td>
-      <td>${row.almacen_codigo}</td><td>${row.codigo_ubicacion || "—"}</td>
-      <td>${row.stock_fisico}</td><td>${row.stock_reservado}</td>
-      <td><span class="badge ${low ? "low" : "ok"}">${row.stock_disponible}</span></td>
-      <td>${row.punto_reorden}</td>
+    body.innerHTML += `<tr class="${TR}">
+      <td class="${TD}">${row.sku}</td><td class="${TD}">${row.producto_nombre}</td>
+      <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
+      <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
+      <td class="${TD}">${badge(row.stock_disponible, low ? "low" : "ok")}</td>
+      <td class="${TD}">${row.punto_reorden}</td>
     </tr>`;
   });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="8" class="empty-row">Sin resultados.</td></tr>`;
+  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
 }
 document.getElementById("stock-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadStock(); });
 
@@ -338,56 +350,56 @@ document.getElementById("form-product").addEventListener("submit", async (e) => 
 
 async function loadProducts() {
   const body = document.getElementById("products-body");
-  body.innerHTML = `<tr><td colspan="5" class="skeleton-row">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const q = document.getElementById("product-q").value.trim();
   const r = await api(`/inventory/products?q=${encodeURIComponent(q)}`);
   body.innerHTML = "";
   (r.data || []).forEach((p) => {
-    body.innerHTML += `<tr>
-      <td>${p.sku}</td><td>${p.nombre}</td><td>${p.marca || "—"}</td>
-      <td>${p.tipo_control}</td><td>${p.punto_reorden}</td>
+    body.innerHTML += `<tr class="${TR}">
+      <td class="${TD}">${p.sku}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
+      <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
     </tr>`;
   });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="5" class="empty-row">Sin resultados.</td></tr>`;
+  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
 }
 document.getElementById("product-q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadProducts(); });
 
 // -------- Movimientos --------
 async function loadMovements() {
   const body = document.getElementById("movements-body");
-  body.innerHTML = `<tr><td colspan="6" class="skeleton-row">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const sku = document.getElementById("mov-sku").value.trim();
   const r = await api(`/inventory/movements${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`);
   body.innerHTML = "";
   (r.data || []).forEach((m) => {
-    body.innerHTML += `<tr>
-      <td>${new Date(m.created_at).toLocaleString("es-PE")}</td>
-      <td>${movTypeBadge(m.tipo_movimiento)}</td><td>${m.sku}</td><td>${m.cantidad}</td>
-      <td>${m.almacen_origen_codigo || "—"}</td><td>${m.almacen_destino_codigo || "—"}</td>
+    body.innerHTML += `<tr class="${TR}">
+      <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
+      <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
+      <td class="${TD}">${m.almacen_origen_codigo || "—"}</td><td class="${TD}">${m.almacen_destino_codigo || "—"}</td>
     </tr>`;
   });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="empty-row">Sin movimientos.</td></tr>`;
+  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Sin movimientos.</td></tr>`;
 }
 document.getElementById("mov-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadMovements(); });
 
 // -------- Alertas --------
 async function loadAlerts() {
   const body = document.getElementById("alerts-body");
-  body.innerHTML = `<tr><td colspan="6" class="skeleton-row">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/inventory/alerts");
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="6" class="empty-row">${r.error?.message || "Tu rol no tiene permiso para ver alertas."}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver alertas."}</td></tr>`;
     return;
   }
   body.innerHTML = "";
   (r.data || []).forEach((a) => {
-    body.innerHTML += `<tr>
-      <td>${a.sku}</td><td>${a.producto_nombre}</td><td>${a.almacen_codigo}</td>
-      <td>${a.nivel_actual}</td><td>${a.nivel_minimo}</td>
-      <td><span class="badge low">${a.estado}</span></td>
+    body.innerHTML += `<tr class="${TR}">
+      <td class="${TD}">${a.sku}</td><td class="${TD}">${a.producto_nombre}</td><td class="${TD}">${a.almacen_codigo}</td>
+      <td class="${TD}">${a.nivel_actual}</td><td class="${TD}">${a.nivel_minimo}</td>
+      <td class="${TD}">${badge(a.estado, a.estado === "PENDIENTE" ? "low" : "ok")}</td>
     </tr>`;
   });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="empty-row">No hay alertas activas.</td></tr>`;
+  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">No hay alertas activas.</td></tr>`;
   updateAlertsBadge((r.data || []).filter((a) => a.estado !== "RESUELTA").length);
 }
 

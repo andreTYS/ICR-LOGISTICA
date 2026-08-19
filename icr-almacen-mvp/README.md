@@ -9,7 +9,7 @@ La automatización con N8N / Telegram **no está incluida en este MVP** — qued
 - `db/schema.sql` — DDL completo (18 tablas, 2 vistas, índices).
 - `db/seed.sql` — datos mínimos para operar: 3 usuarios, 2 almacenes, 2 ubicaciones, 3 productos de ejemplo.
 - `backend/` — API Node.js/Express + PostgreSQL (`pg`), con transacciones atómicas y locking para evitar condiciones de carrera (ver `src/services/inventoryService.js`).
-- `frontend/` — panel web (HTML/CSS/JS puro, sin build step) servido por el mismo backend: Stock, Ingreso, Salida, Transferencia, Productos, Movimientos, Alertas.
+- `frontend/` — panel web (HTML/JS puro, sin build step en runtime) servido por el mismo backend: Panel (dashboard), Stock, Ingreso, Salida, Transferencia, Productos, Movimientos, Alertas. Estilizado con Tailwind CSS (paleta `#00004C` / `#000073` / `#00B7C2` / `#00FFC2`), compilado a `frontend/style.css` en tiempo de desarrollo — ver [`frontend/README.md`](frontend/README.md) para regenerarlo tras tocar clases de Tailwind.
 - `docker-compose.yml` — para desplegar en el VPS de Hostinger junto a Traefik.
 
 ## Opción A — Levantar en local (para revisar antes del jueves)
