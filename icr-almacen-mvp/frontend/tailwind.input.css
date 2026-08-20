@@ -91,6 +91,15 @@ body { font-feature-settings: "cv11"; }
   transition: background .15s ease;
 }
 .btn-secondary:hover { background: #f8fafc; }
+.btn-secondary:disabled { opacity: .4; cursor: default; }
+.btn-secondary:disabled:hover { background: #fff; }
+.btn-danger {
+  padding: 9px 18px; border-radius: 8px; border: 1px solid #fecdd3;
+  background: #fff1f2; color: #e11d48; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background .15s ease;
+}
+.btn-danger:hover { background: #ffe4e6; }
+.btn-danger:disabled { opacity: .4; cursor: default; }
 
 .btn-loading { position: relative; }
 .btn-loading:disabled { opacity: .7; cursor: default; }
@@ -112,8 +121,14 @@ body { font-feature-settings: "cv11"; }
 .result-box.ok pre { border-left: 4px solid #059669; }
 .result-box.err pre { border-left: 4px solid #e11d48; }
 
-.toast { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; animation: toast-in .18s ease; }
-@keyframes toast-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.toast {
+  padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  box-shadow: 0 8px 24px -6px rgba(0,0,76,0.25);
+  animation: toast-in .18s ease; pointer-events: auto; max-width: 320px;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+.toast-out { animation: toast-out .2s ease forwards; }
+@keyframes toast-out { to { opacity: 0; transform: translateX(12px); } }
 .toast.success { background: #ecfdf5; color: #059669; }
 .toast.error { background: #fff1f2; color: #e11d48; }
 

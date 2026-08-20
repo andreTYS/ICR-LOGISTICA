@@ -296,22 +296,41 @@ async function transfer({ sku, quantity, fromWarehouseCode, fromLocationCode, to
 
 // -------------------- Consultas (sin transacción de escritura) --------------------
 
-async function getStock({ sku, warehouseCode }) {
-  const conditions = [];
-  const params = [];
-  if (sku) { params.push(sku); conditions.push(`sku = $${params.length}`); }
-  if (warehouseCode) { params.push(warehouseCode); conditions.push(`almacen_codigo = $${params.length}`); }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const r = await pool.query(`SELECT * FROM vw_inventario_disponible ${where} ORDER BY producto_nombre`, params);
-  return r.rows;
+// Normaliza page/pageSize y calcula el OFFSET; pageSize tiene un tope duro
+// para que nadie pueda pedir toda la tabla de un tirón por accidente.
+function paginationParams(page, pageSize, defaultSize, maxSize) {
+  const p = Math.max(1, Number(page) || 1);
+  const size = Math.min(maxSize, Math.max(1, Number(pageSize) || defaultSize));
+  return { page: p, pageSize: size, offset: (p - 1) * size };
 }
 
-async function searchProducts({ query }) {
+async function getStock({ sku, warehouseCode, page, pageSize }) {
+  const { page: p, pageSize: size, offset } = paginationParams(page, pageSize, 20, 500);
+  const conditions = [];
+  const params = [];
+  if (sku) { params.push(`%${sku}%`); conditions.push(`(sku ILIKE $${params.length} OR producto_nombre ILIKE $${params.length})`); }
+  if (warehouseCode) { params.push(warehouseCode); conditions.push(`almacen_codigo = $${params.length}`); }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(size, offset);
   const r = await pool.query(
-    `SELECT * FROM productos WHERE activo = true AND (sku ILIKE $1 OR nombre ILIKE $1) ORDER BY nombre LIMIT 50`,
-    [`%${query || ""}%`]
+    `SELECT *, COUNT(*) OVER() AS total_count FROM vw_inventario_disponible ${where}
+     ORDER BY producto_nombre LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
   );
-  return r.rows;
+  const total = r.rows[0]?.total_count ? Number(r.rows[0].total_count) : 0;
+  return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
+}
+
+async function searchProducts({ query, page, pageSize }) {
+  const { page: p, pageSize: size, offset } = paginationParams(page, pageSize, 20, 500);
+  const r = await pool.query(
+    `SELECT *, COUNT(*) OVER() AS total_count FROM productos
+     WHERE activo = true AND (sku ILIKE $1 OR nombre ILIKE $1)
+     ORDER BY nombre LIMIT $2 OFFSET $3`,
+    [`%${query || ""}%`, size, offset]
+  );
+  const total = r.rows[0]?.total_count ? Number(r.rows[0].total_count) : 0;
+  return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
 }
 
 async function createProduct(data) {
@@ -327,27 +346,30 @@ async function createProduct(data) {
   return r.rows[0];
 }
 
-async function getMovements({ sku, limit = 50 }) {
+async function getMovements({ sku, page, pageSize }) {
+  const { page: p, pageSize: size, offset } = paginationParams(page, pageSize, 50, 1000);
   const params = [];
   let where = "";
   if (sku) {
     params.push(sku);
     where = "WHERE p.sku = $1";
   }
-  params.push(limit);
+  params.push(size, offset);
   const r = await pool.query(
     `SELECT m.*, p.sku, p.nombre AS producto_nombre,
-            ao.codigo AS almacen_origen_codigo, ad.codigo AS almacen_destino_codigo
+            ao.codigo AS almacen_origen_codigo, ad.codigo AS almacen_destino_codigo,
+            COUNT(*) OVER() AS total_count
      FROM movimientos m
      JOIN productos p ON p.producto_id = m.producto_id
      LEFT JOIN almacenes ao ON ao.almacen_id = m.almacen_origen_id
      LEFT JOIN almacenes ad ON ad.almacen_id = m.almacen_destino_id
      ${where}
      ORDER BY m.created_at DESC
-     LIMIT $${params.length}`,
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  return r.rows;
+  const total = r.rows[0]?.total_count ? Number(r.rows[0].total_count) : 0;
+  return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
 }
 
 async function getAlerts({ estado }) {
@@ -374,7 +396,187 @@ async function listWarehouses() {
   return r.rows;
 }
 
+// -------------------- Reservas --------------------
+
+async function reserve({ sku, quantity, warehouseCode, locationCode, proyectoCodigo, clienteRuc, fechaExpiracion, usuarioId, canal }) {
+  if (!sku || !quantity || quantity <= 0 || !warehouseCode) {
+    throw new AppError("SCHEMA_INVALID", "sku, quantity (>0) y warehouseCode son obligatorios", 400);
+  }
+  return withAuditedTransaction("inventory.reserve", usuarioId, canal, async (client) => {
+    const producto = await findProductBySku(client, sku);
+    const almacen = await findWarehouseByCode(client, warehouseCode);
+    const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
+
+    let proyectoId = null;
+    if (proyectoCodigo) {
+      const pr = await client.query("SELECT proyecto_id FROM proyectos WHERE codigo_proyecto=$1", [proyectoCodigo]);
+      if (pr.rows.length === 0) throw new AppError("PROJECT_OR_CLIENT_INVALID", `Proyecto '${proyectoCodigo}' no existe`, 404);
+      proyectoId = pr.rows[0].proyecto_id;
+    }
+    let clienteId = null;
+    if (clienteRuc) {
+      const cr = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1", [clienteRuc]);
+      if (cr.rows.length === 0) throw new AppError("PROJECT_OR_CLIENT_INVALID", `Cliente RUC '${clienteRuc}' no existe`, 404);
+      clienteId = cr.rows[0].cliente_id;
+    }
+
+    const stockRow = await lockOrCreateStockRow(client, producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null);
+    if (Number(stockRow.stock_disponible) < Number(quantity)) {
+      throw new AppError("INSUFFICIENT_STOCK", `Stock disponible insuficiente (disponible: ${stockRow.stock_disponible}, solicitado: ${quantity})`, 409);
+    }
+
+    const resR = await client.query(
+      `INSERT INTO reservas (producto_id, almacen_id, ubicacion_id, proyecto_id, cliente_id, usuario_id, cantidad, fecha_expiracion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING reserva_id`,
+      [producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null, proyectoId, clienteId, usuarioId, quantity, fechaExpiracion || null]
+    );
+    const stockR = await client.query(
+      `UPDATE stock SET stock_reservado = stock_reservado + $1, updated_at = now()
+       WHERE producto_id=$2 AND almacen_id=$3 AND ubicacion_id IS NOT DISTINCT FROM $4
+       RETURNING stock_reservado, stock_disponible`,
+      [quantity, producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null]
+    );
+
+    return {
+      entidad: "reservas",
+      entidadId: resR.rows[0].reserva_id,
+      valorNuevo: { sku, quantity, warehouseCode },
+      reserva_id: resR.rows[0].reserva_id,
+      stock: stockR.rows[0],
+    };
+  });
+}
+
+async function releaseReservation({ reservaId, usuarioId, canal }) {
+  if (!reservaId) throw new AppError("SCHEMA_INVALID", "reservaId es obligatorio", 400);
+  return withAuditedTransaction("inventory.release_reservation", usuarioId, canal, async (client) => {
+    const r = await client.query("SELECT * FROM reservas WHERE reserva_id=$1 FOR UPDATE", [reservaId]);
+    if (r.rows.length === 0) throw new AppError("RESERVATION_NOT_FOUND", `Reserva '${reservaId}' no existe`, 404);
+    const reserva = r.rows[0];
+    if (reserva.estado !== "ACTIVA") {
+      throw new AppError("RESERVATION_NOT_ACTIVE", `La reserva ya está en estado '${reserva.estado}'`, 409);
+    }
+    await client.query(
+      `UPDATE stock SET stock_reservado = stock_reservado - $1, updated_at = now()
+       WHERE producto_id=$2 AND almacen_id=$3 AND ubicacion_id IS NOT DISTINCT FROM $4`,
+      [reserva.cantidad, reserva.producto_id, reserva.almacen_id, reserva.ubicacion_id]
+    );
+    await client.query("UPDATE reservas SET estado='CANCELADA' WHERE reserva_id=$1", [reservaId]);
+    return { entidad: "reservas", entidadId: reservaId, valorNuevo: { estado: "CANCELADA" } };
+  });
+}
+
+async function getReservations({ estado }) {
+  const params = [];
+  let where = "";
+  if (estado) { params.push(estado); where = "WHERE r.estado = $1"; }
+  const res = await pool.query(
+    `SELECT r.*, p.sku, p.nombre AS producto_nombre, a.codigo AS almacen_codigo, u.nombre_completo AS solicitante
+     FROM reservas r
+     JOIN productos p ON p.producto_id = r.producto_id
+     JOIN almacenes a ON a.almacen_id = r.almacen_id
+     JOIN usuarios u ON u.usuario_id = r.usuario_id
+     ${where}
+     ORDER BY r.fecha_reserva DESC LIMIT 200`,
+    params
+  );
+  return res.rows;
+}
+
+// -------------------- Ajustes con aprobación --------------------
+
+async function adjustCreate({ sku, warehouseCode, locationCode, cantidadFisica, motivo, usuarioId, canal }) {
+  if (!sku || !warehouseCode || cantidadFisica === undefined || cantidadFisica === null || Number(cantidadFisica) < 0) {
+    throw new AppError("SCHEMA_INVALID", "sku, warehouseCode y cantidadFisica (>=0) son obligatorios", 400);
+  }
+  return withAuditedTransaction("inventory.adjust", usuarioId, canal, async (client) => {
+    const producto = await findProductBySku(client, sku);
+    const almacen = await findWarehouseByCode(client, warehouseCode);
+    const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
+    const stockRow = await lockOrCreateStockRow(client, producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null);
+
+    const ajR = await client.query(
+      `INSERT INTO ajustes (producto_id, almacen_id, ubicacion_id, cantidad_sistema, cantidad_fisica, motivo, usuario_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ajuste_id, diferencia`,
+      [producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null, stockRow.stock_fisico, cantidadFisica, motivo || null, usuarioId]
+    );
+
+    return {
+      entidad: "ajustes",
+      entidadId: ajR.rows[0].ajuste_id,
+      valorNuevo: { sku, warehouseCode, cantidadFisica },
+      ajuste_id: ajR.rows[0].ajuste_id,
+      diferencia: ajR.rows[0].diferencia,
+    };
+  });
+}
+
+async function adjustDecide({ ajusteId, decision, aprobadoPor, canal }) {
+  if (!["APROBADO", "RECHAZADO"].includes(decision)) {
+    throw new AppError("SCHEMA_INVALID", "decision debe ser APROBADO o RECHAZADO", 400);
+  }
+  return withAuditedTransaction(`inventory.adjust.${decision.toLowerCase()}`, aprobadoPor, canal, async (client) => {
+    const r = await client.query("SELECT * FROM ajustes WHERE ajuste_id=$1 FOR UPDATE", [ajusteId]);
+    if (r.rows.length === 0) throw new AppError("ADJUSTMENT_NOT_FOUND", `Ajuste '${ajusteId}' no existe`, 404);
+    const ajuste = r.rows[0];
+    if (ajuste.estado !== "PENDIENTE") {
+      throw new AppError("ADJUSTMENT_NOT_PENDING", `El ajuste ya está en estado '${ajuste.estado}'`, 409);
+    }
+    if (decision === "APROBADO") {
+      await client.query(
+        `UPDATE stock SET stock_fisico=$1, updated_at=now()
+         WHERE producto_id=$2 AND almacen_id=$3 AND ubicacion_id IS NOT DISTINCT FROM $4`,
+        [ajuste.cantidad_fisica, ajuste.producto_id, ajuste.almacen_id, ajuste.ubicacion_id]
+      );
+    }
+    await client.query("UPDATE ajustes SET estado=$1, aprobado_por=$2 WHERE ajuste_id=$3", [decision, aprobadoPor, ajusteId]);
+    return { entidad: "ajustes", entidadId: ajusteId, valorNuevo: { estado: decision } };
+  });
+}
+
+async function getAdjustments({ estado }) {
+  const params = [];
+  let where = "";
+  if (estado) { params.push(estado); where = "WHERE aj.estado = $1"; }
+  const res = await pool.query(
+    `SELECT aj.*, p.sku, p.nombre AS producto_nombre, a.codigo AS almacen_codigo,
+            u.nombre_completo AS solicitante, ap.nombre_completo AS aprobador
+     FROM ajustes aj
+     JOIN productos p ON p.producto_id = aj.producto_id
+     JOIN almacenes a ON a.almacen_id = aj.almacen_id
+     JOIN usuarios u ON u.usuario_id = aj.usuario_id
+     LEFT JOIN usuarios ap ON ap.usuario_id = aj.aprobado_por
+     ${where}
+     ORDER BY aj.created_at DESC LIMIT 200`,
+    params
+  );
+  return res.rows;
+}
+
+// -------------------- Auditoría --------------------
+
+async function getAuditLog({ accion, resultado, limit = 100 }) {
+  const conditions = [];
+  const params = [];
+  if (accion) { params.push(accion); conditions.push(`au.accion = $${params.length}`); }
+  if (resultado) { params.push(resultado); conditions.push(`au.resultado = $${params.length}`); }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(Math.min(500, Number(limit) || 100));
+  const res = await pool.query(
+    `SELECT au.*, u.nombre_completo AS usuario_nombre
+     FROM auditoria au
+     LEFT JOIN usuarios u ON u.usuario_id = au.usuario_id
+     ${where}
+     ORDER BY au.created_at DESC LIMIT $${params.length}`,
+    params
+  );
+  return res.rows;
+}
+
 module.exports = {
   receive, remove, transfer,
   getStock, searchProducts, createProduct, getMovements, getAlerts, listWarehouses,
+  reserve, releaseReservation, getReservations,
+  adjustCreate, adjustDecide, getAdjustments,
+  getAuditLog,
 };

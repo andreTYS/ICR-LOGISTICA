@@ -19,6 +19,45 @@ function badge(text, tone) {
   return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${cls}">${text}</span>`;
 }
 
+// -------- Paginación --------
+function renderPager(containerId, { total, page, pageSize }, onChange) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!total) { el.innerHTML = ""; return; }
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(total, page * pageSize);
+  el.innerHTML = `
+    <div class="flex items-center justify-between mt-3 text-sm text-slate-500">
+      <span>Mostrando ${from}–${to} de ${total}</span>
+      <div class="flex items-center gap-2">
+        <button class="btn-secondary px-3 py-1.5 text-xs" id="${containerId}-prev" ${page <= 1 ? "disabled" : ""}>← Anterior</button>
+        <span class="px-1 text-xs">Página ${page} de ${totalPages}</span>
+        <button class="btn-secondary px-3 py-1.5 text-xs" id="${containerId}-next" ${page >= totalPages ? "disabled" : ""}>Siguiente →</button>
+      </div>
+    </div>`;
+  if (page > 1) document.getElementById(`${containerId}-prev`).addEventListener("click", () => onChange(page - 1));
+  if (page < totalPages) document.getElementById(`${containerId}-next`).addEventListener("click", () => onChange(page + 1));
+}
+
+// -------- Exportar CSV --------
+function csvEscape(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function downloadCsv(filename, headers, rows) {
+  const lines = [headers.join(","), ...rows.map((row) => row.map(csvEscape).join(","))];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // -------- Sesión --------
 function getToken() { return localStorage.getItem("icr_token"); }
 function getUser() { try { return JSON.parse(localStorage.getItem("icr_user")); } catch { return null; } }
@@ -101,6 +140,10 @@ const titles = {
   products: ["Productos", "Catálogo de productos gestionados"],
   movements: ["Movimientos (ledger)", "Historial completo de movimientos de inventario"],
   alerts: ["Alertas de stock bajo", "Productos por debajo del punto de reorden"],
+  reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
+  adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
+  audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
+  users: ["Usuarios", "Altas y roles de acceso al panel (solo administradores)"],
 };
 
 function goToView(view) {
@@ -114,6 +157,10 @@ function goToView(view) {
   if (view === "products") loadProducts();
   if (view === "movements") loadMovements();
   if (view === "alerts") loadAlerts();
+  if (view === "reservations") loadReservations();
+  if (view === "adjustments") loadAdjustments();
+  if (view === "audit") loadAuditLog();
+  if (view === "users") loadUsers();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -124,12 +171,15 @@ document.querySelectorAll("[data-goto]").forEach((btn) => {
 });
 
 function toast(message, ok = true) {
-  const el = document.getElementById("toast");
-  el.textContent = message;
+  const container = document.getElementById("toast-container");
+  const el = document.createElement("div");
   el.className = `toast ${ok ? "success" : "error"}`;
-  el.classList.remove("hidden");
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.add("hidden"), 4000);
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("toast-out");
+    setTimeout(() => el.remove(), 200);
+  }, 4000);
 }
 
 async function api(path, options = {}) {
@@ -159,26 +209,26 @@ async function loadWarehouseOptions() {
 }
 
 async function loadSkuOptions() {
-  const r = await api("/inventory/products?q=");
+  const r = await api("/inventory/products?q=&page_size=500");
   const list = document.getElementById("sku-list");
-  list.innerHTML = (r.data || []).map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
+  list.innerHTML = (r.data?.items || []).map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
 }
 
 // -------- Dashboard --------
 async function loadDashboard() {
   const [alertsR, movR, whR, productsR] = await Promise.all([
     api("/inventory/alerts"),
-    api("/inventory/movements?limit=6"),
+    api("/inventory/movements?page_size=6"),
     api("/inventory/warehouses"),
     api("/inventory/products?q="),
   ]);
 
-  document.getElementById("kpi-products").textContent = (productsR.data || []).length;
+  document.getElementById("kpi-products").textContent = productsR.data?.total ?? 0;
   document.getElementById("kpi-warehouses").textContent = (whR.data || []).length;
 
   const since = Date.now() - 24 * 3600 * 1000;
-  const allMov = await api("/inventory/movements?limit=200");
-  const recentCount = (allMov.data || []).filter((m) => new Date(m.created_at).getTime() >= since).length;
+  const allMov = await api("/inventory/movements?page_size=200");
+  const recentCount = (allMov.data?.items || []).filter((m) => new Date(m.created_at).getTime() >= since).length;
   document.getElementById("kpi-movements").textContent = recentCount;
 
   const alertsAllowed = alertsR.status === "success";
@@ -189,7 +239,7 @@ async function loadDashboard() {
   updateAlertsBadge(alertsAllowed ? alertCount : 0);
 
   const movBody = document.getElementById("dash-movements-body");
-  const movRows = movR.data || [];
+  const movRows = movR.data?.items || [];
   movBody.innerHTML = movRows.length
     ? movRows.map((m) => `<tr class="${TR}">
         <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
@@ -227,30 +277,49 @@ function movTypeBadge(tipo) {
 }
 
 // -------- Stock --------
-async function loadStock() {
-  const body = document.getElementById("stock-body");
-  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
+function stockQuery(pageSize) {
   const sku = document.getElementById("stock-sku").value.trim();
   const warehouse = document.getElementById("stock-warehouse")?.value || "";
   const params = new URLSearchParams();
   if (sku) params.set("sku", sku);
   if (warehouse) params.set("warehouse_code", warehouse);
-  const qs = params.toString();
-  const r = await api(`/inventory/stock${qs ? `?${qs}` : ""}`);
-  body.innerHTML = "";
-  (r.data || []).forEach((row) => {
-    const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
-    body.innerHTML += `<tr class="${TR}">
+  if (pageSize) params.set("page_size", pageSize);
+  return params;
+}
+
+function stockRowHtml(row) {
+  const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
+  return `<tr class="${TR}">
       <td class="${TD}">${row.sku}</td><td class="${TD}">${row.producto_nombre}</td>
       <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
       <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
       <td class="${TD}">${badge(row.stock_disponible, low ? "low" : "ok")}</td>
       <td class="${TD}">${row.punto_reorden}</td>
     </tr>`;
-  });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+}
+
+async function loadStock(page = 1) {
+  const body = document.getElementById("stock-body");
+  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const params = stockQuery();
+  params.set("page", page);
+  const r = await api(`/inventory/stock?${params.toString()}`);
+  const items = r.data?.items || [];
+  body.innerHTML = items.length ? items.map(stockRowHtml).join("") : `<tr><td colspan="8" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+  renderPager("stock-pager", r.data || { total: 0 }, loadStock);
 }
 document.getElementById("stock-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadStock(); });
+
+async function exportStockCsv() {
+  const params = stockQuery(2000);
+  const r = await api(`/inventory/stock?${params.toString()}`);
+  const items = r.data?.items || [];
+  downloadCsv(
+    "stock.csv",
+    ["SKU", "Producto", "Almacén", "Ubicación", "Físico", "Reservado", "Disponible", "P. reorden"],
+    items.map((row) => [row.sku, row.producto_nombre, row.almacen_codigo, row.codigo_ubicacion || "", row.stock_fisico, row.stock_reservado, row.stock_disponible, row.punto_reorden])
+  );
+}
 
 function setFormLoading(form, loading) {
   const btn = form.querySelector("button[type=submit]");
@@ -298,6 +367,7 @@ document.getElementById("form-remove").addEventListener("submit", async (e) => {
       cliente_ruc: f.get("cliente_ruc") || null,
     },
   };
+  if (!confirm(`¿Confirmas la salida de ${payload.quantity} × ${payload.product.sku} desde ${payload.warehouse_code}?`)) return;
   setFormLoading(e.target, true);
   try {
     const r = await api("/inventory/remove", { method: "POST", body: JSON.stringify(payload) });
@@ -320,6 +390,7 @@ document.getElementById("form-transfer").addEventListener("submit", async (e) =>
     from: { warehouse_code: f.get("from_warehouse_code"), location_code: f.get("from_location_code") || null },
     to: { warehouse_code: f.get("to_warehouse_code"), location_code: f.get("to_location_code") || null },
   };
+  if (!confirm(`¿Confirmas transferir ${payload.quantity} × ${payload.product.sku} de ${payload.from.warehouse_code} a ${payload.to.warehouse_code}?`)) return;
   setFormLoading(e.target, true);
   try {
     const r = await api("/inventory/transfer", { method: "POST", body: JSON.stringify(payload) });
@@ -348,39 +419,56 @@ document.getElementById("form-product").addEventListener("submit", async (e) => 
   }
 });
 
-async function loadProducts() {
+async function loadProducts(page = 1) {
   const body = document.getElementById("products-body");
   body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const q = document.getElementById("product-q").value.trim();
-  const r = await api(`/inventory/products?q=${encodeURIComponent(q)}`);
-  body.innerHTML = "";
-  (r.data || []).forEach((p) => {
-    body.innerHTML += `<tr class="${TR}">
+  const r = await api(`/inventory/products?q=${encodeURIComponent(q)}&page=${page}`);
+  const items = r.data?.items || [];
+  body.innerHTML = items.length
+    ? items.map((p) => `<tr class="${TR}">
       <td class="${TD}">${p.sku}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
-    </tr>`;
-  });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+    </tr>`).join("")
+    : `<tr><td colspan="5" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+  renderPager("products-pager", r.data || { total: 0 }, loadProducts);
 }
 document.getElementById("product-q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadProducts(); });
 
 // -------- Movimientos --------
-async function loadMovements() {
-  const body = document.getElementById("movements-body");
-  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
-  const sku = document.getElementById("mov-sku").value.trim();
-  const r = await api(`/inventory/movements${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`);
-  body.innerHTML = "";
-  (r.data || []).forEach((m) => {
-    body.innerHTML += `<tr class="${TR}">
+function movRowHtml(m) {
+  return `<tr class="${TR}">
       <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
       <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
       <td class="${TD}">${m.almacen_origen_codigo || "—"}</td><td class="${TD}">${m.almacen_destino_codigo || "—"}</td>
     </tr>`;
-  });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Sin movimientos.</td></tr>`;
+}
+
+async function loadMovements(page = 1) {
+  const body = document.getElementById("movements-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const sku = document.getElementById("mov-sku").value.trim();
+  const params = new URLSearchParams({ page });
+  if (sku) params.set("sku", sku);
+  const r = await api(`/inventory/movements?${params.toString()}`);
+  const items = r.data?.items || [];
+  body.innerHTML = items.length ? items.map(movRowHtml).join("") : `<tr><td colspan="6" class="${TD_EMPTY}">Sin movimientos.</td></tr>`;
+  renderPager("movements-pager", r.data || { total: 0 }, loadMovements);
 }
 document.getElementById("mov-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadMovements(); });
+
+async function exportMovementsCsv() {
+  const sku = document.getElementById("mov-sku").value.trim();
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (sku) params.set("sku", sku);
+  const r = await api(`/inventory/movements?${params.toString()}`);
+  const items = r.data?.items || [];
+  downloadCsv(
+    "movimientos.csv",
+    ["Fecha", "Tipo", "SKU", "Cantidad", "Origen", "Destino"],
+    items.map((m) => [new Date(m.created_at).toLocaleString("es-PE"), m.tipo_movimiento, m.sku, m.cantidad, m.almacen_origen_codigo || "", m.almacen_destino_codigo || ""])
+  );
+}
 
 // -------- Alertas --------
 async function loadAlerts() {
@@ -407,4 +495,192 @@ function renderResult(elId, response) {
   const el = document.getElementById(elId);
   el.className = `result-box ${response.status === "success" ? "ok" : "err"}`;
   el.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+}
+
+// -------- Reservas --------
+document.getElementById("form-reserve").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    product: { sku: f.get("sku") },
+    quantity: Number(f.get("quantity")),
+    warehouse_code: f.get("warehouse_code"),
+    location_code: f.get("location_code") || null,
+    destination: {
+      proyecto_codigo: f.get("proyecto_codigo") || null,
+      cliente_ruc: f.get("cliente_ruc") || null,
+    },
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/inventory/reserve", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("reserve-result", r);
+    if (r.status === "success") { toast("Stock reservado correctamente"); e.target.reset(); loadReservations(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadReservations() {
+  const body = document.getElementById("reservations-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/inventory/reservations");
+  if (r.status !== "success") {
+    body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver reservas."}</td></tr>`;
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((res) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(res.fecha_reserva).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${res.sku}</td><td class="${TD}">${res.almacen_codigo}</td>
+        <td class="${TD}">${res.cantidad}</td><td class="${TD}">${res.solicitante}</td>
+        <td class="${TD}">${badge(res.estado, res.estado === "ACTIVA" ? "ok" : "devolucion")}</td>
+        <td class="${TD}">${res.estado === "ACTIVA" ? `<button class="btn-danger px-3 py-1.5 text-xs" onclick="releaseReservationAction('${res.reserva_id}')">Liberar</button>` : ""}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="7" class="${TD_EMPTY}">Sin reservas registradas.</td></tr>`;
+}
+
+async function releaseReservationAction(reservaId) {
+  if (!confirm("¿Liberar esta reserva? El stock reservado vuelve a estar disponible.")) return;
+  const r = await api("/inventory/release_reservation", { method: "POST", body: JSON.stringify({ reserva_id: reservaId }) });
+  if (r.status === "success") { toast("Reserva liberada"); loadReservations(); }
+  else toast(r.error.message, false);
+}
+
+// -------- Ajustes --------
+document.getElementById("form-adjust").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    product: { sku: f.get("sku") },
+    warehouse_code: f.get("warehouse_code"),
+    location_code: f.get("location_code") || null,
+    cantidad_fisica: Number(f.get("cantidad_fisica")),
+    motivo: f.get("motivo") || null,
+  };
+  if (!confirm(`¿Solicitar ajuste de ${payload.product.sku} en ${payload.warehouse_code} a ${payload.cantidad_fisica} unidades? Un supervisor deberá aprobarlo.`)) return;
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/inventory/adjust", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("adjust-result", r);
+    if (r.status === "success") { toast("Ajuste solicitado, pendiente de aprobación"); e.target.reset(); loadAdjustments(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadAdjustments() {
+  const body = document.getElementById("adjustments-body");
+  body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/inventory/adjustments");
+  if (r.status !== "success") {
+    body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver ajustes."}</td></tr>`;
+    updateAdjustmentsBadge(0);
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(a.created_at).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${a.sku}</td><td class="${TD}">${a.almacen_codigo}</td>
+        <td class="${TD}">${a.cantidad_sistema}</td><td class="${TD}">${a.cantidad_fisica}</td>
+        <td class="${TD}">${a.diferencia}</td><td class="${TD}">${a.solicitante}</td>
+        <td class="${TD}">${badge(a.estado, a.estado === "PENDIENTE" ? "low" : a.estado === "APROBADO" ? "ok" : "devolucion")}</td>
+        <td class="${TD}">${a.estado === "PENDIENTE" ? `
+          <div class="flex gap-1.5">
+            <button class="btn-secondary px-3 py-1.5 text-xs" onclick="decideAdjustmentAction('${a.ajuste_id}','APROBADO')">Aprobar</button>
+            <button class="btn-danger px-3 py-1.5 text-xs" onclick="decideAdjustmentAction('${a.ajuste_id}','RECHAZADO')">Rechazar</button>
+          </div>` : ""}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="9" class="${TD_EMPTY}">Sin ajustes registrados.</td></tr>`;
+  updateAdjustmentsBadge(items.filter((a) => a.estado === "PENDIENTE").length);
+}
+
+function updateAdjustmentsBadge(count) {
+  const el = document.getElementById("adjustments-badge");
+  if (count > 0) { el.textContent = count > 99 ? "99+" : count; el.classList.remove("hidden"); }
+  else el.classList.add("hidden");
+}
+
+async function decideAdjustmentAction(ajusteId, decision) {
+  const label = decision === "APROBADO" ? "aprobar" : "rechazar";
+  if (!confirm(`¿Confirmas ${label} este ajuste?`)) return;
+  const r = await api(`/inventory/adjust/${ajusteId}/decide`, { method: "POST", body: JSON.stringify({ decision }) });
+  if (r.status === "success") { toast(`Ajuste ${decision === "APROBADO" ? "aprobado" : "rechazado"}`); loadAdjustments(); loadDashboard(); }
+  else toast(r.error.message, false);
+}
+
+// -------- Auditoría --------
+async function loadAuditLog() {
+  const body = document.getElementById("audit-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const accion = document.getElementById("audit-accion").value.trim();
+  const params = new URLSearchParams({ limit: 100 });
+  if (accion) params.set("accion", accion);
+  const r = await api(`/inventory/audit?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver la auditoría."}</td></tr>`;
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(a.created_at).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${a.usuario_nombre || "—"}</td><td class="${TD}">${a.canal}</td>
+        <td class="${TD} font-mono text-xs">${a.accion}</td>
+        <td class="${TD}">${badge(a.resultado, a.resultado === "success" ? "ok" : "low")}</td>
+        <td class="${TD} text-xs text-slate-500">${a.error || "—"}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="6" class="${TD_EMPTY}">Sin registros.</td></tr>`;
+}
+document.getElementById("audit-accion").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAuditLog(); });
+
+// -------- Usuarios --------
+document.getElementById("form-user").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = Object.fromEntries(f.entries());
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/users", { method: "POST", body: JSON.stringify(payload) });
+    if (r.status === "success") { toast("Usuario creado"); e.target.reset(); loadUsers(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadUsers() {
+  const body = document.getElementById("users-body");
+  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/users");
+  if (r.status !== "success") {
+    body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para gestionar usuarios."}</td></tr>`;
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((u) => `<tr class="${TR}">
+        <td class="${TD}">${u.nombre_completo}</td><td class="${TD}">${u.email}</td>
+        <td class="${TD}">${u.rol_codigo}</td>
+        <td class="${TD}">${badge(u.activo ? "ACTIVO" : "INACTIVO", u.activo ? "ok" : "devolucion")}</td>
+        <td class="${TD}">
+          <button class="${u.activo ? "btn-danger" : "btn-secondary"} px-3 py-1.5 text-xs" onclick="toggleUserActive('${u.usuario_id}', ${!u.activo})">
+            ${u.activo ? "Desactivar" : "Activar"}
+          </button>
+        </td>
+      </tr>`).join("")
+    : `<tr><td colspan="5" class="${TD_EMPTY}">Sin usuarios.</td></tr>`;
+}
+
+async function toggleUserActive(usuarioId, nextActive) {
+  if (!confirm(`¿${nextActive ? "Activar" : "Desactivar"} este usuario?`)) return;
+  const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ activo: nextActive }) });
+  if (r.status === "success") { toast(`Usuario ${nextActive ? "activado" : "desactivado"}`); loadUsers(); }
+  else toast(r.error.message, false);
 }

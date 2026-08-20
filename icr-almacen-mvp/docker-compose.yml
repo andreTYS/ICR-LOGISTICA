@@ -29,7 +29,9 @@ services:
       PGPASSWORD: ${DB_PASSWORD:-changeme}
       PGDATABASE: icr_almacen
       PORT: 4000
-      JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el .env antes de desplegar}
+      ALLOWED_ORIGIN: https://${DOMAIN:-almacen.icr.example.com}
     depends_on:
       - db
     networks:

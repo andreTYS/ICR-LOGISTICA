@@ -3,6 +3,9 @@ const bcrypt = require("bcryptjs");
 const { pool } = require("./db");
 const { AppError } = require("./errors");
 
+if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET es obligatorio en producción (NODE_ENV=production). Define la variable de entorno antes de arrancar.");
+}
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-cambiar-en-produccion";
 const JWT_EXPIRES_IN = "12h";
 

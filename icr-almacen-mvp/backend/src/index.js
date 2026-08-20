@@ -5,7 +5,14 @@ const path = require("path");
 const routes = require("./routes");
 
 const app = express();
-app.use(cors());
+
+// Sin ALLOWED_ORIGIN definido, refleja el origen del request (conveniente en
+// desarrollo local). En producción, define ALLOWED_ORIGIN (uno o varios,
+// separados por coma) para restringir el panel a los dominios reales.
+const allowedOrigins = (process.env.ALLOWED_ORIGIN || "").split(",").map((o) => o.trim()).filter(Boolean);
+app.use(cors({
+  origin: allowedOrigins.length ? allowedOrigins : true,
+}));
 app.use(express.json());
 
 app.use("/api", routes);

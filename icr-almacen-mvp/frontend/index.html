@@ -87,6 +87,23 @@
           <span>Alertas</span>
           <span id="alerts-badge" class="hidden nav-badge">0</span>
         </button>
+        <button class="nav-item" data-view="reservations">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 4h12v13l-3-2-3 2-3-2-3 2V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Reservas</span>
+        </button>
+        <button class="nav-item" data-view="adjustments">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="m4 12 3 3 9-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Ajustes</span>
+          <span id="adjustments-badge" class="hidden nav-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="audit">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6"/><path d="m17 17-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Auditoría</span>
+        </button>
+        <button class="nav-item" data-view="users">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Usuarios</span>
+        </button>
       </nav>
 
       <div class="sidebar-user border-t border-white/10 pt-3.5 text-sm mt-2">
@@ -107,8 +124,8 @@
           <h1 id="view-title" class="text-[22px] font-bold text-navy-950 m-0">Panel general</h1>
           <p id="view-subtitle" class="text-[13px] text-slate-500 m-0 mt-0.5">Resumen del estado del almacén</p>
         </div>
-        <div id="toast" class="hidden toast"></div>
       </header>
+      <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 items-end pointer-events-none"></div>
 
       <!-- ============ DASHBOARD ============ -->
       <section class="view active" id="view-dashboard">
@@ -194,6 +211,7 @@
           <input id="stock-sku" placeholder="Filtrar por SKU o nombre..." class="field flex-1 max-w-xs" />
           <select id="stock-warehouse" class="field flex-1 max-w-xs"><option value="">Todos los almacenes</option></select>
           <button class="btn-secondary" onclick="loadStock()">Buscar</button>
+          <button class="btn-secondary" onclick="exportStockCsv()">⬇ Exportar CSV</button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -206,6 +224,7 @@
             <tbody id="stock-body"></tbody>
           </table>
         </div>
+        <div id="stock-pager"></div>
       </section>
 
       <!-- ============ INGRESO ============ -->
@@ -345,6 +364,7 @@
             <tbody id="products-body"></tbody>
           </table>
         </div>
+        <div id="products-pager"></div>
       </section>
 
       <!-- ============ MOVIMIENTOS ============ -->
@@ -352,6 +372,7 @@
         <div class="flex flex-wrap gap-2.5 mb-4">
           <input id="mov-sku" placeholder="Filtrar por SKU..." class="field flex-1 max-w-xs" />
           <button class="btn-secondary" onclick="loadMovements()">Buscar</button>
+          <button class="btn-secondary" onclick="exportMovementsCsv()">⬇ Exportar CSV</button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -363,6 +384,7 @@
             <tbody id="movements-body"></tbody>
           </table>
         </div>
+        <div id="movements-pager"></div>
       </section>
 
       <!-- ============ ALERTAS ============ -->
@@ -375,6 +397,139 @@
               <th class="text-left font-semibold px-3 py-2.5">Nivel mínimo</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
             </tr></thead>
             <tbody id="alerts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ RESERVAS ============ -->
+      <section class="view" id="view-reservations">
+        <form class="form-card mb-7" id="form-reserve">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" class="field" />
+            </label>
+            <label class="field-label">Cantidad
+              <input name="quantity" type="number" min="0.01" step="0.01" required class="field" />
+            </label>
+            <label class="field-label">Almacén
+              <select name="warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label class="field-label">Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
+            </label>
+            <label class="field-label">Código de proyecto (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+            </label>
+            <label class="field-label">RUC de cliente (opcional)
+              <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Reservar stock</span></button>
+        </form>
+        <div id="reserve-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">SKU</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Cantidad</th>
+              <th class="text-left font-semibold px-3 py-2.5">Solicitante</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="reservations-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ AJUSTES ============ -->
+      <section class="view" id="view-adjustments">
+        <form class="form-card mb-7" id="form-adjust">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto
+              <input name="sku" list="sku-list" required placeholder="ej. PANEL-JA-550" class="field" />
+            </label>
+            <label class="field-label">Almacén
+              <select name="warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label class="field-label">Ubicación (opcional)
+              <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
+            </label>
+            <label class="field-label">Cantidad física contada
+              <input name="cantidad_fisica" type="number" min="0" step="0.01" required class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Motivo
+              <input name="motivo" placeholder="ej. Conteo cíclico semanal" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Solicitar ajuste</span></button>
+        </form>
+        <div id="adjust-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">SKU</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Sistema</th>
+              <th class="text-left font-semibold px-3 py-2.5">Físico</th><th class="text-left font-semibold px-3 py-2.5">Diferencia</th>
+              <th class="text-left font-semibold px-3 py-2.5">Solicitante</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="adjustments-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ AUDITORÍA ============ -->
+      <section class="view" id="view-audit">
+        <div class="flex flex-wrap gap-2.5 mb-4">
+          <input id="audit-accion" placeholder="Filtrar por acción (ej. inventory.remove)..." class="field flex-1 max-w-xs" />
+          <button class="btn-secondary" onclick="loadAuditLog()">Buscar</button>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">Usuario</th>
+              <th class="text-left font-semibold px-3 py-2.5">Canal</th><th class="text-left font-semibold px-3 py-2.5">Acción</th>
+              <th class="text-left font-semibold px-3 py-2.5">Resultado</th><th class="text-left font-semibold px-3 py-2.5">Detalle</th>
+            </tr></thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ USUARIOS ============ -->
+      <section class="view" id="view-users">
+        <form class="form-card mb-7" id="form-user">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">Nombre completo
+              <input name="nombre_completo" required placeholder="ej. Juan Pérez" class="field" />
+            </label>
+            <label class="field-label">Correo
+              <input name="email" type="email" required placeholder="juan@icr.pe" class="field" />
+            </label>
+            <label class="field-label">Contraseña temporal
+              <input name="password" type="password" required minlength="8" placeholder="mínimo 8 caracteres" class="field" />
+            </label>
+            <label class="field-label">Rol
+              <select name="rol_codigo" required class="field">
+                <option value="">Selecciona un rol…</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="SUPERVISOR">SUPERVISOR</option>
+                <option value="ALMACENERO">ALMACENERO</option>
+                <option value="COMPRAS">COMPRAS</option>
+                <option value="VENTAS">VENTAS</option>
+                <option value="CONSULTA">CONSULTA</option>
+              </select>
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear usuario</span></button>
+        </form>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Nombre</th><th class="text-left font-semibold px-3 py-2.5">Correo</th>
+              <th class="text-left font-semibold px-3 py-2.5">Rol</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="users-body"></tbody>
           </table>
         </div>
       </section>

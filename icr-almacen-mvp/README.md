@@ -9,7 +9,7 @@ La automatización con N8N / Telegram **no está incluida en este MVP** — qued
 - `db/schema.sql` — DDL completo (18 tablas, 2 vistas, índices).
 - `db/seed.sql` — datos mínimos para operar: 3 usuarios, 2 almacenes, 2 ubicaciones, 3 productos de ejemplo.
 - `backend/` — API Node.js/Express + PostgreSQL (`pg`), con transacciones atómicas y locking para evitar condiciones de carrera (ver `src/services/inventoryService.js`).
-- `frontend/` — panel web (HTML/JS puro, sin build step en runtime) servido por el mismo backend: Panel (dashboard), Stock, Ingreso, Salida, Transferencia, Productos, Movimientos, Alertas. Estilizado con Tailwind CSS (paleta `#00004C` / `#000073` / `#00B7C2` / `#00FFC2`), compilado a `frontend/style.css` en tiempo de desarrollo — ver [`frontend/README.md`](frontend/README.md) para regenerarlo tras tocar clases de Tailwind.
+- `frontend/` — panel web (HTML/JS puro, sin build step en runtime) servido por el mismo backend: Panel (dashboard), Stock, Ingreso, Salida, Transferencia, Productos, Movimientos, Alertas, Reservas, Ajustes, Auditoría, Usuarios. Stock/Productos/Movimientos con paginación y exportación a CSV. Estilizado con Tailwind CSS (paleta `#00004C` / `#000073` / `#00B7C2` / `#00FFC2`), compilado a `frontend/style.css` en tiempo de desarrollo — ver [`frontend/README.md`](frontend/README.md) para regenerarlo tras tocar clases de Tailwind.
 - `docker-compose.yml` — para desplegar en el VPS de Hostinger junto a Traefik.
 
 ## Opción A — Levantar en local (para revisar antes del jueves)
@@ -57,7 +57,10 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres PGDATABASE=icr_almacen PORT
 
 El panel ahora exige login (pantalla inicial). El backend valida el token JWT en cada request y aplica el mapa de permisos por rol definido en el documento técnico (`backend/src/auth.js`) — por ejemplo, un usuario con rol `CONSULTA` no puede ejecutar `inventory.receive`, solo consultar.
 
-**Cambiar `JWT_SECRET` antes de desplegar en el VPS** (variable de entorno) — el valor por defecto es solo para desarrollo local.
+**Hardening para producción:**
+- `JWT_SECRET` es **obligatorio** cuando `NODE_ENV=production` — el backend falla al arrancar si no está definido (en desarrollo cae a un valor por defecto).
+- `POST /auth/login` está limitado a 10 intentos por IP cada 15 minutos.
+- CORS está abierto por defecto (conveniente en local); definir `ALLOWED_ORIGIN` (uno o varios dominios separados por coma) para restringirlo en producción.
 
 ## Productos de ejemplo cargados
 
@@ -70,9 +73,9 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 ## Qué NO incluye este MVP (a propósito)
 
 - Automatización N8N / Telegram — fase siguiente.
-- Reservas, ajustes con aprobación, control completo por lote/serie — están modeladas en el schema pero no expuestas todavía como comandos de API (quedan para Fase 2 y 3 del roadmap del PRD).
-- Gestión de usuarios desde el panel (crear/editar usuarios) — hoy se hace por SQL directo; los 3 usuarios de prueba ya cubren los roles principales.
+- Control completo por lote/serie (trazabilidad individual de números de serie en `receive`/`remove`) — las tablas `lotes`/`series` existen en el schema pero no están conectadas a los comandos de API todavía.
 - HTTPS en local (sí lo maneja Traefik en el VPS vía el `docker-compose.yml`).
+- Tests automatizados — la verificación de los casos de aceptación sigue siendo manual (ver abajo).
 
 ## Cómo probar los 5 casos de aceptación del PRD manualmente
 
@@ -81,3 +84,11 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 3. **Retirar stock** → pestaña *Salida*.
 4. **Retiro rechazado por stock insuficiente** → pedir una cantidad mayor a la disponible; el panel muestra el error `INSUFFICIENT_STOCK` sin tocar el stock.
 5. **Transferencia atómica** → pestaña *Transferencia*; verificar en *Stock* que el origen bajó y el destino subió exactamente lo mismo.
+
+## Funcionalidad agregada tras el MVP inicial
+
+- **Reservas** (`inventory.reserve` / `inventory.release_reservation`) — apartar stock para un proyecto o cliente sin retirarlo aún; libera el `stock_reservado` al cancelar. Rol `VENTAS` puede reservar/liberar; la mayoría de roles pueden consultar la lista.
+- **Ajustes con aprobación** (`inventory.adjust` / `inventory.adjust.approve`) — cualquier rol con permiso de ajuste registra el conteo físico; el ajuste queda `PENDIENTE` y solo aplica al stock cuando un `SUPERVISOR` o `ADMIN` lo aprueba (o queda descartado si lo rechaza).
+- **Auditoría** — visor de solo lectura sobre la tabla `auditoria`, que ya registraba cada comando (éxito o error) desde el día uno; ahora tiene UI (`SUPERVISOR`/`ADMIN`).
+- **Usuarios** — alta, cambio de rol y activar/desactivar usuarios desde el panel (antes solo por SQL directo). Exclusivo de `ADMIN`.
+- **Paginación** en Stock, Productos y Movimientos (antes Productos cortaba en 50 resultados sin avisar). Exportar a CSV disponible en Stock y Movimientos.
