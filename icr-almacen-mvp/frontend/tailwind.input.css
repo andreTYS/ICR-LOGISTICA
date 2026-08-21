@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-navy-950: #00004C;
+  --color-navy-900: #000073;
+  --color-accent: #00B7C2;
+  --color-accent-400: #00FFC2;
+  --color-accent-600: #009aa4;
+  --shadow-glow: 0 0 0 1px rgba(0,183,194,0.15), 0 8px 24px -8px rgba(0,0,76,0.35);
+}
+
+/*
+  Tailwind handles almost all styling directly in markup. This layer only
+  covers: (1) a hard override for JS-toggled visibility so it always wins
+  regardless of other display utilities on the same element, and (2) small
+  reusable component classes for things repeated across many views (form
+  fields, cards, buttons) so the HTML stays readable.
+*/
+
+.hidden { display: none !important; }
+
+body { font-feature-settings: "cv11"; }
+
+/* -------- Sidebar navigation -------- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.78);
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  position: relative;
+  transition: background .15s ease, color .15s ease;
+}
+.nav-icon { width: 17px; height: 17px; flex-shrink: 0; opacity: .85; }
+.nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.nav-item.active { background: linear-gradient(135deg, #00B7C2, #00FFC2); color: #00004C; font-weight: 600; }
+.nav-item.active .nav-icon { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  background: #e11d48;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+  min-width: 18px;
+  text-align: center;
+}
+.nav-item.active .nav-badge { background: #00004C; color: #fff; }
+
+/* -------- Form fields -------- */
+.field {
+  padding: 9px 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1a1f2c;
+  background: #fff;
+  font-family: inherit;
+  width: 100%;
+}
+.field:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,183,194,0.45); border-color: #00B7C2; }
+.field-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #667085; font-weight: 600; }
+
+.form-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; }
+.table-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.table-card thead tr th:first-child { border-top-left-radius: 12px; }
+.table-card thead tr th:last-child { border-top-right-radius: 12px; }
+.table-card tbody td { border-bottom: 1px solid #f1f5f9; }
+.table-card tbody tr:last-child td { border-bottom: none; }
+
+/* -------- Buttons -------- */
+.btn-primary {
+  padding: 10px 20px; border-radius: 8px; border: none;
+  background: #00004C; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background .15s ease;
+}
+.btn-primary:hover { background: #000073; }
+.btn-secondary {
+  padding: 9px 18px; border-radius: 8px; border: 1px solid #e2e8f0;
+  background: #fff; color: #00004C; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background .15s ease;
+}
+.btn-secondary:hover { background: #f8fafc; }
+.btn-secondary:disabled { opacity: .4; cursor: default; }
+.btn-secondary:disabled:hover { background: #fff; }
+.btn-danger {
+  padding: 9px 18px; border-radius: 8px; border: 1px solid #fecdd3;
+  background: #fff1f2; color: #e11d48; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background .15s ease;
+}
+.btn-danger:hover { background: #ffe4e6; }
+.btn-danger:disabled { opacity: .4; cursor: default; }
+
+.btn-loading { position: relative; }
+.btn-loading:disabled { opacity: .7; cursor: default; }
+.btn-loading.loading .btn-label { visibility: hidden; }
+.btn-loading.loading::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 15px; height: 15px;
+  margin: -8px 0 0 -8px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* -------- Result / toast / alert states -------- */
+.result-box { margin-top: 18px; font-size: 13px; }
+.result-box pre {
+  background: #00004C; color: #d7dcec; padding: 14px; border-radius: 8px;
+  overflow-x: auto; font-size: 12.5px; margin: 0;
+}
+.result-box.ok pre { border-left: 4px solid #059669; }
+.result-box.err pre { border-left: 4px solid #e11d48; }
+
+.toast {
+  padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  box-shadow: 0 8px 24px -6px rgba(0,0,76,0.25);
+  animation: toast-in .18s ease; pointer-events: auto; max-width: 320px;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+.toast-out { animation: toast-out .2s ease forwards; }
+@keyframes toast-out { to { opacity: 0; transform: translateX(12px); } }
+.toast.success { background: #ecfdf5; color: #059669; }
+.toast.error { background: #fff1f2; color: #e11d48; }
+
+.view { display: none; }
+.view.active { display: block; animation: view-in .15s ease; }
+@keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
+
+.kpi-card { transition: border-color .15s ease; }
+.kpi-card-alert { border-color: #fda4af !important; background: #fff9f9; }
+
+/* -------- Responsive sidebar -------- */
+@media (max-width: 800px) {
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; align-items: center; padding: 12px 14px; gap: 14px; }
+  .brand-sub { display: none; }
+  .sidebar nav { flex-direction: row; flex: none; }
+  .sidebar .nav-item { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 10.5px; flex-shrink: 0; }
+  .sidebar .nav-badge { position: absolute; top: 2px; right: 2px; margin-left: 0; }
+  .sidebar-user { display: none; }
+}

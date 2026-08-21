@@ -1,0 +1,293 @@
+-- ============================================================
+-- ICR Inventario — Módulo de Almacén
+-- Schema PostgreSQL: 18 tablas + 2 vistas
+-- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ---------- CONFIGURACIÓN ----------
+
+CREATE TABLE parametros (
+    parametro_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    clave           TEXT NOT NULL UNIQUE,
+    valor           TEXT NOT NULL,
+    tipo_dato       TEXT NOT NULL CHECK (tipo_dato IN ('STRING','NUMBER','BOOLEAN','DATE')),
+    descripcion     TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE catalogos (
+    catalogo_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo            TEXT NOT NULL,
+    codigo          TEXT NOT NULL,
+    valor           TEXT NOT NULL,
+    descripcion     TEXT,
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    UNIQUE (tipo, codigo)
+);
+
+-- ---------- MAESTROS ----------
+
+CREATE TABLE usuarios (
+    usuario_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre_completo      TEXT NOT NULL,
+    email               TEXT UNIQUE,
+    password_hash       TEXT,
+    telegram_id         TEXT UNIQUE,
+    rol_codigo          TEXT NOT NULL CHECK (rol_codigo IN
+                          ('ADMIN','SUPERVISOR','ALMACENERO','COMPRAS','VENTAS','CONSULTA')),
+    nivel_autorizacion  INT NOT NULL DEFAULT 1,
+    activo              BOOLEAN NOT NULL DEFAULT true,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE almacenes (
+    almacen_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo          TEXT NOT NULL UNIQUE,
+    nombre          TEXT NOT NULL,
+    responsable_id  UUID REFERENCES usuarios(usuario_id),
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE ubicaciones (
+    ubicacion_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    almacen_id       UUID NOT NULL REFERENCES almacenes(almacen_id),
+    codigo_ubicacion TEXT NOT NULL,
+    descripcion      TEXT,
+    activo           BOOLEAN NOT NULL DEFAULT true,
+    UNIQUE (almacen_id, codigo_ubicacion)
+);
+
+CREATE TABLE proveedores (
+    proveedor_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ruc             TEXT NOT NULL UNIQUE,
+    razon_social    TEXT NOT NULL,
+    contacto        TEXT,
+    activo          BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE clientes (
+    cliente_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ruc             TEXT NOT NULL UNIQUE,
+    razon_social    TEXT NOT NULL,
+    contacto        TEXT,
+    activo          BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE proyectos (
+    proyecto_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo_proyecto  TEXT NOT NULL UNIQUE,
+    nombre           TEXT NOT NULL,
+    cliente_id       UUID REFERENCES clientes(cliente_id),
+    responsable_id   UUID REFERENCES usuarios(usuario_id),
+    presupuesto      NUMERIC(14,2),
+    moneda           TEXT DEFAULT 'PEN',
+    fecha_inicio     DATE,
+    fecha_fin        DATE,
+    activo           BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE productos (
+    producto_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sku             TEXT NOT NULL UNIQUE,
+    codigo_barras   TEXT UNIQUE,
+    nombre          TEXT NOT NULL,
+    descripcion     TEXT,
+    marca           TEXT,
+    modelo          TEXT,
+    unidad_medida   TEXT NOT NULL DEFAULT 'UND',
+    tipo_control    TEXT NOT NULL CHECK (tipo_control IN ('NORMAL','LOTE','SERIE','SERIE_LOTE')),
+    stock_minimo    NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
+    punto_reorden   NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (punto_reorden >= 0),
+    stock_maximo    NUMERIC(14,2),
+    costo_unitario  NUMERIC(14,2) DEFAULT 0,
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- TRANSACCIONAL ----------
+
+CREATE TABLE documentos (
+    documento_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo_documento    TEXT NOT NULL CHECK (tipo_documento IN
+                        ('FACTURA','GUIA','ORDEN_COMPRA','GUIA_REMISION')),
+    numero_documento  TEXT NOT NULL,
+    proveedor_id      UUID REFERENCES proveedores(proveedor_id),
+    cliente_id        UUID REFERENCES clientes(cliente_id),
+    fecha_emision     DATE NOT NULL DEFAULT CURRENT_DATE,
+    UNIQUE (tipo_documento, numero_documento)
+);
+
+CREATE TABLE lotes (
+    lote_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id         UUID NOT NULL REFERENCES productos(producto_id),
+    proveedor_id        UUID REFERENCES proveedores(proveedor_id),
+    numero_lote         TEXT NOT NULL,
+    fecha_fabricacion   DATE,
+    fecha_vencimiento   DATE,
+    UNIQUE (producto_id, numero_lote)
+);
+
+CREATE TABLE series (
+    serie_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id     UUID NOT NULL REFERENCES productos(producto_id),
+    lote_id         UUID REFERENCES lotes(lote_id),
+    numero_serie    TEXT NOT NULL UNIQUE,
+    almacen_id      UUID REFERENCES almacenes(almacen_id),
+    ubicacion_id    UUID REFERENCES ubicaciones(ubicacion_id),
+    proyecto_id     UUID REFERENCES proyectos(proyecto_id),
+    cliente_id      UUID REFERENCES clientes(cliente_id),
+    estado          TEXT NOT NULL DEFAULT 'EN_STOCK' CHECK (estado IN
+                      ('EN_STOCK','RESERVADO','DESPACHADO','DEVUELTO','BAJA')),
+    garantia_inicio DATE,
+    garantia_fin    DATE,
+    fecha_salida    TIMESTAMPTZ,
+    CHECK (garantia_fin IS NULL OR garantia_inicio IS NULL OR garantia_fin >= garantia_inicio)
+);
+
+CREATE TABLE reservas (
+    reserva_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id       UUID NOT NULL REFERENCES productos(producto_id),
+    almacen_id        UUID NOT NULL REFERENCES almacenes(almacen_id),
+    ubicacion_id      UUID REFERENCES ubicaciones(ubicacion_id),
+    proyecto_id       UUID REFERENCES proyectos(proyecto_id),
+    cliente_id        UUID REFERENCES clientes(cliente_id),
+    usuario_id        UUID NOT NULL REFERENCES usuarios(usuario_id),
+    cantidad          NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    estado            TEXT NOT NULL DEFAULT 'ACTIVA' CHECK (estado IN
+                        ('ACTIVA','CONSUMIDA','CANCELADA','EXPIRADA')),
+    fecha_reserva     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    fecha_expiracion  TIMESTAMPTZ,
+    CHECK (fecha_expiracion IS NULL OR fecha_expiracion >= fecha_reserva)
+);
+
+CREATE TABLE stock (
+    stock_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id       UUID NOT NULL REFERENCES productos(producto_id),
+    almacen_id        UUID NOT NULL REFERENCES almacenes(almacen_id),
+    ubicacion_id      UUID REFERENCES ubicaciones(ubicacion_id),
+    stock_fisico      NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (stock_fisico >= 0),
+    stock_reservado   NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (stock_reservado >= 0),
+    stock_danado      NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (stock_danado >= 0),
+    stock_transito     NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (stock_transito >= 0),
+    stock_disponible  NUMERIC(14,2) GENERATED ALWAYS AS (stock_fisico - stock_reservado) STORED,
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (producto_id, almacen_id, ubicacion_id)
+);
+
+CREATE TABLE ajustes (
+    ajuste_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id       UUID NOT NULL REFERENCES productos(producto_id),
+    almacen_id        UUID NOT NULL REFERENCES almacenes(almacen_id),
+    ubicacion_id      UUID REFERENCES ubicaciones(ubicacion_id),
+    cantidad_sistema  NUMERIC(14,2) NOT NULL,
+    cantidad_fisica   NUMERIC(14,2) NOT NULL,
+    diferencia        NUMERIC(14,2) GENERATED ALWAYS AS (cantidad_fisica - cantidad_sistema) STORED,
+    motivo            TEXT,
+    usuario_id        UUID NOT NULL REFERENCES usuarios(usuario_id),
+    estado            TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','APROBADO','RECHAZADO')),
+    aprobado_por      UUID REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE movimientos (
+    movimiento_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id        UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    tipo_movimiento       TEXT NOT NULL CHECK (tipo_movimiento IN
+                            ('INGRESO','SALIDA','TRANSFERENCIA','AJUSTE','DEVOLUCION')),
+    producto_id           UUID NOT NULL REFERENCES productos(producto_id),
+    cantidad              NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    almacen_origen_id     UUID REFERENCES almacenes(almacen_id),
+    ubicacion_origen_id   UUID REFERENCES ubicaciones(ubicacion_id),
+    almacen_destino_id    UUID REFERENCES almacenes(almacen_id),
+    ubicacion_destino_id  UUID REFERENCES ubicaciones(ubicacion_id),
+    documento_id          UUID REFERENCES documentos(documento_id),
+    proveedor_id          UUID REFERENCES proveedores(proveedor_id),
+    cliente_id            UUID REFERENCES clientes(cliente_id),
+    proyecto_id           UUID REFERENCES proyectos(proyecto_id),
+    lote_id               UUID REFERENCES lotes(lote_id),
+    serie_id              UUID REFERENCES series(serie_id),
+    usuario_id            UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- MONITOREO ----------
+
+CREATE TABLE alertas (
+    alerta_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id        UUID NOT NULL REFERENCES productos(producto_id),
+    almacen_id         UUID NOT NULL REFERENCES almacenes(almacen_id),
+    tipo_alerta        TEXT NOT NULL DEFAULT 'STOCK_BAJO',
+    nivel_actual       NUMERIC(14,2),
+    nivel_minimo       NUMERIC(14,2),
+    prioridad          TEXT NOT NULL DEFAULT 'MEDIA' CHECK (prioridad IN ('BAJA','MEDIA','ALTA')),
+    estado             TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','EN_PROCESO','RESUELTA')),
+    notificado         BOOLEAN NOT NULL DEFAULT false,
+    fecha_notificacion TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE auditoria (
+    auditoria_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id       UUID REFERENCES usuarios(usuario_id),
+    canal            TEXT NOT NULL DEFAULT 'web' CHECK (canal IN ('web','telegram','api','n8n')),
+    accion           TEXT NOT NULL,
+    entidad          TEXT,
+    entidad_id       UUID,
+    valor_anterior   JSONB,
+    valor_nuevo      JSONB,
+    workflow_n8n     TEXT,
+    execution_id     TEXT,
+    ip_origen        TEXT,
+    resultado        TEXT NOT NULL DEFAULT 'success' CHECK (resultado IN ('success','error')),
+    error            TEXT,
+    transaction_id   UUID,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- VISTAS
+-- ============================================================
+
+CREATE VIEW vw_inventario_disponible AS
+SELECT
+    s.stock_id,
+    p.producto_id,
+    p.sku,
+    p.nombre        AS producto_nombre,
+    p.tipo_control,
+    a.almacen_id,
+    a.codigo        AS almacen_codigo,
+    a.nombre        AS almacen_nombre,
+    u.ubicacion_id,
+    u.codigo_ubicacion,
+    s.stock_fisico,
+    s.stock_reservado,
+    s.stock_disponible,
+    s.stock_danado,
+    s.stock_transito,
+    p.stock_minimo,
+    p.punto_reorden,
+    p.stock_maximo
+FROM stock s
+JOIN productos p  ON p.producto_id = s.producto_id
+JOIN almacenes a  ON a.almacen_id  = s.almacen_id
+LEFT JOIN ubicaciones u ON u.ubicacion_id = s.ubicacion_id
+WHERE a.activo = true AND p.activo = true;
+
+CREATE VIEW vw_stock_bajo AS
+SELECT *
+FROM vw_inventario_disponible
+WHERE stock_disponible <= punto_reorden;
+
+-- ============================================================
+-- ÍNDICES DE APOYO
+-- ============================================================
+
+CREATE INDEX idx_movimientos_producto ON movimientos(producto_id);
+CREATE INDEX idx_movimientos_fecha ON movimientos(created_at);
+CREATE INDEX idx_stock_producto_almacen ON stock(producto_id, almacen_id);
+CREATE INDEX idx_auditoria_fecha ON auditoria(created_at);
+CREATE INDEX idx_auditoria_transaction ON auditoria(transaction_id);

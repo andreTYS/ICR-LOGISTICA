@@ -1,0 +1,13 @@
+{
+  "name": "icr-almacen-frontend",
+  "private": true,
+  "description": "Panel web del MVP de Almacén (HTML/JS puro, sin build step en runtime). Tailwind se compila a style.css en tiempo de desarrollo.",
+  "scripts": {
+    "build:css": "tailwindcss -i tailwind.input.css -o style.css --minify",
+    "watch:css": "tailwindcss -i tailwind.input.css -o style.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}
