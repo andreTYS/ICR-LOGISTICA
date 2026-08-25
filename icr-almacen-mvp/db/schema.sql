@@ -103,8 +103,23 @@ CREATE TABLE productos (
     punto_reorden   NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (punto_reorden >= 0),
     stock_maximo    NUMERIC(14,2),
     costo_unitario  NUMERIC(14,2) DEFAULT 0,
+    imagen_url      TEXT,
+    es_kit          BOOLEAN NOT NULL DEFAULT false,
     activo          BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Composición de un producto "caja/kit" (es_kit = true): qué productos
+-- individuales incluye y en qué cantidad. Un producto normal no tiene filas
+-- aquí; un kit puede tener varios items, cada uno referenciando un producto
+-- no-kit (no se admiten kits anidados, ver CHECK en la app).
+CREATE TABLE producto_kit_items (
+    kit_item_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_kit_id  UUID NOT NULL REFERENCES productos(producto_id),
+    producto_id      UUID NOT NULL REFERENCES productos(producto_id),
+    cantidad         NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    UNIQUE (producto_kit_id, producto_id),
+    CHECK (producto_kit_id <> producto_id)
 );
 
 -- ---------- TRANSACCIONAL ----------
@@ -258,6 +273,8 @@ SELECT
     p.sku,
     p.nombre        AS producto_nombre,
     p.tipo_control,
+    p.imagen_url,
+    p.es_kit,
     a.almacen_id,
     a.codigo        AS almacen_codigo,
     a.nombre        AS almacen_nombre,

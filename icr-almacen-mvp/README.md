@@ -45,11 +45,12 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres PGDATABASE=icr_almacen npm 
    DOMAIN=almacen.icr.tudominio.com
    ```
 3. Confirmar que el nombre de la red externa de Traefik en `docker-compose.yml` (`traefik_public`) coincide con la red real que ya usa Traefik en el VPS — si se llama distinto, cambiarlo ahí.
-4. Levantar:
+4. El logo y las fotos de producto se guardan en `/app/uploads` dentro del contenedor, montado como el volumen `icr_almacen_uploads` — sobrevive a un `docker compose up -d --build`. Si el VPS tiene backups de volúmenes, agregar este a la lista.
+5. Levantar:
    ```bash
    docker compose up -d --build
    ```
-5. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
+6. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
 
 ## Usuarios de prueba (seed)
 
@@ -109,3 +110,6 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 - **Kardex por producto** — clic en cualquier SKU (en Stock o Productos) abre un panel con el desglose de stock por almacén/ubicación y el historial completo de movimientos de ese producto.
 - **Acciones rápidas + gráfico de actividad** en el Panel — accesos directos a Ingreso/Salida/Transferencia/Reservar, y un gráfico de barras (Ingresos vs. Salidas) de los últimos 7 días con tooltip al pasar el mouse. Colores validados para daltonismo con el script de la skill de dataviz (`#2a78d6` / `#eb6834`, ΔE CVD 24.7 — muy por encima del piso de 8).
 - **Estados vacíos con ícono** en todas las tablas (sin resultados, sin permiso, todo al día) en vez de solo texto en cursiva.
+- **Logo configurable** — pestaña *Configuración* (solo `ADMIN`): subir una imagen (JPEG/PNG/WebP, hasta 3MB) que reemplaza la marca "IC" en el menú lateral y en la pantalla de login. Se guarda en `parametros` (`LOGO_URL`) y el archivo en `/uploads`, servido como estático por el propio backend.
+- **Fotos de producto** — botón "Subir foto" en la tabla de Productos y dentro del Kardex de cada SKU. Aparece como miniatura en la lista y como imagen grande en el Kardex.
+- **Kits ("cajas de herramientas")** — cualquier producto puede agrupar otros productos con una cantidad cada uno (tabla `producto_kit_items`), gestionable desde la sección "Kit / lista de materiales" del Kardex. Agregar el primer item convierte automáticamente el producto en kit (badge `KIT` en Productos); no se admiten kits anidados. Es un catálogo de composición — el stock de cada componente se sigue registrando por separado con `inventory.receive`/`remove`.

@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const routes = require("./routes");
+const { uploadsDir } = require("./uploads");
 
 const app = express();
 
@@ -16,6 +17,9 @@ app.use(cors({
 app.use(express.json());
 
 app.use("/api", routes);
+
+// Logo configurable y fotos de producto (ver src/uploads.js)
+app.use("/uploads", express.static(uploadsDir, { maxAge: "7d" }));
 
 // Sirve el panel web estático (frontend/) para que el MVP funcione con un solo proceso
 app.use(express.static(path.join(__dirname, "..", "..", "frontend")));
