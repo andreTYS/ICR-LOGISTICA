@@ -77,6 +77,8 @@ body { font-feature-settings: "cv11"; }
 .table-card thead tr th:last-child { border-top-right-radius: 12px; }
 .table-card tbody td { border-bottom: 1px solid #f1f5f9; }
 .table-card tbody tr:last-child td { border-bottom: none; }
+.table-card tbody tr:hover td { background: #f0fdfe; }
+.row-clickable { cursor: pointer; }
 
 /* -------- Buttons -------- */
 .btn-primary {
@@ -100,6 +102,14 @@ body { font-feature-settings: "cv11"; }
 }
 .btn-danger:hover { background: #ffe4e6; }
 .btn-danger:disabled { opacity: .4; cursor: default; }
+
+.btn-quick {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 999px; border: 1px solid #e2e8f0;
+  background: #fff; color: #00004C; font-weight: 600; font-size: 13.5px; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.btn-quick:hover { background: #f0fdfe; border-color: #00B7C2; }
 
 .btn-loading { position: relative; }
 .btn-loading:disabled { opacity: .7; cursor: default; }
@@ -138,6 +148,29 @@ body { font-feature-settings: "cv11"; }
 
 .kpi-card { transition: border-color .15s ease; }
 .kpi-card-alert { border-color: #fda4af !important; background: #fff9f9; }
+
+/* -------- Gráfico de actividad (dashboard) -------- */
+.chart-bar { transition: opacity .12s ease; cursor: default; }
+.chart-bar:hover { opacity: .8; }
+.chart-tip {
+  position: absolute; pointer-events: none; z-index: 20;
+  background: #00004C; color: #fff; font-size: 11.5px; font-weight: 600;
+  padding: 5px 9px; border-radius: 6px; white-space: nowrap;
+  transform: translate(-50%, -100%); opacity: 0; transition: opacity .1s ease;
+}
+.chart-tip.visible { opacity: 1; }
+
+/* -------- Modal (Kardex) -------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,76,0.45); z-index: 40;
+  display: flex; align-items: flex-start; justify-content: center; padding: 5vh 16px;
+  animation: fade-in .12s ease;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  background: #fff; border-radius: 14px; width: 100%; max-width: 720px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 60px -12px rgba(0,0,76,0.5);
+}
 
 /* -------- Responsive sidebar -------- */
 @media (max-width: 800px) {

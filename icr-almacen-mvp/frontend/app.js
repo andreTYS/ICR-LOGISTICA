@@ -19,6 +19,24 @@ function badge(text, tone) {
   return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${cls}">${text}</span>`;
 }
 
+// -------- Estados vacíos con icono --------
+const EMPTY_ICONS = {
+  search: '<circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6"/><path d="m17 17-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  check: '<circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.6"/><path d="m6.5 10 2.5 2.5 4.5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  inbox: '<path d="M3 10h4.5l1.5 2.5h2L12.5 10H17" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 10 4.8 4.6A1 1 0 0 1 5.7 4h8.6a1 1 0 0 1 .95.6L17 10v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  chart: '<path d="M4 16V9M9 16V4M14 16v-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  lock: '<rect x="4" y="9" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" stroke="currentColor" stroke-width="1.6"/>',
+};
+function emptyState(message, icon) {
+  return `<div class="flex flex-col items-center justify-center gap-2 py-8 text-slate-400">
+    <svg class="w-7 h-7" viewBox="0 0 20 20" fill="none">${EMPTY_ICONS[icon] || EMPTY_ICONS.inbox}</svg>
+    <span class="text-sm italic">${message}</span>
+  </div>`;
+}
+function emptyRow(colspan, message, icon) {
+  return `<tr><td colspan="${colspan}" class="px-3 py-2">${emptyState(message, icon)}</td></tr>`;
+}
+
 // -------- Paginación --------
 function renderPager(containerId, { total, page, pageSize }, onChange) {
   const el = document.getElementById(containerId);
@@ -246,11 +264,11 @@ async function loadDashboard() {
         <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td>
         <td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
       </tr>`).join("")
-    : `<tr><td colspan="4" class="${TD_EMPTY}">Sin movimientos todavía.</td></tr>`;
+    : emptyRow(4, "Sin movimientos todavía.", "inbox");
 
   const alertBody = document.getElementById("dash-alerts-body");
   if (!alertsAllowed) {
-    alertBody.innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Tu rol no tiene permiso para ver alertas.</td></tr>`;
+    alertBody.innerHTML = emptyRow(3, "Tu rol no tiene permiso para ver alertas.", "lock");
   } else {
     const topAlerts = alerts.filter((a) => a.estado !== "RESUELTA").slice(0, 6);
     alertBody.innerHTML = topAlerts.length
@@ -258,8 +276,90 @@ async function loadDashboard() {
           <td class="${TD}">${a.sku}</td><td class="${TD}">${a.producto_nombre}</td>
           <td class="${TD}">${badge(`${a.nivel_actual} / ${a.nivel_minimo}`, "low")}</td>
         </tr>`).join("")
-      : `<tr><td colspan="3" class="${TD_EMPTY}">Sin alertas activas. 🎉</td></tr>`;
+      : emptyRow(3, "Sin alertas activas.", "check");
   }
+
+  renderActivityChart(allMov.data?.items || []);
+}
+
+// -------- Gráfico de actividad (Ingresos vs Salidas, últimos 7 días) --------
+// Paleta validada para 2 series categóricas (CVD-safe, ver skill dataviz):
+// azul #2a78d6 = Ingresos, naranja #eb6834 = Salidas.
+function renderActivityChart(movements) {
+  const el = document.getElementById("activity-chart");
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+  const counts = days.map((d) => {
+    const next = new Date(d);
+    next.setDate(next.getDate() + 1);
+    const dayMov = movements.filter((m) => {
+      const t = new Date(m.created_at).getTime();
+      return t >= d.getTime() && t < next.getTime();
+    });
+    return {
+      label: d.toLocaleDateString("es-PE", { weekday: "short", day: "numeric" }),
+      ingresos: dayMov.filter((m) => m.tipo_movimiento === "INGRESO").length,
+      salidas: dayMov.filter((m) => m.tipo_movimiento === "SALIDA").length,
+    };
+  });
+
+  const max = Math.max(1, ...counts.map((c) => Math.max(c.ingresos, c.salidas)));
+  const W = 700, H = 150, padBottom = 22, padTop = 8;
+  const groupW = W / counts.length;
+  const barW = Math.min(22, groupW / 2 - 6);
+  const scale = (v) => (v / max) * (H - padBottom - padTop);
+  const roundedTopBar = (x, y, w, h, r) => {
+    if (h <= 0) return "";
+    r = Math.min(r, h, w / 2);
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  };
+
+  let bars = "";
+  counts.forEach((c, i) => {
+    const gx = i * groupW + groupW / 2;
+    const x1 = gx - barW - 2;
+    const x2 = gx + 2;
+    const hIn = scale(c.ingresos);
+    const hOut = scale(c.salidas);
+    const yIn = H - padBottom - hIn;
+    const yOut = H - padBottom - hOut;
+    bars += `<path class="chart-bar" fill="#2a78d6" d="${roundedTopBar(x1, yIn, barW, hIn, 3)}"
+        onmouseenter="showChartTip(event,'Ingresos · ${c.label}: ${c.ingresos}')" onmousemove="moveChartTip(event)" onmouseleave="hideChartTip()"></path>`;
+    bars += `<path class="chart-bar" fill="#eb6834" d="${roundedTopBar(x2, yOut, barW, hOut, 3)}"
+        onmouseenter="showChartTip(event,'Salidas · ${c.label}: ${c.salidas}')" onmousemove="moveChartTip(event)" onmouseleave="hideChartTip()"></path>`;
+    bars += `<line x1="${i * groupW}" y1="${H - padBottom}" x2="${(i + 1) * groupW}" y2="${H - padBottom}" stroke="#e2e8f0" stroke-width="1"/>`;
+    bars += `<text x="${gx}" y="${H - 5}" text-anchor="middle" font-size="10.5" fill="#94a3b8">${c.label}</text>`;
+  });
+
+  const hasData = movements.length > 0;
+  el.innerHTML = hasData
+    ? `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="height:170px" role="img" aria-label="Ingresos y salidas de los últimos 7 días">${bars}</svg>
+       <div id="chart-tip" class="chart-tip"></div>`
+    : emptyState("Sin movimientos en los últimos días.", "chart");
+}
+
+function showChartTip(evt, text) {
+  const tip = document.getElementById("chart-tip");
+  if (!tip) return;
+  tip.textContent = text;
+  tip.classList.add("visible");
+  moveChartTip(evt);
+}
+function moveChartTip(evt) {
+  const tip = document.getElementById("chart-tip");
+  const container = document.getElementById("activity-chart");
+  if (!tip || !container) return;
+  const rect = container.getBoundingClientRect();
+  tip.style.left = `${evt.clientX - rect.left}px`;
+  tip.style.top = `${evt.clientY - rect.top - 10}px`;
+}
+function hideChartTip() {
+  document.getElementById("chart-tip")?.classList.remove("visible");
 }
 
 function updateAlertsBadge(count) {
@@ -289,7 +389,7 @@ function stockQuery(pageSize) {
 
 function stockRowHtml(row) {
   const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
-  return `<tr class="${TR}">
+  return `<tr class="${TR} row-clickable" onclick="openKardex('${row.sku}')" title="Ver Kardex de ${row.sku}">
       <td class="${TD}">${row.sku}</td><td class="${TD}">${row.producto_nombre}</td>
       <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
       <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
@@ -305,7 +405,7 @@ async function loadStock(page = 1) {
   params.set("page", page);
   const r = await api(`/inventory/stock?${params.toString()}`);
   const items = r.data?.items || [];
-  body.innerHTML = items.length ? items.map(stockRowHtml).join("") : `<tr><td colspan="8" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+  body.innerHTML = items.length ? items.map(stockRowHtml).join("") : emptyRow(8, "Sin resultados.", "search");
   renderPager("stock-pager", r.data || { total: 0 }, loadStock);
 }
 document.getElementById("stock-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadStock(); });
@@ -426,11 +526,11 @@ async function loadProducts(page = 1) {
   const r = await api(`/inventory/products?q=${encodeURIComponent(q)}&page=${page}`);
   const items = r.data?.items || [];
   body.innerHTML = items.length
-    ? items.map((p) => `<tr class="${TR}">
+    ? items.map((p) => `<tr class="${TR} row-clickable" onclick="openKardex('${p.sku}')" title="Ver Kardex de ${p.sku}">
       <td class="${TD}">${p.sku}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
     </tr>`).join("")
-    : `<tr><td colspan="5" class="${TD_EMPTY}">Sin resultados.</td></tr>`;
+    : emptyRow(5, "Sin resultados.", "search");
   renderPager("products-pager", r.data || { total: 0 }, loadProducts);
 }
 document.getElementById("product-q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadProducts(); });
@@ -452,7 +552,7 @@ async function loadMovements(page = 1) {
   if (sku) params.set("sku", sku);
   const r = await api(`/inventory/movements?${params.toString()}`);
   const items = r.data?.items || [];
-  body.innerHTML = items.length ? items.map(movRowHtml).join("") : `<tr><td colspan="6" class="${TD_EMPTY}">Sin movimientos.</td></tr>`;
+  body.innerHTML = items.length ? items.map(movRowHtml).join("") : emptyRow(6, "Sin movimientos.", "inbox");
   renderPager("movements-pager", r.data || { total: 0 }, loadMovements);
 }
 document.getElementById("mov-sku").addEventListener("keydown", (e) => { if (e.key === "Enter") loadMovements(); });
@@ -476,7 +576,7 @@ async function loadAlerts() {
   body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/inventory/alerts");
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver alertas."}</td></tr>`;
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver alertas.", "lock");
     return;
   }
   body.innerHTML = "";
@@ -487,7 +587,7 @@ async function loadAlerts() {
       <td class="${TD}">${badge(a.estado, a.estado === "PENDIENTE" ? "low" : "ok")}</td>
     </tr>`;
   });
-  if ((r.data || []).length === 0) body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">No hay alertas activas.</td></tr>`;
+  if ((r.data || []).length === 0) body.innerHTML = emptyRow(6, "No hay alertas activas.", "check");
   updateAlertsBadge((r.data || []).filter((a) => a.estado !== "RESUELTA").length);
 }
 
@@ -528,7 +628,7 @@ async function loadReservations() {
   body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/inventory/reservations");
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver reservas."}</td></tr>`;
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver reservas.", "lock");
     return;
   }
   const items = r.data || [];
@@ -540,7 +640,7 @@ async function loadReservations() {
         <td class="${TD}">${badge(res.estado, res.estado === "ACTIVA" ? "ok" : "devolucion")}</td>
         <td class="${TD}">${res.estado === "ACTIVA" ? `<button class="btn-danger px-3 py-1.5 text-xs" onclick="releaseReservationAction('${res.reserva_id}')">Liberar</button>` : ""}</td>
       </tr>`).join("")
-    : `<tr><td colspan="7" class="${TD_EMPTY}">Sin reservas registradas.</td></tr>`;
+    : emptyRow(7, "Sin reservas registradas.", "inbox");
 }
 
 async function releaseReservationAction(reservaId) {
@@ -579,7 +679,7 @@ async function loadAdjustments() {
   body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/inventory/adjustments");
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver ajustes."}</td></tr>`;
+    body.innerHTML = emptyRow(9, r.error?.message || "Tu rol no tiene permiso para ver ajustes.", "lock");
     updateAdjustmentsBadge(0);
     return;
   }
@@ -597,7 +697,7 @@ async function loadAdjustments() {
             <button class="btn-danger px-3 py-1.5 text-xs" onclick="decideAdjustmentAction('${a.ajuste_id}','RECHAZADO')">Rechazar</button>
           </div>` : ""}</td>
       </tr>`).join("")
-    : `<tr><td colspan="9" class="${TD_EMPTY}">Sin ajustes registrados.</td></tr>`;
+    : emptyRow(9, "Sin ajustes registrados.", "inbox");
   updateAdjustmentsBadge(items.filter((a) => a.estado === "PENDIENTE").length);
 }
 
@@ -624,7 +724,7 @@ async function loadAuditLog() {
   if (accion) params.set("accion", accion);
   const r = await api(`/inventory/audit?${params.toString()}`);
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para ver la auditoría."}</td></tr>`;
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver la auditoría.", "lock");
     return;
   }
   const items = r.data || [];
@@ -636,7 +736,7 @@ async function loadAuditLog() {
         <td class="${TD}">${badge(a.resultado, a.resultado === "success" ? "ok" : "low")}</td>
         <td class="${TD} text-xs text-slate-500">${a.error || "—"}</td>
       </tr>`).join("")
-    : `<tr><td colspan="6" class="${TD_EMPTY}">Sin registros.</td></tr>`;
+    : emptyRow(6, "Sin registros.", "inbox");
 }
 document.getElementById("audit-accion").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAuditLog(); });
 
@@ -660,7 +760,7 @@ async function loadUsers() {
   body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/users");
   if (r.status !== "success") {
-    body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">${r.error?.message || "Tu rol no tiene permiso para gestionar usuarios."}</td></tr>`;
+    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para gestionar usuarios.", "lock");
     return;
   }
   const items = r.data || [];
@@ -675,7 +775,7 @@ async function loadUsers() {
           </button>
         </td>
       </tr>`).join("")
-    : `<tr><td colspan="5" class="${TD_EMPTY}">Sin usuarios.</td></tr>`;
+    : emptyRow(5, "Sin usuarios.", "inbox");
 }
 
 async function toggleUserActive(usuarioId, nextActive) {
@@ -684,3 +784,49 @@ async function toggleUserActive(usuarioId, nextActive) {
   if (r.status === "success") { toast(`Usuario ${nextActive ? "activado" : "desactivado"}`); loadUsers(); }
   else toast(r.error.message, false);
 }
+
+// -------- Kardex por producto (stock + historial, al hacer clic en un SKU) --------
+async function openKardex(sku) {
+  const modal = document.getElementById("kardex-modal");
+  document.getElementById("kardex-title").textContent = sku;
+  document.getElementById("kardex-subtitle").textContent = "Cargando…";
+  document.getElementById("kardex-stock-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("kardex-movements-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  modal.classList.remove("hidden");
+
+  const [stockR, movR] = await Promise.all([
+    api(`/inventory/stock?sku=${encodeURIComponent(sku)}&page_size=100`),
+    api(`/inventory/movements?sku=${encodeURIComponent(sku)}&page_size=100`),
+  ]);
+
+  const stockItems = stockR.data?.items || [];
+  const productName = stockItems[0]?.producto_nombre || movR.data?.items?.[0]?.producto_nombre || "";
+  document.getElementById("kardex-subtitle").textContent = productName || "Sin datos de producto";
+
+  const stockBody = document.getElementById("kardex-stock-body");
+  stockBody.innerHTML = stockItems.length
+    ? stockItems.map((row) => {
+        const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
+        return `<tr class="${TR}">
+          <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
+          <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
+          <td class="${TD}">${badge(row.stock_disponible, low ? "low" : "ok")}</td>
+        </tr>`;
+      }).join("")
+    : emptyRow(5, "Sin stock registrado para este producto.", "inbox");
+
+  const movBody = document.getElementById("kardex-movements-body");
+  const movItems = movR.data?.items || [];
+  movBody.innerHTML = movItems.length
+    ? movItems.map((m) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.cantidad}</td>
+        <td class="${TD}">${m.almacen_origen_codigo || "—"}</td><td class="${TD}">${m.almacen_destino_codigo || "—"}</td>
+      </tr>`).join("")
+    : emptyRow(5, "Sin movimientos registrados.", "inbox");
+}
+
+function closeKardex() {
+  document.getElementById("kardex-modal").classList.add("hidden");
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeKardex(); });

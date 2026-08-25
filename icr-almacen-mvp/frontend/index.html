@@ -37,7 +37,7 @@
       </button>
       <div id="login-error" class="hidden bg-rose-50 text-rose-600 text-sm px-3 py-2 rounded-lg"></div>
       <p class="text-[11.5px] text-slate-400 text-center leading-snug">
-        Usuarios de prueba: almacen@icr.pe / almacen123 · supervisor@icr.pe / supervisor123
+        Usuarios de prueba: admin@moqueguasoft.com / admin123 (acceso completo) · almacen@icr.pe / almacen123 · supervisor@icr.pe / supervisor123
       </p>
     </form>
   </div>
@@ -166,6 +166,36 @@
               <div class="text-xs text-slate-500 mt-0.5">Alertas de stock bajo</div>
             </div>
           </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2.5 mb-5">
+          <button class="btn-quick" data-goto="receive">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Ingreso
+          </button>
+          <button class="btn-quick" data-goto="remove">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 17V7m0 0-4 4m4-4 4 4M4 6V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Salida
+          </button>
+          <button class="btn-quick" data-goto="transfer">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M3 7h11m0 0-3-3m3 3-3 3M17 13H6m0 0 3 3m-3-3 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Transferencia
+          </button>
+          <button class="btn-quick" data-goto="reservations">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M4 4h12v13l-3-2-3 2-3-2-3 2V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            Reservar stock
+          </button>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 mb-5 viz-root">
+          <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h2 class="text-[14.5px] font-bold text-navy-950 m-0">Actividad de los últimos 7 días</h2>
+            <div class="flex items-center gap-4 text-xs text-slate-500">
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px]" style="background:#2a78d6"></span>Ingresos</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px]" style="background:#eb6834"></span>Salidas</span>
+            </div>
+          </div>
+          <div id="activity-chart" class="mt-2 relative"></div>
         </div>
 
         <div class="grid lg:grid-cols-2 gap-5">
@@ -536,6 +566,38 @@
 
       <datalist id="sku-list"></datalist>
     </main>
+  </div>
+
+  <div id="kardex-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeKardex()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="kardex-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="kardex-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <button onclick="closeKardex()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+          <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="px-6 py-4">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Stock por almacén</h3>
+        <table class="w-full border-collapse text-sm mb-6">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5">Almacén</th><th class="font-semibold py-1.5">Ubicación</th>
+            <th class="font-semibold py-1.5">Físico</th><th class="font-semibold py-1.5">Reservado</th><th class="font-semibold py-1.5">Disponible</th>
+          </tr></thead>
+          <tbody id="kardex-stock-body"></tbody>
+        </table>
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Historial de movimientos</h3>
+        <table class="w-full border-collapse text-sm">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5">Fecha</th><th class="font-semibold py-1.5">Tipo</th>
+            <th class="font-semibold py-1.5">Cantidad</th><th class="font-semibold py-1.5">Origen</th><th class="font-semibold py-1.5">Destino</th>
+          </tr></thead>
+          <tbody id="kardex-movements-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
