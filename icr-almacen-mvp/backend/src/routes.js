@@ -5,7 +5,7 @@ const multer = require("multer");
 const inventory = require("./services/inventoryService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
-const { upload } = require("./uploads");
+const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -137,7 +137,8 @@ router.post(
   upload.single("photo"),
   handle(async (req) => {
     if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
-    return inventory.setProductPhoto(req.params.sku, `/uploads/${req.file.filename}`);
+    const url = await processAndSaveImage(req.file);
+    return inventory.setProductPhoto(req.params.sku, url);
   })
 );
 
@@ -313,7 +314,8 @@ router.post(
   upload.single("logo"),
   handle(async (req) => {
     if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
-    return settings.setLogoUrl(`/uploads/${req.file.filename}`);
+    const url = await processAndSaveImage(req.file);
+    return settings.setLogoUrl(url);
   })
 );
 

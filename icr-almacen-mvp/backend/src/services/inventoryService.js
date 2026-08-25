@@ -71,16 +71,22 @@ async function withAuditedTransaction(action, usuarioId, canal, fn) {
     return result;
   } catch (err) {
     await client.query("ROLLBACK");
-    // Auditar el error en una transacción nueva (la anterior se revirtió)
+    // Auditar el error en una transacción nueva (la anterior se revirtió).
+    // auditClient debe liberarse pase lo que pase: si insertAuditoria falla
+    // aquí (p.ej. un canal inválido) y el release() queda solo en el camino
+    // feliz, cada error de aquí en más deja una conexión del pool sin
+    // liberar hasta agotarlo.
+    let auditClient;
     try {
-      const auditClient = await pool.connect();
+      auditClient = await pool.connect();
       await insertAuditoria(auditClient, {
         usuarioId, canal, accion: action,
         resultado: "error", error: err.code ? `${err.code}: ${err.message}` : err.message,
       });
-      auditClient.release();
     } catch (auditErr) {
       console.error("No se pudo registrar auditoría de error", auditErr);
+    } finally {
+      auditClient?.release();
     }
     throw err;
   } finally {
