@@ -45,11 +45,12 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres PGDATABASE=icr_almacen npm 
    DOMAIN=almacen.icr.tudominio.com
    ```
 3. Confirmar que el nombre de la red externa de Traefik en `docker-compose.yml` (`traefik_public`) coincide con la red real que ya usa Traefik en el VPS — si se llama distinto, cambiarlo ahí.
-4. Levantar:
+4. El logo y las fotos de producto se guardan en `/app/uploads` dentro del contenedor, montado como el volumen `icr_almacen_uploads` — sobrevive a un `docker compose up -d --build`. Si el VPS tiene backups de volúmenes, agregar este a la lista.
+5. Levantar:
    ```bash
    docker compose up -d --build
    ```
-5. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
+6. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
 
 ## Usuarios de prueba (seed)
 
@@ -89,7 +90,20 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 - Automatización N8N / Telegram — fase siguiente.
 - Control completo por lote/serie (trazabilidad individual de números de serie en `receive`/`remove`) — las tablas `lotes`/`series` existen en el schema pero no están conectadas a los comandos de API todavía.
 - HTTPS en local (sí lo maneja Traefik en el VPS vía el `docker-compose.yml`).
-- Tests automatizados — la verificación de los casos de aceptación sigue siendo manual (ver abajo).
+
+## Tests automatizados
+
+```bash
+cd backend
+npm install
+PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres npm test
+```
+
+`npm test` corre contra una base Postgres real, no mocks — la lógica de negocio vive en transacciones con locking (`FOR UPDATE`, orden determinístico en transferencias) y eso es justamente lo que un mock no puede validar. `test/db-setup.js` recrea `icr_almacen_test` desde cero (mismo `schema.sql` + `seed.sql` que usa el resto del proyecto) antes de cada corrida, y **se niega a tocar cualquier base cuyo nombre no contenga "test"** para que un `PGDATABASE` mal configurado no pueda borrar una base de desarrollo real.
+
+Cobertura: los 5 casos de aceptación del PRD, reservar/liberar (incluyendo rechazo por stock insuficiente), ajustes con aprobación/rechazo (y que no se puedan decidir dos veces), kits (composición + rechazo de kits anidados), y el mapa de permisos por rol (`backend/test/auth.test.js`, sin DB).
+
+Escribir estos tests encontró un bug real preexistente: cuando fallaba el registro de auditoría de un error (por ejemplo con un `canal` inválido), el cliente de conexión nunca se liberaba de vuelta al pool — bajo una racha sostenida de errores, esto terminaba agotando el pool de conexiones y colgando el backend entero. Ya está corregido en `inventoryService.js`.
 
 ## Cómo probar los 5 casos de aceptación del PRD manualmente
 
@@ -109,3 +123,7 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 - **Kardex por producto** — clic en cualquier SKU (en Stock o Productos) abre un panel con el desglose de stock por almacén/ubicación y el historial completo de movimientos de ese producto.
 - **Acciones rápidas + gráfico de actividad** en el Panel — accesos directos a Ingreso/Salida/Transferencia/Reservar, y un gráfico de barras (Ingresos vs. Salidas) de los últimos 7 días con tooltip al pasar el mouse. Colores validados para daltonismo con el script de la skill de dataviz (`#2a78d6` / `#eb6834`, ΔE CVD 24.7 — muy por encima del piso de 8).
 - **Estados vacíos con ícono** en todas las tablas (sin resultados, sin permiso, todo al día) en vez de solo texto en cursiva.
+- **Logo configurable** — pestaña *Configuración* (solo `ADMIN`): subir una imagen (JPEG/PNG/WebP, hasta 3MB) que reemplaza la marca "IC" en el menú lateral y en la pantalla de login. Se guarda en `parametros` (`LOGO_URL`) y el archivo en `/uploads`, servido como estático por el propio backend.
+- **Fotos de producto** — botón "Subir foto" en la tabla de Productos y dentro del Kardex de cada SKU. Aparece como miniatura en la lista y como imagen grande en el Kardex.
+- Toda imagen subida (logo o foto de producto) se **reescala a un máximo de 800px de lado y se recomprime** con `sharp` antes de guardarse (`backend/src/uploads.js`) — una foto de celular de varios MB no se guarda tal cual.
+- **Kits ("cajas de herramientas")** — cualquier producto puede agrupar otros productos con una cantidad cada uno (tabla `producto_kit_items`), gestionable desde la sección "Kit / lista de materiales" del Kardex. Agregar el primer item convierte automáticamente el producto en kit (badge `KIT` en Productos); no se admiten kits anidados. Es un catálogo de composición — el stock de cada componente se sigue registrando por separado con `inventory.receive`/`remove`.

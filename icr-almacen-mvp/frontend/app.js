@@ -49,9 +49,15 @@ function renderPager(containerId, { total, page, pageSize }, onChange) {
     <div class="flex items-center justify-between mt-3 text-sm text-slate-500">
       <span>Mostrando ${from}–${to} de ${total}</span>
       <div class="flex items-center gap-2">
-        <button class="btn-secondary px-3 py-1.5 text-xs" id="${containerId}-prev" ${page <= 1 ? "disabled" : ""}>← Anterior</button>
+        <button class="btn-secondary px-3 py-1.5 text-xs inline-flex items-center gap-1" id="${containerId}-prev" ${page <= 1 ? "disabled" : ""}>
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none"><path d="M13 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Anterior
+        </button>
         <span class="px-1 text-xs">Página ${page} de ${totalPages}</span>
-        <button class="btn-secondary px-3 py-1.5 text-xs" id="${containerId}-next" ${page >= totalPages ? "disabled" : ""}>Siguiente →</button>
+        <button class="btn-secondary px-3 py-1.5 text-xs inline-flex items-center gap-1" id="${containerId}-next" ${page >= totalPages ? "disabled" : ""}>
+          Siguiente
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
     </div>`;
   if (page > 1) document.getElementById(`${containerId}-prev`).addEventListener("click", () => onChange(page - 1));
@@ -148,6 +154,19 @@ if (getToken() && getUser()) {
   enterApp();
 }
 
+// -------- Logo configurable --------
+// Pública (no requiere sesión): la pantalla de login también debe mostrarlo.
+function applyLogo(url) {
+  const html = url
+    ? `<img src="${url}" alt="Logo" class="w-full h-full object-cover" />`
+    : "IC";
+  ["login-brand-mark", "sidebar-brand-mark", "settings-logo-preview"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+fetch(`${API}/settings`).then((r) => r.json()).then((r) => applyLogo(r.data?.logo_url)).catch(() => {});
+
 // -------- Navegación --------
 const titles = {
   dashboard: ["Panel general", "Resumen del estado del almacén"],
@@ -162,6 +181,7 @@ const titles = {
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
   users: ["Usuarios", "Altas y roles de acceso al panel (solo administradores)"],
+  settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
 function goToView(view) {
@@ -213,6 +233,23 @@ async function api(path, options = {}) {
   }
   const json = await res.json();
   return json;
+}
+
+// Subida de archivos (multipart) — separado de api() porque no debe fijar
+// Content-Type: application/json (el navegador arma el boundary solo).
+async function uploadFile(path, formData) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: formData,
+  });
+  if (res.status === 401) {
+    clearSession();
+    document.getElementById("app-shell").classList.add("hidden");
+    document.getElementById("login-screen").classList.remove("hidden");
+    throw new Error("Sesión expirada");
+  }
+  return res.json();
 }
 
 // -------- Datos de apoyo (almacenes / SKUs) --------
@@ -519,19 +556,44 @@ document.getElementById("form-product").addEventListener("submit", async (e) => 
   }
 });
 
+function productThumbHtml(p) {
+  return p.imagen_url
+    ? `<img src="${p.imagen_url}" class="w-9 h-9 rounded-lg object-cover border border-slate-200" alt="${p.sku}" />`
+    : `<span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-300 flex items-center justify-center border border-slate-200">
+        <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="8.5" r="1.3" stroke="currentColor" stroke-width="1.4"/><path d="m5 14 3.5-3.5L11 13l2-2 2 2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </span>`;
+}
+
 async function loadProducts(page = 1) {
   const body = document.getElementById("products-body");
-  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const q = document.getElementById("product-q").value.trim();
   const r = await api(`/inventory/products?q=${encodeURIComponent(q)}&page=${page}`);
   const items = r.data?.items || [];
   body.innerHTML = items.length
     ? items.map((p) => `<tr class="${TR} row-clickable" onclick="openKardex('${p.sku}')" title="Ver Kardex de ${p.sku}">
-      <td class="${TD}">${p.sku}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
+      <td class="${TD}">${productThumbHtml(p)}</td>
+      <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
+      <td class="${TD}"><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">Subir foto</button></td>
     </tr>`).join("")
-    : emptyRow(5, "Sin resultados.", "search");
+    : emptyRow(7, "Sin resultados.", "search");
   renderPager("products-pager", r.data || { total: 0 }, loadProducts);
+}
+
+function triggerPhotoUpload(sku) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/jpeg,image/png,image/webp";
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    const fd = new FormData();
+    fd.append("photo", input.files[0]);
+    const r = await uploadFile(`/inventory/products/${encodeURIComponent(sku)}/photo`, fd);
+    if (r.status === "success") { toast("Foto actualizada"); loadProducts(); }
+    else toast(r.error.message, false);
+  };
+  input.click();
 }
 document.getElementById("product-q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadProducts(); });
 
@@ -785,23 +847,49 @@ async function toggleUserActive(usuarioId, nextActive) {
   else toast(r.error.message, false);
 }
 
+// -------- Configuración: logo --------
+document.getElementById("form-logo").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  setFormLoading(e.target, true);
+  try {
+    const r = await uploadFile("/settings/logo", fd);
+    if (r.status === "success") { toast("Logo actualizado"); applyLogo(r.data.logo_url); e.target.reset(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
 // -------- Kardex por producto (stock + historial, al hacer clic en un SKU) --------
+let currentKardexSku = null;
+
 async function openKardex(sku) {
+  currentKardexSku = sku;
   const modal = document.getElementById("kardex-modal");
   document.getElementById("kardex-title").textContent = sku;
   document.getElementById("kardex-subtitle").textContent = "Cargando…";
+  document.getElementById("kardex-photo").innerHTML = "";
   document.getElementById("kardex-stock-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   document.getElementById("kardex-movements-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("kardex-kit-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
   modal.classList.remove("hidden");
 
-  const [stockR, movR] = await Promise.all([
+  const [stockR, movR, prodR] = await Promise.all([
     api(`/inventory/stock?sku=${encodeURIComponent(sku)}&page_size=100`),
     api(`/inventory/movements?sku=${encodeURIComponent(sku)}&page_size=100`),
+    api(`/inventory/products?q=${encodeURIComponent(sku)}&page_size=20`),
   ]);
 
   const stockItems = stockR.data?.items || [];
-  const productName = stockItems[0]?.producto_nombre || movR.data?.items?.[0]?.producto_nombre || "";
+  const product = (prodR.data?.items || []).find((p) => p.sku === sku);
+  const productName = product?.nombre || stockItems[0]?.producto_nombre || movR.data?.items?.[0]?.producto_nombre || "";
   document.getElementById("kardex-subtitle").textContent = productName || "Sin datos de producto";
+  document.getElementById("kardex-photo").innerHTML = product?.imagen_url
+    ? `<img src="${product.imagen_url}" class="w-full h-full object-cover" alt="${sku}" />`
+    : `<svg class="w-5 h-5 text-slate-300" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="8.5" r="1.3" stroke="currentColor" stroke-width="1.4"/><path d="m5 14 3.5-3.5L11 13l2-2 2 2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+
+  loadKitItems(sku);
 
   const stockBody = document.getElementById("kardex-stock-body");
   stockBody.innerHTML = stockItems.length
@@ -828,5 +916,64 @@ async function openKardex(sku) {
 
 function closeKardex() {
   document.getElementById("kardex-modal").classList.add("hidden");
+  currentKardexSku = null;
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeKardex(); });
+
+function triggerKardexPhotoUpload() {
+  if (!currentKardexSku) return;
+  const sku = currentKardexSku;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/jpeg,image/png,image/webp";
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    const fd = new FormData();
+    fd.append("photo", input.files[0]);
+    const r = await uploadFile(`/inventory/products/${encodeURIComponent(sku)}/photo`, fd);
+    if (r.status === "success") {
+      toast("Foto actualizada");
+      document.getElementById("kardex-photo").innerHTML = `<img src="${r.data.imagen_url}" class="w-full h-full object-cover" alt="${sku}" />`;
+    } else toast(r.error.message, false);
+  };
+  input.click();
+}
+
+// -------- Kit / lista de materiales --------
+async function loadKitItems(sku) {
+  const body = document.getElementById("kardex-kit-body");
+  const r = await api(`/inventory/kits/${encodeURIComponent(sku)}/items`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(4, r.error?.message || "Tu rol no tiene permiso para ver el kit.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((it) => `<tr class="${TR}">
+        <td class="${TD}">${it.sku}</td><td class="${TD}">${it.nombre}</td><td class="${TD}">${it.cantidad}</td>
+        <td class="${TD}"><button class="btn-danger px-2.5 py-1 text-xs" onclick="removeKitItemAction('${sku}','${it.sku}')">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Este producto todavía no es un kit.", "inbox");
+}
+
+document.getElementById("form-kit-item").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentKardexSku) return;
+  const f = new FormData(e.target);
+  const payload = { sku: f.get("sku"), quantity: Number(f.get("quantity")) };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/inventory/kits/${encodeURIComponent(currentKardexSku)}/items`, { method: "POST", body: JSON.stringify(payload) });
+    if (r.status === "success") { toast("Item agregado al kit"); e.target.reset(); loadKitItems(currentKardexSku); loadProducts(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function removeKitItemAction(kitSku, itemSku) {
+  if (!confirm(`¿Quitar ${itemSku} del kit ${kitSku}?`)) return;
+  const r = await api(`/inventory/kits/${encodeURIComponent(kitSku)}/items/${encodeURIComponent(itemSku)}`, { method: "DELETE" });
+  if (r.status === "success") { toast("Item quitado del kit"); loadKitItems(kitSku); loadProducts(); }
+  else toast(r.error.message, false);
+}

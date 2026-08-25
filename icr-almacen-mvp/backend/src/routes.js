@@ -1,8 +1,11 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
+const multer = require("multer");
 const inventory = require("./services/inventoryService");
 const users = require("./services/userService");
+const settings = require("./services/settingsService");
+const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -55,6 +58,12 @@ router.get(
   "/auth/me",
   requireAuth,
   handle(async (req) => req.user)
+);
+
+// Pública: la pantalla de login necesita el logo antes de autenticarse
+router.get(
+  "/settings",
+  handle(async () => settings.getSettings())
 );
 
 // A partir de aquí, todo comando requiere sesión válida (Authorization: Bearer <token>)
@@ -120,6 +129,39 @@ router.post(
   "/inventory/product",
   requirePermission("inventory.product.create"),
   handle(async (req) => inventory.createProduct(req.body))
+);
+
+router.post(
+  "/inventory/products/:sku/photo",
+  requirePermission("inventory.product.update"),
+  upload.single("photo"),
+  handle(async (req) => {
+    if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
+    const url = await processAndSaveImage(req.file);
+    return inventory.setProductPhoto(req.params.sku, url);
+  })
+);
+
+// -------- Kits ("cajas de herramientas") --------
+
+router.post(
+  "/inventory/kits/:kitSku/items",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.addKitItem({
+    kitSku: req.params.kitSku, itemSku: req.body?.sku, quantity: Number(req.body?.quantity),
+  }))
+);
+
+router.delete(
+  "/inventory/kits/:kitSku/items/:itemSku",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.removeKitItem({ kitSku: req.params.kitSku, itemSku: req.params.itemSku }))
+);
+
+router.get(
+  "/inventory/kits/:kitSku/items",
+  requirePermission("inventory.stock.get"),
+  handle(async (req) => inventory.getKitItems(req.params.kitSku))
 );
 
 // -------- Comandos de consulta --------
@@ -263,5 +305,31 @@ router.patch(
   requirePermission("users.manage"),
   handle(async (req) => users.updateUser(req.params.id, req.body))
 );
+
+// -------- Configuración (logo, solo ADMIN vía wildcard '*') --------
+
+router.post(
+  "/settings/logo",
+  requirePermission("settings.manage"),
+  upload.single("logo"),
+  handle(async (req) => {
+    if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
+    const url = await processAndSaveImage(req.file);
+    return settings.setLogoUrl(url);
+  })
+);
+
+// Maneja errores de multer (tamaño/tipo de archivo) con el mismo formato de respuesta que `handle()`
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    const message = err.code === "LIMIT_FILE_SIZE" ? "El archivo supera el tamaño máximo permitido (3MB)" : err.message;
+    return res.status(400).json({ status: "error", data: null, error: { code: "UPLOAD_ERROR", message } });
+  }
+  if (err instanceof AppError) {
+    return res.status(err.status).json({ status: "error", data: null, error: { code: err.code, message: err.message, details: err.details } });
+  }
+  console.error(err);
+  res.status(500).json({ status: "error", data: null, error: { code: "INTERNAL_ERROR", message: "Error interno del servidor" } });
+});
 
 module.exports = router;

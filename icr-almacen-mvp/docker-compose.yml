@@ -32,6 +32,8 @@ services:
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el .env antes de desplegar}
       ALLOWED_ORIGIN: https://${DOMAIN:-almacen.icr.example.com}
+    volumes:
+      - icr_almacen_uploads:/app/uploads
     depends_on:
       - db
     networks:
@@ -46,6 +48,7 @@ services:
 
 volumes:
   icr_almacen_data:
+  icr_almacen_uploads:
 
 networks:
   icr_internal:

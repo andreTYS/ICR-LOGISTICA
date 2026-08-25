@@ -71,16 +71,22 @@ async function withAuditedTransaction(action, usuarioId, canal, fn) {
     return result;
   } catch (err) {
     await client.query("ROLLBACK");
-    // Auditar el error en una transacción nueva (la anterior se revirtió)
+    // Auditar el error en una transacción nueva (la anterior se revirtió).
+    // auditClient debe liberarse pase lo que pase: si insertAuditoria falla
+    // aquí (p.ej. un canal inválido) y el release() queda solo en el camino
+    // feliz, cada error de aquí en más deja una conexión del pool sin
+    // liberar hasta agotarlo.
+    let auditClient;
     try {
-      const auditClient = await pool.connect();
+      auditClient = await pool.connect();
       await insertAuditoria(auditClient, {
         usuarioId, canal, accion: action,
         resultado: "error", error: err.code ? `${err.code}: ${err.message}` : err.message,
       });
-      auditClient.release();
     } catch (auditErr) {
       console.error("No se pudo registrar auditoría de error", auditErr);
+    } finally {
+      auditClient?.release();
     }
     throw err;
   } finally {
@@ -346,6 +352,79 @@ async function createProduct(data) {
   return r.rows[0];
 }
 
+async function setProductPhoto(sku, imagenUrl) {
+  const r = await pool.query(
+    "UPDATE productos SET imagen_url = $1 WHERE sku = $2 AND activo = true RETURNING *",
+    [imagenUrl, sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
+  return r.rows[0];
+}
+
+// -------------------- Kits ("cajas de herramientas") --------------------
+// Un producto "kit" (es_kit = true) agrupa otros productos con una cantidad
+// cada uno (producto_kit_items). No afecta al stock por sí mismo — es un
+// catálogo de composición para que el operario sepa qué junta al armar la
+// caja; el ingreso/salida de cada componente se sigue registrando por separado.
+
+async function addKitItem({ kitSku, itemSku, quantity }) {
+  if (!kitSku || !itemSku || !quantity || quantity <= 0) {
+    throw new AppError("SCHEMA_INVALID", "kitSku, itemSku y quantity (>0) son obligatorios", 400);
+  }
+  if (kitSku === itemSku) {
+    throw new AppError("SCHEMA_INVALID", "Un kit no puede contenerse a sí mismo", 400);
+  }
+  const kitR = await pool.query("SELECT producto_id, es_kit FROM productos WHERE sku=$1 AND activo=true", [kitSku]);
+  if (kitR.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${kitSku}' no existe o está inactivo`, 404);
+  const itemR = await pool.query("SELECT producto_id, es_kit FROM productos WHERE sku=$1 AND activo=true", [itemSku]);
+  if (itemR.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${itemSku}' no existe o está inactivo`, 404);
+  if (itemR.rows[0].es_kit) {
+    throw new AppError("SCHEMA_INVALID", "No se admiten kits anidados (el item tampoco puede ser un kit)", 400);
+  }
+
+  await pool.query("UPDATE productos SET es_kit = true WHERE producto_id = $1", [kitR.rows[0].producto_id]);
+  const r = await pool.query(
+    `INSERT INTO producto_kit_items (producto_kit_id, producto_id, cantidad)
+     VALUES ($1,$2,$3)
+     ON CONFLICT (producto_kit_id, producto_id) DO UPDATE SET cantidad = EXCLUDED.cantidad
+     RETURNING *`,
+    [kitR.rows[0].producto_id, itemR.rows[0].producto_id, quantity]
+  );
+  return r.rows[0];
+}
+
+async function removeKitItem({ kitSku, itemSku }) {
+  const r = await pool.query(
+    `DELETE FROM producto_kit_items
+     WHERE producto_kit_id = (SELECT producto_id FROM productos WHERE sku=$1)
+       AND producto_id = (SELECT producto_id FROM productos WHERE sku=$2)
+     RETURNING kit_item_id`,
+    [kitSku, itemSku]
+  );
+  if (r.rows.length === 0) throw new AppError("KIT_ITEM_NOT_FOUND", "Ese item no forma parte del kit", 404);
+
+  const remaining = await pool.query(
+    `SELECT count(*) FROM producto_kit_items WHERE producto_kit_id = (SELECT producto_id FROM productos WHERE sku=$1)`,
+    [kitSku]
+  );
+  if (Number(remaining.rows[0].count) === 0) {
+    await pool.query("UPDATE productos SET es_kit = false WHERE sku = $1", [kitSku]);
+  }
+  return { removed: true };
+}
+
+async function getKitItems(kitSku) {
+  const r = await pool.query(
+    `SELECT ki.*, p.sku, p.nombre, p.imagen_url
+     FROM producto_kit_items ki
+     JOIN productos p ON p.producto_id = ki.producto_id
+     WHERE ki.producto_kit_id = (SELECT producto_id FROM productos WHERE sku = $1)
+     ORDER BY p.nombre`,
+    [kitSku]
+  );
+  return r.rows;
+}
+
 async function getMovements({ sku, page, pageSize }) {
   const { page: p, pageSize: size, offset } = paginationParams(page, pageSize, 50, 1000);
   const params = [];
@@ -579,4 +658,5 @@ module.exports = {
   reserve, releaseReservation, getReservations,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
+  setProductPhoto, addKitItem, removeKitItem, getKitItems,
 };
