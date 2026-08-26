@@ -45,7 +45,16 @@ VALUES
     ('30000000-0000-0000-0000-000000000007', 'CABLE-SOLAR-6MM', 'Cable solar fotovoltaico 6mm²', 'Genérico', 'PV1-F', 'M', 'NORMAL', 100, 200, 3000, 3.20),
     ('30000000-0000-0000-0000-000000000008', 'CONECTOR-MC4', 'Par de conectores MC4', 'Staubli', 'MC4-EVO2', 'PAR', 'NORMAL', 50, 100, 1000, 4.50),
     ('30000000-0000-0000-0000-000000000009', 'ESTRUCTURA-TECHO', 'Kit estructura de montaje para techo (10 paneles)', 'Genérico', 'RAIL-ALU-10', 'KIT', 'NORMAL', 3, 5, 60, 850.00),
-    ('30000000-0000-0000-0000-000000000010', 'MONITOR-WIFI', 'Módulo de monitoreo WiFi para inversor', 'Growatt', 'ShineWiFi-X', 'UND', 'SERIE', 2, 5, 40, 180.00);
+    ('30000000-0000-0000-0000-000000000010', 'MONITOR-WIFI', 'Módulo de monitoreo WiFi para inversor', 'Growatt', 'ShineWiFi-X', 'UND', 'SERIE', 2, 5, 40, 180.00),
+    -- Herramientas individuales (componentes de las maletas de abajo)
+    ('30000000-0000-0000-0000-000000000011', 'HERR-CRIMP-MC4', 'Pinza crimpadora MC4', 'Genérico', 'PRO-CRIMP-4-6', 'UND', 'NORMAL', 2, 4, 20, 145.00),
+    ('30000000-0000-0000-0000-000000000012', 'HERR-EXTRACTOR-MC4', 'Extractor de terminales MC4', 'Staubli', 'MC4-TOOL-1', 'UND', 'NORMAL', 2, 4, 20, 38.00),
+    ('30000000-0000-0000-0000-000000000013', 'HERR-MULTIMETRO', 'Multímetro digital de gancho', 'Fluke', 'CL120', 'UND', 'NORMAL', 2, 3, 15, 210.00),
+    ('30000000-0000-0000-0000-000000000014', 'HERR-TORQUIMETRO', 'Llave torquímetro 1/2"', 'Stanley', 'MTS0068', 'UND', 'NORMAL', 1, 2, 10, 165.00),
+    ('30000000-0000-0000-0000-000000000015', 'HERR-DESTORNILLADOR', 'Set de destornilladores aislados 1000V', 'Wera', 'Kraftform-VDE', 'JGO', 'NORMAL', 2, 4, 15, 95.00),
+    -- Maletas ("cajas de herramientas"): kits armados con herramientas + materiales de repuesto
+    ('30000000-0000-0000-0000-000000000016', 'MALETA-MC4', 'Maleta de conectorizado MC4', 'Genérico', 'CASE-MC4-01', 'UND', 'NORMAL', 1, 2, 10, 390.00),
+    ('30000000-0000-0000-0000-000000000017', 'MALETA-INSTALACION', 'Maleta de instalación eléctrica', 'Genérico', 'CASE-INST-01', 'UND', 'NORMAL', 1, 2, 10, 470.00);
 
 -- ---------- Proveedores, clientes y proyecto de ejemplo (para probar ingreso con documento y salida con destino) ----------
 INSERT INTO proveedores (proveedor_id, ruc, razon_social, contacto, activo)
