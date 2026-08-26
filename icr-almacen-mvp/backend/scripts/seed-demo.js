@@ -29,6 +29,14 @@ async function run() {
   await inventory.receive({ sku: "ESTRUCTURA-TECHO", quantity: 15, warehouseCode: "ALM-001", documento: { tipo_documento: "ORDEN_COMPRA", numero_documento: "OC-3390" }, usuarioId: ALMACENERO, canal: "web" });
   await inventory.receive({ sku: "MONITOR-WIFI", quantity: 20, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
 
+  await inventory.receive({ sku: "HERR-CRIMP-MC4", quantity: 10, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "HERR-EXTRACTOR-MC4", quantity: 10, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "HERR-MULTIMETRO", quantity: 8, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "HERR-TORQUIMETRO", quantity: 6, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "HERR-DESTORNILLADOR", quantity: 9, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "MALETA-MC4", quantity: 6, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "MALETA-INSTALACION", quantity: 4, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+
   await inventory.remove({ sku: "PANEL-JA-550", quantity: 18, warehouseCode: "ALM-001", locationCode: "A-01-R01-N01", proyectoCodigo: "PROY-001", clienteRuc: "20512345678", usuarioId: ALMACENERO, canal: "web" });
   await inventory.remove({ sku: "INV-GROWATT-5K", quantity: 3, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: ALMACENERO, canal: "web" });
   await inventory.remove({ sku: "CABLE-SOLAR-6MM", quantity: 350, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
@@ -43,6 +51,18 @@ async function run() {
   await inventory.reserve({ sku: "PANEL-JA-550", quantity: 10, warehouseCode: "ALM-001", locationCode: "A-01-R01-N01", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web" });
 
   await inventory.adjustCreate({ sku: "BAT-DEYE-5.1", warehouseCode: "ALM-002", cantidadFisica: 9, motivo: "Conteo cíclico — diferencia detectada", usuarioId: ALMACENERO, canal: "web" });
+
+  console.log("Armando maletas de herramientas (kits)...");
+  await inventory.addKitItem({ kitSku: "MALETA-MC4", itemSku: "HERR-CRIMP-MC4", quantity: 1 });
+  await inventory.addKitItem({ kitSku: "MALETA-MC4", itemSku: "HERR-EXTRACTOR-MC4", quantity: 1 });
+  await inventory.addKitItem({ kitSku: "MALETA-MC4", itemSku: "CONECTOR-MC4", quantity: 10 });
+  await inventory.addKitItem({ kitSku: "MALETA-MC4", itemSku: "CABLE-SOLAR-6MM", quantity: 5 });
+
+  await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "HERR-TORQUIMETRO", quantity: 1 });
+  await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "HERR-DESTORNILLADOR", quantity: 1 });
+  await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "HERR-MULTIMETRO", quantity: 1 });
+  await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "CONECTOR-MC4", quantity: 4 });
+  await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "CABLE-SOLAR-6MM", quantity: 10 });
 
   console.log("Movimientos generados. Redistribuyendo fechas en los últimos 8 días para el gráfico de actividad...");
 

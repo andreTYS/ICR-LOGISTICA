@@ -7,8 +7,8 @@ La automatización con N8N / Telegram **no está incluida en este MVP** — qued
 ## Qué incluye
 
 - `db/schema.sql` — DDL completo (18 tablas, 2 vistas, índices).
-- `db/seed.sql` — catálogo base para operar: 6 usuarios (uno por rol), 3 almacenes, 4 ubicaciones, 10 productos, 2 proveedores, 2 clientes, 1 proyecto.
-- `backend/scripts/seed-demo.js` (`npm run seed:demo`) — genera un historial de movimientos realista (ingresos, salidas, transferencias, una reserva activa, un ajuste pendiente) usando los mismos comandos de la API, así que el stock resultante queda garantizado consistente con el ledger.
+- `db/seed.sql` — catálogo base para operar: 6 usuarios (uno por rol), 3 almacenes, 4 ubicaciones, 17 productos (10 equipos solares/BESS, 5 herramientas y 2 maletas armadas como kits), 2 proveedores, 2 clientes, 1 proyecto.
+- `backend/scripts/seed-demo.js` (`npm run seed:demo`) — genera un historial de movimientos realista (ingresos, salidas, transferencias, una reserva activa, un ajuste pendiente) usando los mismos comandos de la API, así que el stock resultante queda garantizado consistente con el ledger; también carga stock de las herramientas y arma las dos maletas de ejemplo (`inventory.addKitItem`).
 - `backend/` — API Node.js/Express + PostgreSQL (`pg`), con transacciones atómicas y locking para evitar condiciones de carrera (ver `src/services/inventoryService.js`).
 - `frontend/` — panel web (HTML/JS puro, sin build step en runtime) servido por el mismo backend: Panel (dashboard), Stock, Ingreso, Salida, Transferencia, Productos, Movimientos, Alertas, Reservas, Ajustes, Auditoría, Usuarios. Stock/Productos/Movimientos con paginación y exportación a CSV. Estilizado con Tailwind CSS (paleta `#00004C` / `#000073` / `#00B7C2` / `#00FFC2`), compilado a `frontend/style.css` en tiempo de desarrollo — ver [`frontend/README.md`](frontend/README.md) para regenerarlo tras tocar clases de Tailwind.
 - `docker-compose.yml` — para desplegar en el VPS de Hostinger junto a Traefik.
@@ -84,6 +84,13 @@ El panel ahora exige login (pantalla inicial). El backend valida el token JWT en
 | `CONECTOR-MC4` | Par de conectores MC4 | NORMAL |
 | `ESTRUCTURA-TECHO` | Kit estructura de montaje para techo | NORMAL |
 | `MONITOR-WIFI` | Módulo de monitoreo WiFi para inversor | SERIE |
+| `HERR-CRIMP-MC4` | Pinza crimpadora MC4 | NORMAL |
+| `HERR-EXTRACTOR-MC4` | Extractor de terminales MC4 | NORMAL |
+| `HERR-MULTIMETRO` | Multímetro digital de gancho | NORMAL |
+| `HERR-TORQUIMETRO` | Llave torquímetro 1/2" | NORMAL |
+| `HERR-DESTORNILLADOR` | Set de destornilladores aislados 1000V | NORMAL |
+| `MALETA-MC4` (KIT) | Maleta de conectorizado MC4 — pinza crimpadora, extractor, conectores y cable de repuesto | NORMAL |
+| `MALETA-INSTALACION` (KIT) | Maleta de instalación eléctrica — torquímetro, set de destornilladores, multímetro, conectores y cable de repuesto | NORMAL |
 
 ## Qué NO incluye este MVP (a propósito)
 
