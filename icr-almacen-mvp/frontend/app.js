@@ -186,12 +186,24 @@ const titles = {
   settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
+// Grupos de módulos del menú lateral (Almacén, Compras, Administración, …).
+// Clic en el encabezado expande/colapsa; el grupo que contiene la vista
+// activa se expande solo y se resalta.
+function toggleNavGroup(name) {
+  document.querySelector(`.nav-group[data-group="${name}"]`)?.classList.toggle("expanded");
+}
+
 function goToView(view) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
   document.getElementById(`view-${view}`).classList.add("active");
   document.getElementById("view-title").textContent = titles[view][0];
   document.getElementById("view-subtitle").textContent = titles[view][1];
+  document.querySelectorAll(".nav-group").forEach((g) => {
+    const hasActive = !!g.querySelector(".nav-item.active");
+    g.classList.toggle("has-active", hasActive);
+    if (hasActive) g.classList.add("expanded");
+  });
   if (view === "dashboard") loadDashboard();
   if (view === "stock") loadStock();
   if (view === "products") loadProducts();

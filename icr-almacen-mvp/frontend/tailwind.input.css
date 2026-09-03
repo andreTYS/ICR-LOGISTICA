@@ -57,6 +57,48 @@ body { font-feature-settings: "cv11"; }
 }
 .nav-item.active .nav-badge { background: #00004C; color: #fff; }
 
+/* -------- Sidebar module groups (Almacén, Compras, Administración, …) -------- */
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.55);
+  padding: 8px 12px 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-family: inherit;
+  transition: background .15s ease, color .15s ease;
+}
+.nav-group-header:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+.nav-group.has-active .nav-group-header { color: #00FFC2; }
+.nav-group-chevron { width: 12px; height: 12px; margin-left: auto; flex-shrink: 0; transition: transform .15s ease; opacity: .7; }
+.nav-group.expanded .nav-group-chevron { transform: rotate(90deg); }
+.nav-submenu { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .18s ease; }
+.nav-submenu > div { overflow: hidden; }
+.nav-group.expanded .nav-submenu { grid-template-rows: 1fr; }
+.nav-submenu .nav-item { padding-left: 22px; font-size: 13.5px; }
+
+.nav-group-placeholder { opacity: .4; cursor: default; }
+.nav-group-placeholder:hover { background: transparent; color: rgba(255,255,255,0.55); }
+.nav-soon-pill {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: none;
+  background: rgba(255,255,255,0.12);
+  padding: 2px 6px;
+  border-radius: 20px;
+}
+
 /* -------- Form fields -------- */
 .field {
   padding: 9px 11px;
@@ -180,4 +222,13 @@ body { font-feature-settings: "cv11"; }
   .sidebar .nav-item { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 10.5px; flex-shrink: 0; }
   .sidebar .nav-badge { position: absolute; top: 2px; right: 2px; margin-left: 0; }
   .sidebar-user { display: none; }
+  /* En mobile el menú es una fila horizontal: los grupos pierden el
+     colapsado (siempre "abiertos") y el encabezado se reduce a una
+     etiqueta angosta en vez de ocupar una fila propia. */
+  .nav-group { display: flex; align-items: center; flex-shrink: 0; }
+  .nav-group-header { flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 8.5px; width: auto; }
+  .nav-group-chevron { display: none; }
+  .nav-submenu { grid-template-rows: 1fr !important; display: flex; }
+  .nav-submenu > div { display: flex; overflow: visible; }
+  .nav-group-placeholder { display: none; }
 }
