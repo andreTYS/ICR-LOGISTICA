@@ -155,6 +155,24 @@ async function getProyecto(codigoProyecto) {
   };
 }
 
+async function crearCliente({ ruc, razonSocial, contacto, usuarioId, canal }) {
+  if (!ruc || !razonSocial) {
+    throw new AppError("SCHEMA_INVALID", "ruc y razonSocial son obligatorios", 400);
+  }
+  return withAuditedTransaction("projects.client.create", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      `INSERT INTO clientes (ruc, razon_social, contacto) VALUES ($1,$2,$3) RETURNING *`,
+      [ruc, razonSocial, contacto || null]
+    );
+    return { entidad: "clientes", entidadId: r.rows[0].cliente_id, valorNuevo: { ruc, razonSocial }, cliente: r.rows[0] };
+  });
+}
+
+async function listClientes() {
+  const r = await pool.query("SELECT * FROM clientes WHERE activo = true ORDER BY razon_social");
+  return r.rows;
+}
+
 async function listTecnicos() {
   const r = await pool.query(
     "SELECT usuario_id, nombre_completo, rol_codigo FROM usuarios WHERE activo = true ORDER BY nombre_completo"
@@ -164,5 +182,5 @@ async function listTecnicos() {
 
 module.exports = {
   crearProyecto, actualizarEstado, registrarManoObra,
-  listProyectos, getProyecto, listTecnicos,
+  listProyectos, getProyecto, listTecnicos, crearCliente, listClientes,
 };

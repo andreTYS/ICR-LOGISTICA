@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ICR Almacén — Panel de Inventario</title>
+<title>Inversiones ICR — ERP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -18,8 +18,8 @@
       <div class="flex items-center justify-center gap-3 mb-2">
         <span id="login-brand-mark" class="w-11 h-11 rounded-xl bg-gradient-to-br from-accent to-accent-400 text-navy-950 font-extrabold flex items-center justify-center text-sm shadow-glow overflow-hidden">IC</span>
         <div>
-          <div class="font-bold text-navy-950 leading-tight">ICR Almacén</div>
-          <div class="text-xs text-slate-500 leading-tight">Módulo de Inventario · MVP</div>
+          <div class="font-bold text-navy-950 leading-tight">Inversiones ICR</div>
+          <div class="text-xs text-slate-500 leading-tight">Acceso ERP de Inversiones ICR</div>
         </div>
       </div>
       <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
@@ -48,8 +48,8 @@
       <div class="flex items-center gap-2.5 mb-6 px-1">
         <span id="sidebar-brand-mark" class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent to-accent-400 text-navy-950 font-extrabold flex items-center justify-center text-[13px] shrink-0 overflow-hidden">IC</span>
         <div class="brand-text">
-          <div class="font-bold text-[15px] leading-tight">ICR Almacén</div>
-          <div class="brand-sub text-[11px] text-white/50 leading-tight">Módulo de Inventario · MVP</div>
+          <div class="font-bold text-[15px] leading-tight">Inversiones ICR</div>
+          <div class="brand-sub text-[11px] text-white/50 leading-tight">Sistema ERP</div>
         </div>
       </div>
 
@@ -121,6 +121,14 @@
               <span>Órdenes de compra</span>
               <span id="purchases-badge" class="hidden nav-badge">0</span>
             </button>
+            <button class="nav-item" data-view="purchases-replenishment">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Reabastecimiento</span>
+            </button>
+            <button class="nav-item" data-view="purchases-suppliers">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Proveedores</span>
+            </button>
           </div></div>
         </div>
 
@@ -136,6 +144,10 @@
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 17 17 3M8 12l2 2M11 9l2 2M6 15l2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span>Obras / costeo</span>
             </button>
+            <button class="nav-item" data-view="projects-clients">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Clientes</span>
+            </button>
           </div></div>
         </div>
 
@@ -145,10 +157,31 @@
           <span>Ventas / CRM</span>
           <span class="nav-soon-pill">Pronto</span>
         </div>
-        <div class="nav-group-header nav-group-placeholder" title="Fase 3 del roadmap — todavía no construido">
-          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h2M11 9.5h2M7 13h2M11 13h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <span>Contabilidad</span>
-          <span class="nav-soon-pill">Pronto</span>
+        <!-- ============ MÓDULO: CONTABILIDAD ============ -->
+        <div class="nav-group" data-group="contabilidad">
+          <button class="nav-group-header" type="button" onclick="toggleNavGroup('contabilidad')">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h2M11 9.5h2M7 13h2M11 13h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <span>Contabilidad</span>
+            <svg class="nav-group-chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="nav-submenu" id="nav-submenu-contabilidad"><div>
+            <button class="nav-item" data-view="accounting-entries">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Asientos</span>
+            </button>
+            <button class="nav-item" data-view="accounting-accounts">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h2M11 9.5h2M7 13h2M11 13h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Plan de cuentas</span>
+            </button>
+            <button class="nav-item" data-view="accounting-rules">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 10h5M11 10h5M9 4v3M9 13v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="10" r="2" stroke="currentColor" stroke-width="1.6"/></svg>
+              <span>Reglas de imputación</span>
+            </button>
+            <button class="nav-item" data-view="accounting-fiscal">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 13h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Parámetros fiscales</span>
+            </button>
+          </div></div>
         </div>
         <div class="nav-group-header nav-group-placeholder" title="Prioridad media — todavía no construido">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="5" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="10" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M11 8.5h4M11 11.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -238,6 +271,36 @@
             <div>
               <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-alerts">—</div>
               <div class="text-xs text-slate-500 mt-0.5">Alertas de stock bajo</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-7">
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5 cursor-pointer hover:border-accent transition" data-goto="purchases">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-cyan-50 text-accent-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M4 6h12l-1 9a1.5 1.5 0 0 1-1.5 1.3H6.5A1.5 1.5 0 0 1 5 15L4 6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-purchases-pending">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Órdenes de compra pendientes</div>
+            </div>
+          </div>
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5 cursor-pointer hover:border-accent transition" data-goto="projects">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-navy-950/5 text-navy-950 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M3 17 17 3M8 12l2 2M11 9l2 2M6 15l2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-projects-active">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Proyectos activos</div>
+            </div>
+          </div>
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5 cursor-pointer hover:border-accent transition" data-goto="accounting-entries">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-accounting-draft">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Asientos contables en borrador</div>
             </div>
           </div>
         </div>
@@ -517,21 +580,6 @@
 
       <!-- ============ COMPRAS ============ -->
       <section class="view" id="view-purchases">
-        <div class="mb-7">
-          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Sugerencias de reabastecimiento</h3>
-          <div class="table-card">
-            <table class="w-full border-collapse text-sm">
-              <thead><tr class="bg-navy-950 text-white text-[12.5px]">
-                <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
-                <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Disponible</th>
-                <th class="text-left font-semibold px-3 py-2.5">P. reorden</th><th class="text-left font-semibold px-3 py-2.5">Sugerido</th>
-                <th class="text-left font-semibold px-3 py-2.5"></th>
-              </tr></thead>
-              <tbody id="replenishment-body"></tbody>
-            </table>
-          </div>
-        </div>
-
         <form class="form-card mb-7" id="form-oc-create">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva orden de compra</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
@@ -596,6 +644,50 @@
         </div>
       </section>
 
+      <!-- ============ COMPRAS: REABASTECIMIENTO ============ -->
+      <section class="view" id="view-purchases-replenishment">
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Disponible</th>
+              <th class="text-left font-semibold px-3 py-2.5">P. reorden</th><th class="text-left font-semibold px-3 py-2.5">Sugerido</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="replenishment-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ COMPRAS: PROVEEDORES ============ -->
+      <section class="view" id="view-purchases-suppliers">
+        <form class="form-card mb-7" id="form-supplier-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo proveedor</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">RUC
+              <input name="ruc" required placeholder="ej. 20100047218" class="field" />
+            </label>
+            <label class="field-label">Razón social
+              <input name="razon_social" required placeholder="ej. JA Solar Perú Distribuidora S.A.C." class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Contacto (opcional)
+              <input name="contacto" placeholder="ej. ventas@proveedor.example" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear proveedor</span></button>
+        </form>
+        <div id="supplier-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">RUC</th><th class="text-left font-semibold px-3 py-2.5">Razón social</th>
+              <th class="text-left font-semibold px-3 py-2.5">Contacto</th>
+            </tr></thead>
+            <tbody id="suppliers-body"></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- ============ PROYECTOS ============ -->
       <section class="view" id="view-projects">
         <form class="form-card mb-7" id="form-project-create">
@@ -643,6 +735,205 @@
             <tbody id="projects-body"></tbody>
           </table>
           <div id="projects-pager"></div>
+        </div>
+      </section>
+
+      <!-- ============ PROYECTOS: CLIENTES ============ -->
+      <section class="view" id="view-projects-clients">
+        <form class="form-card mb-7" id="form-client-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo cliente</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">RUC
+              <input name="ruc" required placeholder="ej. 20512345678" class="field" />
+            </label>
+            <label class="field-label">Razón social
+              <input name="razon_social" required placeholder="ej. Constructora Vilca Hnos S.A.C." class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Contacto (opcional)
+              <input name="contacto" placeholder="ej. proyectos@cliente.example" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear cliente</span></button>
+        </form>
+        <div id="client-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">RUC</th><th class="text-left font-semibold px-3 py-2.5">Razón social</th>
+              <th class="text-left font-semibold px-3 py-2.5">Contacto</th>
+            </tr></thead>
+            <tbody id="clients-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ CONTABILIDAD: ASIENTOS ============ -->
+      <section class="view" id="view-accounting-entries">
+        <form class="form-card mb-7" id="form-entry-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo asiento manual</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">Glosa
+              <input name="glosa" required placeholder="ej. Compra de materiales al contado" class="field" />
+            </label>
+            <label class="field-label">Fecha (opcional)
+              <input name="fecha" type="date" class="field" />
+            </label>
+          </div>
+          <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label w-28">Cuenta
+              <input id="entry-line-cuenta" placeholder="ej. 20" class="field" />
+            </label>
+            <label class="field-label w-28">Debe
+              <input id="entry-line-debe" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <label class="field-label w-28">Haber
+              <input id="entry-line-haber" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <label class="field-label flex-1 min-w-[140px]">Proyecto (opcional)
+              <input id="entry-line-proyecto" placeholder="ej. PROY-001" class="field" />
+            </label>
+            <button type="button" class="btn-secondary" onclick="addEntryDraftLine()">+ Agregar línea</button>
+          </div>
+          <table class="w-full border-collapse text-sm mb-4">
+            <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+              <th class="font-semibold py-1.5 pr-3">Cuenta</th><th class="font-semibold py-1.5 pr-3">Debe</th>
+              <th class="font-semibold py-1.5 pr-3">Haber</th><th class="font-semibold py-1.5 pr-3">Proyecto</th><th class="font-semibold py-1.5"></th>
+            </tr></thead>
+            <tbody id="entry-draft-lines-body"></tbody>
+          </table>
+          <div id="entry-draft-balance" class="text-xs text-slate-500 mb-4"></div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear asiento</span></button>
+        </form>
+        <div id="entry-create-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="entry-filter-estado" class="field w-auto" onchange="loadEntries(1)">
+            <option value="">Todos los estados</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="CONTABILIZADO">Contabilizado</option>
+            <option value="ANULADO">Anulado</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">N°</th><th class="text-left font-semibold px-3 py-2.5">Fecha</th>
+              <th class="text-left font-semibold px-3 py-2.5">Glosa</th><th class="text-left font-semibold px-3 py-2.5">Origen</th>
+              <th class="text-left font-semibold px-3 py-2.5">Total</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="entries-body"></tbody>
+          </table>
+          <div id="entries-pager"></div>
+        </div>
+      </section>
+
+      <!-- ============ CONTABILIDAD: PLAN DE CUENTAS ============ -->
+      <section class="view" id="view-accounting-accounts">
+        <form class="form-card mb-7" id="form-account-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva cuenta</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">Código
+              <input name="codigo" required placeholder="ej. 20" class="field" />
+            </label>
+            <label class="field-label">Nombre
+              <input name="nombre" required placeholder="ej. Mercaderías" class="field" />
+            </label>
+            <label class="field-label">Tipo
+              <select name="tipo" required class="field">
+                <option value="">Selecciona…</option>
+                <option value="ACTIVO">Activo</option>
+                <option value="PASIVO">Pasivo</option>
+                <option value="PATRIMONIO">Patrimonio</option>
+                <option value="INGRESO">Ingreso</option>
+                <option value="GASTO">Gasto</option>
+              </select>
+            </label>
+            <label class="field-label">Cuenta padre (opcional)
+              <input name="cuenta_padre_codigo" placeholder="ej. 20" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear cuenta</span></button>
+        </form>
+        <div id="account-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Código</th><th class="text-left font-semibold px-3 py-2.5">Nombre</th>
+              <th class="text-left font-semibold px-3 py-2.5">Tipo</th><th class="text-left font-semibold px-3 py-2.5">Cuenta padre</th>
+            </tr></thead>
+            <tbody id="accounts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ CONTABILIDAD: REGLAS DE IMPUTACIÓN ============ -->
+      <section class="view" id="view-accounting-rules">
+        <form class="form-card mb-7" id="form-rule-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva regla de imputación</h3>
+          <p class="text-xs text-slate-500 mb-4">Mapea un evento de negocio a un debe/haber fijo. Al recibir una compra con una regla activa para <code>purchases.receive</code>, se genera el asiento automáticamente en Borrador.</p>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">Evento
+              <input name="evento" required placeholder="ej. purchases.receive" class="field" />
+            </label>
+            <label class="field-label">Descripción (opcional)
+              <input name="descripcion" placeholder="ej. Recepción de compra" class="field" />
+            </label>
+            <label class="field-label">Cuenta debe (código)
+              <input name="cuenta_debe_codigo" required placeholder="ej. 20" class="field" />
+            </label>
+            <label class="field-label">Cuenta haber (código)
+              <input name="cuenta_haber_codigo" required placeholder="ej. 42" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Guardar regla</span></button>
+        </form>
+        <div id="rule-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Evento</th><th class="text-left font-semibold px-3 py-2.5">Debe</th>
+              <th class="text-left font-semibold px-3 py-2.5">Haber</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="rules-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ CONTABILIDAD: PARÁMETROS FISCALES ============ -->
+      <section class="view" id="view-accounting-fiscal">
+        <form class="form-card mb-7" id="form-fiscal-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo parámetro fiscal</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">Tipo
+              <input name="tipo" required placeholder="ej. IGV, UIT, DETRACCION" class="field" />
+            </label>
+            <label class="field-label">Valor
+              <input name="valor" type="number" step="0.0001" required placeholder="ej. 18" class="field" />
+            </label>
+            <label class="field-label">Vigente desde
+              <input name="vigente_desde" type="date" required class="field" />
+            </label>
+            <label class="field-label">Vigente hasta (opcional)
+              <input name="vigente_hasta" type="date" class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Descripción (opcional)
+              <input name="descripcion" placeholder="ej. Tasa general de IGV Perú" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Guardar parámetro</span></button>
+        </form>
+        <div id="fiscal-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Tipo</th><th class="text-left font-semibold px-3 py-2.5">Valor</th>
+              <th class="text-left font-semibold px-3 py-2.5">Vigente desde</th><th class="text-left font-semibold px-3 py-2.5">Vigente hasta</th>
+              <th class="text-left font-semibold px-3 py-2.5">Descripción</th>
+            </tr></thead>
+            <tbody id="fiscal-params-body"></tbody>
+          </table>
         </div>
       </section>
 
@@ -856,6 +1147,33 @@
           <button class="btn-secondary" type="submit">Registrar horas</button>
         </form>
         <div id="project-labor-result" class="result-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="entry-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeEntryModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="entry-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="entry-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="entry-post-btn" class="btn-secondary px-3 py-1.5 text-xs" onclick="postEntryAction()">Contabilizar</button>
+          <button id="entry-void-btn" class="btn-danger px-3 py-1.5 text-xs" onclick="voidEntryAction()">Anular</button>
+          <button onclick="closeEntryModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <table class="w-full border-collapse text-sm">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Cuenta</th><th class="font-semibold py-1.5 pr-3">Debe</th>
+            <th class="font-semibold py-1.5 pr-3">Haber</th><th class="font-semibold py-1.5">Proyecto</th>
+          </tr></thead>
+          <tbody id="entry-lines-body"></tbody>
+        </table>
       </div>
     </div>
   </div>

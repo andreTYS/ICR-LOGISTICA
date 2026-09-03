@@ -179,8 +179,15 @@ const titles = {
   products: ["Productos", "Catálogo de productos gestionados"],
   movements: ["Movimientos (ledger)", "Historial completo de movimientos de inventario"],
   alerts: ["Alertas de stock bajo", "Productos por debajo del punto de reorden"],
-  purchases: ["Compras", "Órdenes de compra, recepciones y sugerencias de reabastecimiento"],
+  purchases: ["Órdenes de compra", "Crear, enviar y recibir órdenes de compra"],
+  "purchases-replenishment": ["Reabastecimiento", "Productos por debajo del punto de reorden, con cantidad sugerida"],
+  "purchases-suppliers": ["Proveedores", "Catálogo de proveedores"],
   projects: ["Proyectos", "Obras con costeo real: materiales consumidos + mano de obra vs. presupuesto"],
+  "projects-clients": ["Clientes", "Catálogo de clientes"],
+  "accounting-entries": ["Asientos contables", "Asientos manuales y generados automáticamente por las reglas de imputación"],
+  "accounting-accounts": ["Plan de cuentas", "Estructura de cuentas contables"],
+  "accounting-rules": ["Reglas de imputación", "Mapeo de eventos de negocio a cuentas debe/haber"],
+  "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -211,8 +218,15 @@ function goToView(view) {
   if (view === "products") loadProducts();
   if (view === "movements") loadMovements();
   if (view === "alerts") loadAlerts();
-  if (view === "purchases") loadPurchases();
+  if (view === "purchases") loadPurchaseOrders(1);
+  if (view === "purchases-replenishment") loadReplenishmentSuggestions();
+  if (view === "purchases-suppliers") loadSuppliers();
   if (view === "projects") loadProjects(1);
+  if (view === "projects-clients") loadClients();
+  if (view === "accounting-entries") loadEntries(1);
+  if (view === "accounting-accounts") loadAccounts();
+  if (view === "accounting-rules") loadRules();
+  if (view === "accounting-fiscal") loadFiscalParams();
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -351,6 +365,23 @@ async function loadDashboard() {
   }
 
   renderActivityChart(allMov.data?.items || []);
+  loadDashboardModuleSummary();
+}
+
+// Resumen de los demás módulos del ERP en el Panel. Tolerante a permisos:
+// un rol sin acceso a alguno de estos módulos simplemente ve "—" ahí,
+// en vez de romper el resto del dashboard.
+async function loadDashboardModuleSummary() {
+  const [ocEnviada, ocParcial, proyectosActivos, asientosBorrador] = await Promise.all([
+    api("/purchases/orders?estado=ENVIADA&page_size=1"),
+    api("/purchases/orders?estado=PARCIAL&page_size=1"),
+    api("/projects?estado=ACTIVO&page_size=1"),
+    api("/accounting/entries?estado=BORRADOR&page_size=1"),
+  ]);
+  const purchasesPending = (ocEnviada.status === "success" ? ocEnviada.data.total : 0) + (ocParcial.status === "success" ? ocParcial.data.total : 0);
+  document.getElementById("kpi-purchases-pending").textContent = (ocEnviada.status === "success") ? purchasesPending : "—";
+  document.getElementById("kpi-projects-active").textContent = proyectosActivos.status === "success" ? proyectosActivos.data.total : "—";
+  document.getElementById("kpi-accounting-draft").textContent = asientosBorrador.status === "success" ? asientosBorrador.data.total : "—";
 }
 
 // -------- Gráfico de actividad (Ingresos vs Salidas, últimos 7 días) --------
@@ -458,6 +489,11 @@ function projectStatusBadge(estado) {
 }
 function money(n) {
   return Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const ENTRY_STATUS_TONES = { BORRADOR: "devolucion", CONTABILIZADO: "ok", ANULADO: "low" };
+function entryStatusBadge(estado) {
+  return badge(estado, ENTRY_STATUS_TONES[estado] || "devolucion");
 }
 
 // -------- Stock --------
@@ -766,11 +802,6 @@ document.getElementById("form-oc-create").addEventListener("submit", async (e) =
   }
 });
 
-async function loadPurchases() {
-  loadReplenishmentSuggestions();
-  loadPurchaseOrders(1);
-}
-
 async function loadReplenishmentSuggestions() {
   const body = document.getElementById("replenishment-body");
   body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
@@ -793,6 +824,7 @@ async function loadReplenishmentSuggestions() {
 function prefillOcFromSuggestion(sku, cantidad) {
   ocDraftItems.push({ sku, quantity: Number(cantidad) });
   renderOcDraftItems();
+  goToView("purchases");
   document.getElementById("form-oc-create").scrollIntoView({ behavior: "smooth", block: "center" });
   toast(`${sku} agregado a la orden en construcción`);
 }
@@ -924,6 +956,36 @@ document.getElementById("form-oc-receive").addEventListener("submit", async (e) 
     setFormLoading(e.target, false);
   }
 });
+
+// -------- Compras: proveedores --------
+document.getElementById("form-supplier-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = { channel: "web", ruc: f.get("ruc"), razon_social: f.get("razon_social"), contacto: f.get("contacto") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/purchases/suppliers", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("supplier-create-result", r);
+    if (r.status === "success") { toast(`Proveedor ${r.data.proveedor.razon_social} creado`); e.target.reset(); loadSuppliers(); loadSupplierOptions(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadSuppliers() {
+  const body = document.getElementById("suppliers-body");
+  body.innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/purchases/suppliers");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(3, r.error?.message || "Tu rol no tiene permiso para ver proveedores.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((s) => `<tr class="${TR}"><td class="${TD}">${s.ruc}</td><td class="${TD}">${s.razon_social}</td><td class="${TD}">${s.contacto || "—"}</td></tr>`).join("")
+    : emptyRow(3, "Sin proveedores registrados.", "inbox");
+}
 
 // -------- Proyectos --------
 let currentProjectCodigo = null;
@@ -1075,6 +1137,292 @@ document.getElementById("form-project-labor").addEventListener("submit", async (
     setFormLoading(e.target, false);
   }
 });
+
+// -------- Proyectos: clientes --------
+document.getElementById("form-client-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = { channel: "web", ruc: f.get("ruc"), razon_social: f.get("razon_social"), contacto: f.get("contacto") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/projects-clients", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("client-create-result", r);
+    if (r.status === "success") { toast(`Cliente ${r.data.cliente.razon_social} creado`); e.target.reset(); loadClients(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadClients() {
+  const body = document.getElementById("clients-body");
+  body.innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/projects-clients");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(3, r.error?.message || "Tu rol no tiene permiso para ver clientes.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((c) => `<tr class="${TR}"><td class="${TD}">${c.ruc}</td><td class="${TD}">${c.razon_social}</td><td class="${TD}">${c.contacto || "—"}</td></tr>`).join("")
+    : emptyRow(3, "Sin clientes registrados.", "inbox");
+}
+
+// -------- Contabilidad: plan de cuentas --------
+document.getElementById("form-account-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web", codigo: f.get("codigo"), nombre: f.get("nombre"), tipo: f.get("tipo"),
+    cuenta_padre_codigo: f.get("cuenta_padre_codigo") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/accounting/accounts", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("account-create-result", r);
+    if (r.status === "success") { toast(`Cuenta ${r.data.cuenta.codigo} creada`); e.target.reset(); loadAccounts(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadAccounts() {
+  const body = document.getElementById("accounts-body");
+  body.innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/accounting/accounts");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(4, r.error?.message || "Tu rol no tiene permiso para ver el plan de cuentas.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((c) => `<tr class="${TR}">
+        <td class="${TD} font-semibold text-navy-900">${c.codigo}</td><td class="${TD}">${c.nombre}</td>
+        <td class="${TD}">${c.tipo}</td><td class="${TD}">${c.cuenta_padre_codigo ? `${c.cuenta_padre_codigo} — ${c.cuenta_padre_nombre}` : "—"}</td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin cuentas registradas todavía.", "inbox");
+}
+
+// -------- Contabilidad: reglas de imputación --------
+document.getElementById("form-rule-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web", evento: f.get("evento"), descripcion: f.get("descripcion") || null,
+    cuenta_debe_codigo: f.get("cuenta_debe_codigo"), cuenta_haber_codigo: f.get("cuenta_haber_codigo"),
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/accounting/rules", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("rule-create-result", r);
+    if (r.status === "success") { toast(`Regla para '${r.data.regla.evento}' guardada`); e.target.reset(); loadRules(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadRules() {
+  const body = document.getElementById("rules-body");
+  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/accounting/rules");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para ver las reglas.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((rule) => `<tr class="${TR}">
+        <td class="${TD} font-semibold text-navy-900">${rule.evento}</td>
+        <td class="${TD}">${rule.cuenta_debe_codigo} — ${rule.cuenta_debe_nombre}</td>
+        <td class="${TD}">${rule.cuenta_haber_codigo} — ${rule.cuenta_haber_nombre}</td>
+        <td class="${TD}">${badge(rule.activo ? "ACTIVA" : "INACTIVA", rule.activo ? "ok" : "devolucion")}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="toggleRuleAction('${rule.evento}', ${!rule.activo})">${rule.activo ? "Desactivar" : "Activar"}</button></td>
+      </tr>`).join("")
+    : emptyRow(5, "Sin reglas de imputación registradas.", "inbox");
+}
+
+async function toggleRuleAction(evento, nuevoActivo) {
+  const r = await api(`/accounting/rules/${encodeURIComponent(evento)}/toggle`, { method: "POST", body: JSON.stringify({ activo: nuevoActivo }) });
+  if (r.status === "success") { toast(`Regla '${evento}' ${nuevoActivo ? "activada" : "desactivada"}`); loadRules(); }
+  else toast(r.error.message, false);
+}
+
+// -------- Contabilidad: parámetros fiscales --------
+document.getElementById("form-fiscal-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web", tipo: f.get("tipo"), valor: f.get("valor"),
+    vigente_desde: f.get("vigente_desde"), vigente_hasta: f.get("vigente_hasta") || null,
+    descripcion: f.get("descripcion") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/accounting/fiscal-params", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("fiscal-create-result", r);
+    if (r.status === "success") { toast(`Parámetro ${r.data.parametro.tipo} guardado`); e.target.reset(); loadFiscalParams(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadFiscalParams() {
+  const body = document.getElementById("fiscal-params-body");
+  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/accounting/fiscal-params");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para ver los parámetros fiscales.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((p) => `<tr class="${TR}">
+        <td class="${TD} font-semibold text-navy-900">${p.tipo}</td><td class="${TD}">${money(p.valor)}</td>
+        <td class="${TD}">${new Date(p.vigente_desde).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}">${p.vigente_hasta ? new Date(p.vigente_hasta).toLocaleDateString("es-PE") : "Vigente"}</td>
+        <td class="${TD}">${p.descripcion || "—"}</td>
+      </tr>`).join("")
+    : emptyRow(5, "Sin parámetros fiscales registrados.", "inbox");
+}
+
+// -------- Contabilidad: asientos --------
+let entryDraftLines = [];
+let currentEntryNumero = null;
+
+function renderEntryDraftLines() {
+  const body = document.getElementById("entry-draft-lines-body");
+  body.innerHTML = entryDraftLines.length
+    ? entryDraftLines.map((l, i) => `<tr class="${TR}">
+        <td class="${TD}">${l.cuenta_codigo}</td><td class="${TD}">${l.debe || "—"}</td><td class="${TD}">${l.haber || "—"}</td>
+        <td class="${TD}">${l.proyecto_codigo || "—"}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeEntryDraftLine(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(5, "Agrega al menos 2 líneas (debe y haber) antes de crear el asiento.", "inbox");
+  const totalDebe = entryDraftLines.reduce((s, l) => s + Number(l.debe || 0), 0);
+  const totalHaber = entryDraftLines.reduce((s, l) => s + Number(l.haber || 0), 0);
+  const balanced = Math.abs(totalDebe - totalHaber) < 0.01;
+  document.getElementById("entry-draft-balance").innerHTML =
+    `Debe: ${money(totalDebe)} · Haber: ${money(totalHaber)} · ${balanced ? '<span class="text-emerald-600 font-semibold">Cuadra</span>' : '<span class="text-rose-600 font-semibold">No cuadra</span>'}`;
+}
+
+function addEntryDraftLine() {
+  const cuenta = document.getElementById("entry-line-cuenta").value.trim();
+  const debe = Number(document.getElementById("entry-line-debe").value || 0);
+  const haber = Number(document.getElementById("entry-line-haber").value || 0);
+  const proyecto = document.getElementById("entry-line-proyecto").value.trim();
+  if (!cuenta || (debe <= 0 && haber <= 0) || (debe > 0 && haber > 0)) {
+    toast("Ingresa una cuenta y un monto en debe O en haber (no ambos)", false);
+    return;
+  }
+  entryDraftLines.push({ cuenta_codigo: cuenta, debe: debe || undefined, haber: haber || undefined, proyecto_codigo: proyecto || undefined });
+  document.getElementById("entry-line-cuenta").value = "";
+  document.getElementById("entry-line-debe").value = "";
+  document.getElementById("entry-line-haber").value = "";
+  document.getElementById("entry-line-proyecto").value = "";
+  renderEntryDraftLines();
+}
+function removeEntryDraftLine(i) {
+  entryDraftLines.splice(i, 1);
+  renderEntryDraftLines();
+}
+renderEntryDraftLines();
+
+document.getElementById("form-entry-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (entryDraftLines.length < 2) { toast("Agrega al menos 2 líneas al asiento", false); return; }
+  const f = new FormData(e.target);
+  const payload = { channel: "web", glosa: f.get("glosa"), fecha: f.get("fecha") || null, lineas: entryDraftLines };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/accounting/entries", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("entry-create-result", r);
+    if (r.status === "success") {
+      toast(`Asiento ${r.data.numero} creado en BORRADOR`);
+      e.target.reset();
+      entryDraftLines = [];
+      renderEntryDraftLines();
+      loadEntries(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadEntries(page) {
+  const body = document.getElementById("entries-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("entry-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/accounting/entries?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver asientos.", "lock");
+    document.getElementById("entries-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR} cursor-pointer" onclick="openEntryModal('${a.numero}')">
+        <td class="${TD} font-semibold text-navy-900">${a.numero}</td>
+        <td class="${TD}">${new Date(a.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${a.glosa}</td>
+        <td class="${TD}">${a.origen_evento || "Manual"}</td><td class="${TD}">${money(a.total)}</td>
+        <td class="${TD}">${entryStatusBadge(a.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openEntryModal('${a.numero}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin asientos registrados.", "inbox");
+  renderPager("entries-pager", r.data, (p) => loadEntries(p));
+}
+
+async function openEntryModal(numero) {
+  currentEntryNumero = numero;
+  const modal = document.getElementById("entry-modal");
+  document.getElementById("entry-modal-title").textContent = numero;
+  document.getElementById("entry-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("entry-lines-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  modal.classList.remove("hidden");
+
+  const r = await api(`/accounting/entries/${encodeURIComponent(numero)}`);
+  if (r.status !== "success") {
+    document.getElementById("entry-modal-subtitle").textContent = r.error?.message || "No se pudo cargar el asiento";
+    return;
+  }
+  const a = r.data;
+  document.getElementById("entry-modal-subtitle").innerHTML = `${a.glosa} · ${new Date(a.fecha).toLocaleDateString("es-PE")} · ${entryStatusBadge(a.estado)}`;
+  document.getElementById("entry-post-btn").classList.toggle("hidden", a.estado !== "BORRADOR");
+  document.getElementById("entry-void-btn").classList.toggle("hidden", a.estado === "ANULADO");
+
+  document.getElementById("entry-lines-body").innerHTML = (a.lineas || []).map((l) => `<tr class="${TR}">
+      <td class="${TD}">${l.cuenta_codigo} — ${l.cuenta_nombre}</td>
+      <td class="${TD}">${Number(l.debe) > 0 ? money(l.debe) : "—"}</td>
+      <td class="${TD}">${Number(l.haber) > 0 ? money(l.haber) : "—"}</td>
+      <td class="${TD}">${l.codigo_proyecto || "—"}</td>
+    </tr>`).join("");
+}
+
+function closeEntryModal() {
+  document.getElementById("entry-modal").classList.add("hidden");
+  currentEntryNumero = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeEntryModal(); });
+
+async function postEntryAction() {
+  if (!currentEntryNumero) return;
+  if (!confirm(`¿Contabilizar el asiento ${currentEntryNumero}? Ya no se podrá editar.`)) return;
+  const r = await api(`/accounting/entries/${encodeURIComponent(currentEntryNumero)}/post`, { method: "POST" });
+  if (r.status === "success") { toast("Asiento contabilizado"); openEntryModal(currentEntryNumero); loadEntries(1); }
+  else toast(r.error.message, false);
+}
+
+async function voidEntryAction() {
+  if (!currentEntryNumero) return;
+  if (!confirm(`¿Anular el asiento ${currentEntryNumero}?`)) return;
+  const r = await api(`/accounting/entries/${encodeURIComponent(currentEntryNumero)}/void`, { method: "POST" });
+  if (r.status === "success") { toast("Asiento anulado"); openEntryModal(currentEntryNumero); loadEntries(1); }
+  else toast(r.error.message, false);
+}
 
 // -------- Reservas --------
 document.getElementById("form-reserve").addEventListener("submit", async (e) => {

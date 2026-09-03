@@ -296,6 +296,69 @@ CREATE TABLE recepcion_items (
     cantidad               NUMERIC(14,2) NOT NULL CHECK (cantidad > 0)
 );
 
+-- ---------- CONTABILIDAD ----------
+-- Motor de asientos por reglas de imputación (PRD §5.1) + parámetros
+-- fiscales versionados por vigencia (PRD §5.2). Un asiento nace en BORRADOR
+-- (manual o generado automático por una regla) y solo afecta reportes una
+-- vez CONTABILIZADO — el PRD pide esto explícitamente como mitigación de
+-- riesgo hasta que un contador revise las reglas.
+
+CREATE TABLE plan_cuentas (
+    cuenta_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo            TEXT NOT NULL UNIQUE,
+    nombre            TEXT NOT NULL,
+    tipo              TEXT NOT NULL CHECK (tipo IN ('ACTIVO','PASIVO','PATRIMONIO','INGRESO','GASTO')),
+    cuenta_padre_id   UUID REFERENCES plan_cuentas(cuenta_id),
+    activo            BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE parametros_fiscales (
+    parametro_fiscal_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo                 TEXT NOT NULL,
+    valor                NUMERIC(10,4) NOT NULL,
+    vigente_desde        DATE NOT NULL,
+    vigente_hasta        DATE,
+    descripcion          TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (vigente_hasta IS NULL OR vigente_hasta >= vigente_desde)
+);
+
+-- Un evento de negocio (ej. 'purchases.receive') mapea a un debe/haber fijo.
+-- Agregar un evento nuevo o cambiar una cuenta es una fila, no un despliegue.
+CREATE TABLE reglas_imputacion (
+    regla_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    evento            TEXT NOT NULL UNIQUE,
+    cuenta_debe_id    UUID NOT NULL REFERENCES plan_cuentas(cuenta_id),
+    cuenta_haber_id   UUID NOT NULL REFERENCES plan_cuentas(cuenta_id),
+    descripcion       TEXT,
+    activo            BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE SEQUENCE asiento_numero_seq START 1;
+
+CREATE TABLE asientos (
+    asiento_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero           TEXT NOT NULL UNIQUE,
+    fecha            DATE NOT NULL DEFAULT CURRENT_DATE,
+    glosa            TEXT NOT NULL,
+    origen_evento    TEXT,
+    origen_id        UUID,
+    estado           TEXT NOT NULL DEFAULT 'BORRADOR' CHECK (estado IN ('BORRADOR','CONTABILIZADO','ANULADO')),
+    creado_por       UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE asiento_lineas (
+    asiento_linea_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    asiento_id        UUID NOT NULL REFERENCES asientos(asiento_id) ON DELETE CASCADE,
+    cuenta_id         UUID NOT NULL REFERENCES plan_cuentas(cuenta_id),
+    debe              NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (debe >= 0),
+    haber             NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (haber >= 0),
+    proyecto_id       UUID REFERENCES proyectos(proyecto_id),
+    CHECK ((debe > 0 AND haber = 0) OR (haber > 0 AND debe = 0))
+);
+
 -- ---------- MONITOREO ----------
 
 CREATE TABLE alertas (
@@ -380,3 +443,6 @@ CREATE INDEX idx_oc_items_orden ON orden_compra_items(orden_compra_id);
 CREATE INDEX idx_recepcion_items_recepcion ON recepcion_items(recepcion_id);
 CREATE INDEX idx_mano_obra_proyecto ON proyecto_mano_obra(proyecto_id);
 CREATE INDEX idx_movimientos_proyecto ON movimientos(proyecto_id);
+CREATE INDEX idx_asiento_lineas_asiento ON asiento_lineas(asiento_id);
+CREATE INDEX idx_asientos_fecha ON asientos(fecha);
+CREATE INDEX idx_parametros_fiscales_tipo ON parametros_fiscales(tipo, vigente_desde);

@@ -3,6 +3,7 @@ const { AppError } = require("../errors");
 const {
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
 } = require("./inventoryService");
+const contabilidad = require("./contabilidadService");
 
 // -------------------- Helpers --------------------
 
@@ -110,7 +111,7 @@ async function recibirOrdenCompra({ numero, items, documento, usuarioId, canal }
     throw new AppError("SCHEMA_INVALID", "numero e items (al menos 1) son obligatorios", 400);
   }
 
-  return withAuditedTransaction("purchases.receive", usuarioId, canal, async (client) => {
+  const result = await withAuditedTransaction("purchases.receive", usuarioId, canal, async (client) => {
     const oc = await findOrdenCompraByNumero(client, numero, { forUpdate: true });
     if (oc.estado === "BORRADOR") {
       throw new AppError("PURCHASE_ORDER_NOT_SENT", `La orden '${numero}' todavía no fue enviada al proveedor`, 400);
@@ -126,6 +127,7 @@ async function recibirOrdenCompra({ numero, items, documento, usuarioId, canal }
       [oc.orden_compra_id, documentoId, usuarioId]
     );
     const recepcionId = recepcionR.rows[0].recepcion_id;
+    let montoRecibido = 0;
 
     for (const it of items) {
       if (!it.sku || !it.quantity || it.quantity <= 0) {
@@ -149,6 +151,7 @@ async function recibirOrdenCompra({ numero, items, documento, usuarioId, canal }
           400
         );
       }
+      montoRecibido += it.quantity * Number(item.costo_unitario);
 
       await client.query(
         "UPDATE orden_compra_items SET cantidad_recibida = cantidad_recibida + $1 WHERE orden_compra_item_id = $2",
@@ -187,15 +190,43 @@ async function recibirOrdenCompra({ numero, items, documento, usuarioId, canal }
     return {
       entidad: "ordenes_compra", entidadId: oc.orden_compra_id,
       valorNuevo: { numero, items, estado: nuevoEstado },
-      orden_compra: ocR.rows[0], recepcion_id: recepcionId,
+      orden_compra: ocR.rows[0], recepcion_id: recepcionId, monto_recibido: montoRecibido,
     };
   });
+
+  // Best-effort: si hay una regla de imputación activa para este evento,
+  // generar el asiento contable en BORRADOR. Nunca debe romper la
+  // recepción (ya confirmada y con el stock actualizado) si esto falla.
+  try {
+    await contabilidad.generarAsientoAutomatico({
+      evento: "purchases.receive", monto: result.monto_recibido,
+      glosa: `Recepción de compra ${numero}`, origenId: result.recepcion_id,
+      usuarioId, canal,
+    });
+  } catch (err) {
+    console.error(`No se pudo generar el asiento automático para la recepción de la orden '${numero}'`, err);
+  }
+
+  return result;
 }
 
 // -------------------- Consultas --------------------
 
+async function crearProveedor({ ruc, razonSocial, contacto, usuarioId, canal }) {
+  if (!ruc || !razonSocial) {
+    throw new AppError("SCHEMA_INVALID", "ruc y razonSocial son obligatorios", 400);
+  }
+  return withAuditedTransaction("purchases.supplier.create", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      `INSERT INTO proveedores (ruc, razon_social, contacto) VALUES ($1,$2,$3) RETURNING *`,
+      [ruc, razonSocial, contacto || null]
+    );
+    return { entidad: "proveedores", entidadId: r.rows[0].proveedor_id, valorNuevo: { ruc, razonSocial }, proveedor: r.rows[0] };
+  });
+}
+
 async function listProveedores() {
-  const r = await pool.query("SELECT ruc, razon_social FROM proveedores WHERE activo = true ORDER BY razon_social");
+  const r = await pool.query("SELECT * FROM proveedores WHERE activo = true ORDER BY razon_social");
   return r.rows;
 }
 
@@ -279,5 +310,5 @@ async function getSugerenciasReabastecimiento() {
 
 module.exports = {
   crearOrdenCompra, enviarOrdenCompra, cancelarOrdenCompra, recibirOrdenCompra,
-  getOrdenesCompra, getOrdenCompra, getSugerenciasReabastecimiento, listProveedores,
+  getOrdenesCompra, getOrdenCompra, getSugerenciasReabastecimiento, listProveedores, crearProveedor,
 };
