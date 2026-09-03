@@ -95,6 +95,24 @@ test("el listado de proyectos pagina y filtra por estado", async () => {
   assert.ok(cancelados.items.some((p) => p.codigo_proyecto === "PROY-T04"));
 });
 
+test("el reporte de rentabilidad calcula margen y margen% por proyecto en una sola consulta", async () => {
+  const reporte = await proyectos.getReporteRentabilidad({});
+
+  const t03 = reporte.items.find((p) => p.codigo_proyecto === "PROY-T03");
+  assert.ok(t03, "PROY-T03 debería aparecer en el reporte");
+  assert.equal(Number(t03.costo_materiales), 4 * 650);
+  assert.equal(Number(t03.costo_mano_obra), 8 * 20);
+  assert.equal(Number(t03.costo_total), 4 * 650 + 8 * 20);
+  assert.equal(Number(t03.margen), 5000 - (4 * 650 + 8 * 20));
+  assert.equal(Number(t03.margen_pct), Number((((5000 - (4 * 650 + 8 * 20)) / 5000) * 100).toFixed(2)));
+
+  const t01 = reporte.items.find((p) => p.codigo_proyecto === "PROY-T01");
+  assert.equal(Number(t01.costo_total), 0, "un proyecto sin movimientos ni horas no debería tener costo");
+  assert.equal(Number(t01.margen), 15000);
+
+  assert.ok(reporte.totales.costo_total >= Number(t03.costo_total), "el total agregado debe incluir al menos el costo de PROY-T03");
+});
+
 after(async () => {
   await pool.end();
 });

@@ -450,6 +450,12 @@ router.post(
   })
 );
 
+router.get(
+  "/projects-profitability-report",
+  requirePermission("projects.query"),
+  handle(async (req) => proyectos.getReporteRentabilidad({ estado: req.query.estado }))
+);
+
 // -------- Contabilidad --------
 
 router.post(

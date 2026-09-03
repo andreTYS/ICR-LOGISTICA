@@ -148,6 +148,10 @@
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Clientes</span>
             </button>
+            <button class="nav-item" data-view="projects-profitability">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 16V9M9 16V4M14 16v-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Rentabilidad</span>
+            </button>
           </div></div>
         </div>
 
@@ -763,6 +767,33 @@
               <th class="text-left font-semibold px-3 py-2.5">Contacto</th>
             </tr></thead>
             <tbody id="clients-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ PROYECTOS: RENTABILIDAD ============ -->
+      <section class="view" id="view-projects-profitability">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6" id="profitability-cards"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2.5 mb-4">
+          <select id="profitability-filter-estado" class="field w-auto" onchange="loadProfitabilityReport()">
+            <option value="">Todos los estados</option>
+            <option value="ACTIVO">Activo</option>
+            <option value="PAUSADO">Pausado</option>
+            <option value="FINALIZADO">Finalizado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+          <button class="btn-secondary" onclick="exportProfitabilityCsv()">Exportar CSV</button>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Código</th><th class="text-left font-semibold px-3 py-2.5">Nombre</th>
+              <th class="text-left font-semibold px-3 py-2.5">Cliente</th><th class="text-left font-semibold px-3 py-2.5">Presupuesto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Materiales</th><th class="text-left font-semibold px-3 py-2.5">Mano de obra</th>
+              <th class="text-left font-semibold px-3 py-2.5">Costo total</th><th class="text-left font-semibold px-3 py-2.5">Margen</th>
+              <th class="text-left font-semibold px-3 py-2.5">Margen %</th>
+            </tr></thead>
+            <tbody id="profitability-body"></tbody>
           </table>
         </div>
       </section>
