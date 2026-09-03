@@ -147,6 +147,7 @@ function enterApp() {
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
+  loadTechnicianOptions();
   loadDashboard();
 }
 
@@ -179,6 +180,7 @@ const titles = {
   movements: ["Movimientos (ledger)", "Historial completo de movimientos de inventario"],
   alerts: ["Alertas de stock bajo", "Productos por debajo del punto de reorden"],
   purchases: ["Compras", "Órdenes de compra, recepciones y sugerencias de reabastecimiento"],
+  projects: ["Proyectos", "Obras con costeo real: materiales consumidos + mano de obra vs. presupuesto"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -210,6 +212,7 @@ function goToView(view) {
   if (view === "movements") loadMovements();
   if (view === "alerts") loadAlerts();
   if (view === "purchases") loadPurchases();
+  if (view === "projects") loadProjects(1);
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -289,6 +292,15 @@ async function loadSupplierOptions() {
   const list = document.getElementById("supplier-list");
   if (!list || r.status !== "success") return;
   list.innerHTML = (r.data || []).map((s) => `<option value="${s.ruc}">${s.ruc} — ${s.razon_social}</option>`).join("");
+}
+
+async function loadTechnicianOptions() {
+  const r = await api("/projects-technicians");
+  if (r.status !== "success") return;
+  const opts = (r.data || []).map((t) => `<option value="${t.usuario_id}">${t.nombre_completo} (${t.rol_codigo})</option>`).join("");
+  document.querySelectorAll("select.technician-select").forEach((sel) => {
+    sel.innerHTML = `<option value="">Selecciona…</option>${opts}`;
+  });
 }
 
 // -------- Dashboard --------
@@ -438,6 +450,14 @@ function movTypeBadge(tipo) {
 const OC_STATUS_TONES = { BORRADOR: "devolucion", ENVIADA: "transferencia", PARCIAL: "ajuste", RECIBIDA: "ok", CANCELADA: "low" };
 function ocStatusBadge(estado) {
   return badge(estado, OC_STATUS_TONES[estado] || "devolucion");
+}
+
+const PROJECT_STATUS_TONES = { ACTIVO: "ok", PAUSADO: "ajuste", FINALIZADO: "devolucion", CANCELADO: "low" };
+function projectStatusBadge(estado) {
+  return badge(estado, PROJECT_STATUS_TONES[estado] || "devolucion");
+}
+function money(n) {
+  return Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // -------- Stock --------
@@ -900,6 +920,157 @@ document.getElementById("form-oc-receive").addEventListener("submit", async (e) 
       loadPurchaseOrders(1);
       loadDashboard();
     } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+// -------- Proyectos --------
+let currentProjectCodigo = null;
+
+document.getElementById("form-project-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    codigo_proyecto: f.get("codigo_proyecto"),
+    nombre: f.get("nombre"),
+    cliente_ruc: f.get("cliente_ruc") || null,
+    presupuesto: f.get("presupuesto") || null,
+    fecha_inicio: f.get("fecha_inicio") || null,
+    fecha_fin: f.get("fecha_fin") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/projects", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("project-create-result", r);
+    if (r.status === "success") { toast(`Proyecto ${r.data.proyecto.codigo_proyecto} creado`); e.target.reset(); loadProjects(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadProjects(page) {
+  const body = document.getElementById("projects-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("project-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/projects?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver proyectos.", "lock");
+    document.getElementById("projects-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((p) => `<tr class="${TR} cursor-pointer" onclick="openProjectModal('${p.codigo_proyecto}')">
+        <td class="${TD} font-semibold text-navy-900">${p.codigo_proyecto}</td>
+        <td class="${TD}">${p.nombre}</td><td class="${TD}">${p.cliente_nombre || "—"}</td>
+        <td class="${TD}">${p.presupuesto != null ? `${p.moneda || "PEN"} ${money(p.presupuesto)}` : "—"}</td>
+        <td class="${TD}">${projectStatusBadge(p.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openProjectModal('${p.codigo_proyecto}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin proyectos registrados.", "inbox");
+  renderPager("projects-pager", r.data, (p) => loadProjects(p));
+}
+
+function costeoCard(label, value, tone) {
+  return `<div class="rounded-xl border border-slate-200 px-4 py-3">
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1">${label}</div>
+    <div class="text-lg font-bold ${tone || "text-navy-950"}">${value}</div>
+  </div>`;
+}
+
+async function openProjectModal(codigo) {
+  currentProjectCodigo = codigo;
+  const modal = document.getElementById("proj-modal");
+  document.getElementById("proj-modal-title").textContent = codigo;
+  document.getElementById("proj-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("proj-costeo-cards").innerHTML = "";
+  document.getElementById("proj-materials-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("proj-labor-body").innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("project-labor-result").innerHTML = "";
+  modal.classList.remove("hidden");
+
+  const r = await api(`/projects/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    document.getElementById("proj-modal-subtitle").textContent = r.error?.message || "No se pudo cargar el proyecto";
+    return;
+  }
+  const p = r.data;
+  document.getElementById("proj-modal-subtitle").innerHTML = `${p.nombre} ${p.cliente_nombre ? `· ${p.cliente_nombre}` : ""} · ${projectStatusBadge(p.estado)}`;
+
+  const isTerminal = p.estado === "FINALIZADO" || p.estado === "CANCELADO";
+  document.getElementById("proj-status-actions").querySelectorAll("button[onclick^='setProjectStatus']").forEach((btn) => {
+    const target = btn.getAttribute("onclick").match(/'([A-Z]+)'/)[1];
+    btn.classList.toggle("hidden", target === p.estado || isTerminal);
+  });
+  document.getElementById("form-project-labor").classList.toggle("hidden", p.estado === "CANCELADO");
+
+  const c = p.costeo;
+  document.getElementById("proj-costeo-cards").innerHTML = [
+    costeoCard("Materiales", `${p.moneda || "PEN"} ${money(c.costo_materiales)}`),
+    costeoCard("Mano de obra", `${p.moneda || "PEN"} ${money(c.costo_mano_obra)}`),
+    costeoCard("Costo total", `${p.moneda || "PEN"} ${money(c.costo_total)}`, "text-navy-950"),
+    c.presupuesto != null
+      ? costeoCard("Margen vs. presupuesto", `${p.moneda || "PEN"} ${money(c.margen)}`, c.margen >= 0 ? "text-emerald-600" : "text-rose-600")
+      : costeoCard("Presupuesto", "Sin definir", "text-slate-400"),
+  ].join("");
+
+  const matBody = document.getElementById("proj-materials-body");
+  matBody.innerHTML = (p.materiales || []).length
+    ? p.materiales.map((m) => `<tr class="${TR}">
+        <td class="${TD}">${m.sku}</td><td class="${TD}">${m.producto_nombre}</td>
+        <td class="${TD}">${m.cantidad_total}</td><td class="${TD}">${money(m.costo_unitario)}</td><td class="${TD}">${money(m.subtotal)}</td>
+      </tr>`).join("")
+    : emptyRow(5, "Sin materiales consumidos todavía.", "inbox");
+
+  const laborBody = document.getElementById("proj-labor-body");
+  laborBody.innerHTML = (p.mano_obra || []).length
+    ? p.mano_obra.map((m) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(m.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${m.tecnico_nombre}</td>
+        <td class="${TD}">${m.horas}</td><td class="${TD}">${money(m.costo_hora)}</td>
+        <td class="${TD}">${money(m.horas * m.costo_hora)}</td><td class="${TD}">${m.descripcion || "—"}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin horas registradas todavía.", "inbox");
+}
+
+function closeProjectModal() {
+  document.getElementById("proj-modal").classList.add("hidden");
+  currentProjectCodigo = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeProjectModal(); });
+
+async function setProjectStatus(estado) {
+  if (!currentProjectCodigo) return;
+  const labels = { ACTIVO: "reactivar", PAUSADO: "pausar", FINALIZADO: "finalizar", CANCELADO: "cancelar" };
+  if (!confirm(`¿Confirmas ${labels[estado] || estado.toLowerCase()} el proyecto ${currentProjectCodigo}?`)) return;
+  const r = await api(`/projects/${encodeURIComponent(currentProjectCodigo)}/status`, { method: "POST", body: JSON.stringify({ estado }) });
+  if (r.status === "success") { toast(`Proyecto ${estado.toLowerCase()}`); openProjectModal(currentProjectCodigo); loadProjects(1); }
+  else toast(r.error.message, false);
+}
+
+document.getElementById("form-project-labor").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentProjectCodigo) return;
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    tecnico_id: f.get("tecnico_id"),
+    fecha: f.get("fecha") || null,
+    horas: Number(f.get("horas")),
+    costo_hora: Number(f.get("costo_hora")),
+    descripcion: f.get("descripcion") || null,
+  };
+  if (!payload.tecnico_id) { toast("Selecciona un técnico", false); return; }
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/projects/${encodeURIComponent(currentProjectCodigo)}/labor`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("project-labor-result", r);
+    if (r.status === "success") { toast("Horas registradas"); e.target.reset(); openProjectModal(currentProjectCodigo); }
+    else toast(r.error.message, false);
   } finally {
     setFormLoading(e.target, false);
   }

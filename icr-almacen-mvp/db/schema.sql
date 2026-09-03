@@ -86,7 +86,24 @@ CREATE TABLE proyectos (
     moneda           TEXT DEFAULT 'PEN',
     fecha_inicio     DATE,
     fecha_fin        DATE,
+    estado           TEXT NOT NULL DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO','PAUSADO','FINALIZADO','CANCELADO')),
     activo           BOOLEAN NOT NULL DEFAULT true
+);
+
+-- Horas de mano de obra imputadas a un proyecto (costo/hora por técnico
+-- todavía no viene de un módulo de RRHH — se registra por entrada, como en
+-- el resto del MVP). Junto con los movimientos de SALIDA que ya llevan
+-- proyecto_id, es la otra mitad del costeo real de una instalación (PRD §5.4).
+CREATE TABLE proyecto_mano_obra (
+    mano_obra_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proyecto_id      UUID NOT NULL REFERENCES proyectos(proyecto_id),
+    tecnico_id       UUID NOT NULL REFERENCES usuarios(usuario_id),
+    fecha            DATE NOT NULL DEFAULT CURRENT_DATE,
+    horas            NUMERIC(6,2) NOT NULL CHECK (horas > 0),
+    costo_hora       NUMERIC(10,2) NOT NULL CHECK (costo_hora >= 0),
+    descripcion      TEXT,
+    registrado_por   UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE productos (
@@ -361,3 +378,5 @@ CREATE INDEX idx_auditoria_fecha ON auditoria(created_at);
 CREATE INDEX idx_auditoria_transaction ON auditoria(transaction_id);
 CREATE INDEX idx_oc_items_orden ON orden_compra_items(orden_compra_id);
 CREATE INDEX idx_recepcion_items_recepcion ON recepcion_items(recepcion_id);
+CREATE INDEX idx_mano_obra_proyecto ON proyecto_mano_obra(proyecto_id);
+CREATE INDEX idx_movimientos_proyecto ON movimientos(proyecto_id);

@@ -10,6 +10,7 @@ require("dotenv").config();
 const { pool } = require("../src/db");
 const inventory = require("../src/services/inventoryService");
 const compras = require("../src/services/comprasService");
+const proyectos = require("../src/services/proyectosService");
 
 const ADMIN = "00000000-0000-0000-0000-000000000001";
 const ALMACENERO = "00000000-0000-0000-0000-000000000002";
@@ -100,6 +101,16 @@ async function run() {
     proveedorRuc: "20605309489", warehouseCode: "ALM-001",
     items: [{ sku: "MONITOR-WIFI", quantity: 15 }],
     usuarioId: COMPRAS, canal: "web",
+  });
+
+  console.log("Registrando mano de obra del proyecto de ejemplo (PROY-001)...");
+  await proyectos.registrarManoObra({
+    codigoProyecto: "PROY-001", tecnicoId: ALMACENERO, horas: 24, costoHora: 28,
+    descripcion: "Montaje de estructura y paneles", usuarioId: SUPERVISOR, canal: "web",
+  });
+  await proyectos.registrarManoObra({
+    codigoProyecto: "PROY-001", tecnicoId: ALMACENERO, horas: 10, costoHora: 32,
+    descripcion: "Cableado e instalación del inversor", usuarioId: SUPERVISOR, canal: "web",
   });
 
   console.log("Movimientos generados. Redistribuyendo fechas en los últimos 8 días para el gráfico de actividad...");
