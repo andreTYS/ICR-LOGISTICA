@@ -24,14 +24,19 @@ INSERT INTO almacenes (almacen_id, codigo, nombre, responsable_id)
 VALUES
     ('10000000-0000-0000-0000-000000000001', 'ALM-001', 'Almacén Principal Arequipa', '00000000-0000-0000-0000-000000000003'),
     ('10000000-0000-0000-0000-000000000002', 'ALM-002', 'Almacén Secundario Arequipa', '00000000-0000-0000-0000-000000000003'),
-    ('10000000-0000-0000-0000-000000000003', 'ALM-003', 'Almacén Tacna', '00000000-0000-0000-0000-000000000002');
+    ('10000000-0000-0000-0000-000000000003', 'ALM-003', 'Almacén Tacna', '00000000-0000-0000-0000-000000000002'),
+    ('10000000-0000-0000-0000-000000000004', 'ALM-004', 'Almacén Lima (Callao)', '00000000-0000-0000-0000-000000000003'),
+    ('10000000-0000-0000-0000-000000000005', 'ALM-005', 'Almacén Cusco', '00000000-0000-0000-0000-000000000002');
 
 INSERT INTO ubicaciones (ubicacion_id, almacen_id, codigo_ubicacion, descripcion)
 VALUES
     ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'A-01-R01-N01', 'Zona A, Rack 1, Nivel 1'),
     ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'A-01-R02-N01', 'Zona A, Rack 2, Nivel 1'),
     ('20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'A-01-R01-N01', 'Zona A, Rack 1, Nivel 1'),
-    ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000003', 'B-01-R01-N01', 'Zona B, Rack 1, Nivel 1');
+    ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000003', 'B-01-R01-N01', 'Zona B, Rack 1, Nivel 1'),
+    ('20000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000004', 'C-01-R01-N01', 'Zona C, Rack 1, Nivel 1'),
+    ('20000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000004', 'C-01-R02-N01', 'Zona C, Rack 2, Nivel 1'),
+    ('20000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000005', 'D-01-R01-N01', 'Zona D, Rack 1, Nivel 1');
 
 -- ---------- Catálogo de productos (equipos solares / BESS) ----------
 INSERT INTO productos (producto_id, sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario)
@@ -54,19 +59,60 @@ VALUES
     ('30000000-0000-0000-0000-000000000015', 'HERR-DESTORNILLADOR', 'Set de destornilladores aislados 1000V', 'Wera', 'Kraftform-VDE', 'JGO', 'NORMAL', 2, 4, 15, 95.00),
     -- Maletas ("cajas de herramientas"): kits armados con herramientas + materiales de repuesto
     ('30000000-0000-0000-0000-000000000016', 'MALETA-MC4', 'Maleta de conectorizado MC4', 'Genérico', 'CASE-MC4-01', 'UND', 'NORMAL', 1, 2, 10, 390.00),
-    ('30000000-0000-0000-0000-000000000017', 'MALETA-INSTALACION', 'Maleta de instalación eléctrica', 'Genérico', 'CASE-INST-01', 'UND', 'NORMAL', 1, 2, 10, 470.00);
+    ('30000000-0000-0000-0000-000000000017', 'MALETA-INSTALACION', 'Maleta de instalación eléctrica', 'Genérico', 'CASE-INST-01', 'UND', 'NORMAL', 1, 2, 10, 470.00),
+    -- Ampliación del catálogo: más paneles/inversores/baterías, estructura y accesorios
+    ('30000000-0000-0000-0000-000000000018', 'PANEL-CANADIAN-545', 'Panel Solar Canadian Solar 545W', 'Canadian Solar', 'CS6R-545MS', 'UND', 'NORMAL', 5, 10, 500, 630.00),
+    ('30000000-0000-0000-0000-000000000019', 'PANEL-TRINA-500', 'Panel Solar Trina Vertex 500W', 'Trina Solar', 'TSM-500NEG9R', 'UND', 'NORMAL', 5, 10, 400, 600.00),
+    ('30000000-0000-0000-0000-000000000020', 'INV-SUNGROW-8K', 'Inversor Sungrow 8kW híbrido', 'Sungrow', 'SH8.0RT', 'UND', 'SERIE', 1, 2, 30, 3200.00),
+    ('30000000-0000-0000-0000-000000000021', 'INV-FRONIUS-3K', 'Inversor Fronius Primo 3kW', 'Fronius', 'Primo 3.0-1', 'UND', 'SERIE', 1, 2, 25, 1850.00),
+    ('30000000-0000-0000-0000-000000000022', 'BAT-BYD-5.1', 'Batería BYD Battery-Box 5.1kWh', 'BYD', 'HVS 5.1', 'UND', 'SERIE', 1, 3, 25, 3450.00),
+    ('30000000-0000-0000-0000-000000000023', 'ESTRUCTURA-SUELO', 'Kit estructura de montaje en suelo (20 paneles)', 'Genérico', 'RAIL-ALU-20-GND', 'KIT', 'NORMAL', 2, 4, 40, 1650.00),
+    ('30000000-0000-0000-0000-000000000024', 'CABLE-SOLAR-4MM', 'Cable solar fotovoltaico 4mm²', 'Genérico', 'PV1-F-4', 'M', 'NORMAL', 100, 200, 3000, 2.40),
+    ('30000000-0000-0000-0000-000000000025', 'BREAKER-DC-1000V', 'Interruptor termomagnético DC 1000V', 'Schneider', 'C60H-DC', 'UND', 'NORMAL', 10, 20, 200, 65.00),
+    ('30000000-0000-0000-0000-000000000026', 'SPD-DC-1000V', 'Protector de sobretensión DC 1000V', 'Phoenix Contact', 'VAL-MS-1000DC', 'UND', 'NORMAL', 5, 10, 100, 120.00),
+    ('30000000-0000-0000-0000-000000000027', 'CAJA-COMBINER-6', 'Caja combinadora de strings (6 entradas)', 'Genérico', 'PV-CB-6', 'UND', 'NORMAL', 3, 6, 40, 280.00),
+    ('30000000-0000-0000-0000-000000000028', 'MONITOR-VICTRON-GX', 'Cerebro de monitoreo Victron Cerbo GX', 'Victron Energy', 'Cerbo GX', 'UND', 'SERIE', 1, 3, 20, 420.00),
+    ('30000000-0000-0000-0000-000000000029', 'ARNES-SEGURIDAD', 'Arnés de seguridad para trabajo en altura', 'Genérico', 'SAFE-H1', 'UND', 'NORMAL', 3, 6, 30, 210.00),
+    ('30000000-0000-0000-0000-000000000030', 'CINTA-AISLANTE-UV', 'Cinta aislante resistente a UV', 'Genérico', 'TAPE-UV-20M', 'UND', 'NORMAL', 20, 40, 300, 8.50);
 
--- ---------- Proveedores, clientes y proyecto de ejemplo (para probar ingreso con documento y salida con destino) ----------
+-- ---------- Proveedores, clientes y proyectos de ejemplo (para probar ingreso con documento y salida con destino) ----------
 INSERT INTO proveedores (proveedor_id, ruc, razon_social, contacto, activo)
 VALUES
     ('40000000-0000-0000-0000-000000000001', '20100047218', 'JA Solar Perú Distribuidora S.A.C.', 'ventas@jasolarperu.example', true),
-    ('40000000-0000-0000-0000-000000000002', '20605309489', 'Growatt Andina Importaciones E.I.R.L.', 'contacto@growattandina.example', true);
+    ('40000000-0000-0000-0000-000000000002', '20605309489', 'Growatt Andina Importaciones E.I.R.L.', 'contacto@growattandina.example', true),
+    ('40000000-0000-0000-0000-000000000003', '20512398761', 'Suministros Eléctricos del Sur S.A.C.', 'ventas@electrosur.example', true),
+    ('40000000-0000-0000-0000-000000000004', '20601122334', 'Baterías y Almacenamiento Perú E.I.R.L.', 'contacto@bap.example', true),
+    ('40000000-0000-0000-0000-000000000005', '20498765123', 'Ferretería Industrial Arequipa S.A.', 'compras@ferreind.example', true);
 
 INSERT INTO clientes (cliente_id, ruc, razon_social, contacto, activo)
 VALUES
     ('50000000-0000-0000-0000-000000000001', '20512345678', 'Constructora Vilca Hnos S.A.C.', 'proyectos@vilcahnos.example', true),
-    ('50000000-0000-0000-0000-000000000002', '20487654321', 'Minera Altiplano S.A.', 'compras@mineraaltiplano.example', true);
+    ('50000000-0000-0000-0000-000000000002', '20487654321', 'Minera Altiplano S.A.', 'compras@mineraaltiplano.example', true),
+    ('50000000-0000-0000-0000-000000000003', '20523456789', 'Agroindustrias Majes S.A.C.', 'gerencia@agromajes.example', true),
+    ('50000000-0000-0000-0000-000000000004', '20534567891', 'Hotel Colca Valley S.A.C.', 'mantenimiento@colcavalley.example', true),
+    ('50000000-0000-0000-0000-000000000005', '20545678912', 'Municipalidad Distrital de Yanque', 'obras@muniyanque.example', true);
 
 INSERT INTO proyectos (proyecto_id, codigo_proyecto, nombre, cliente_id, responsable_id, presupuesto, moneda, fecha_inicio, activo)
 VALUES
-    ('60000000-0000-0000-0000-000000000001', 'PROY-001', 'Planta solar 50kW — Fundo Vilca', '50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 185000.00, 'PEN', CURRENT_DATE - INTERVAL '20 days', true);
+    ('60000000-0000-0000-0000-000000000001', 'PROY-001', 'Planta solar 50kW — Fundo Vilca', '50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 185000.00, 'PEN', CURRENT_DATE - INTERVAL '20 days', true),
+    ('60000000-0000-0000-0000-000000000002', 'PROY-002', 'Planta solar 120kW — Minera Altiplano', '50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003', 420000.00, 'PEN', CURRENT_DATE - INTERVAL '8 days', true),
+    ('60000000-0000-0000-0000-000000000003', 'PROY-003', 'Sistema híbrido 15kW — Hotel Colca Valley', '50000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000005', 68000.00, 'PEN', CURRENT_DATE - INTERVAL '3 days', true);
+
+-- ---------- Contabilidad: plan de cuentas inicial + parámetro fiscal + regla de imputación ----------
+-- Subconjunto mínimo del PCGE peruano, suficiente para que el motor de
+-- reglas de imputación tenga algo con qué trabajar desde el primer arranque.
+INSERT INTO plan_cuentas (cuenta_id, codigo, nombre, tipo) VALUES
+    ('70000000-0000-0000-0000-000000000001', '10', 'Caja y bancos', 'ACTIVO'),
+    ('70000000-0000-0000-0000-000000000002', '20', 'Mercaderías', 'ACTIVO'),
+    ('70000000-0000-0000-0000-000000000003', '40', 'Tributos, contraprestaciones y aportes por pagar', 'PASIVO'),
+    ('70000000-0000-0000-0000-000000000004', '42', 'Cuentas por pagar comerciales — terceros', 'PASIVO'),
+    ('70000000-0000-0000-0000-000000000005', '60', 'Compras', 'GASTO'),
+    ('70000000-0000-0000-0000-000000000006', '69', 'Costo de ventas', 'GASTO'),
+    ('70000000-0000-0000-0000-000000000007', '70', 'Ventas', 'INGRESO');
+
+INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
+    ('IGV', 18.0000, '2024-01-01', 'Impuesto General a las Ventas — tasa general Perú'),
+    ('UIT', 5350.0000, '2026-01-01', 'Unidad Impositiva Tributaria 2026');
+
+INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripcion) VALUES
+    ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor');

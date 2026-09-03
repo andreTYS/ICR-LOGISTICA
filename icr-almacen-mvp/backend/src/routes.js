@@ -5,6 +5,7 @@ const multer = require("multer");
 const inventory = require("./services/inventoryService");
 const compras = require("./services/comprasService");
 const proyectos = require("./services/proyectosService");
+const contabilidad = require("./services/contabilidadService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const { upload, processAndSaveImage } = require("./uploads");
@@ -358,6 +359,15 @@ router.get(
   handle(async () => compras.listProveedores())
 );
 
+router.post(
+  "/purchases/suppliers",
+  requirePermission("purchases.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return compras.crearProveedor({ ruc: b.ruc, razonSocial: b.razon_social, contacto: b.contacto || null, usuarioId: req.user.usuario_id, canal: b.channel || "web" });
+  })
+);
+
 // -------- Proyectos --------
 
 router.post(
@@ -423,6 +433,122 @@ router.get(
   "/projects-technicians",
   requirePermission("projects.query"),
   handle(async () => proyectos.listTecnicos())
+);
+
+router.get(
+  "/projects-clients",
+  requirePermission("projects.query"),
+  handle(async () => proyectos.listClientes())
+);
+
+router.post(
+  "/projects-clients",
+  requirePermission("projects.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.crearCliente({ ruc: b.ruc, razonSocial: b.razon_social, contacto: b.contacto || null, usuarioId: req.user.usuario_id, canal: b.channel || "web" });
+  })
+);
+
+// -------- Contabilidad --------
+
+router.post(
+  "/accounting/accounts",
+  requirePermission("accounting.account.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return contabilidad.crearCuenta({
+      codigo: b.codigo, nombre: b.nombre, tipo: b.tipo, cuentaPadreCodigo: b.cuenta_padre_codigo || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/accounting/accounts",
+  requirePermission("accounting.query"),
+  handle(async () => contabilidad.listCuentas())
+);
+
+router.post(
+  "/accounting/fiscal-params",
+  requirePermission("accounting.fiscal_param.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return contabilidad.crearParametroFiscal({
+      tipo: b.tipo, valor: Number(b.valor), vigenteDesde: b.vigente_desde, vigenteHasta: b.vigente_hasta || null,
+      descripcion: b.descripcion || null, usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/accounting/fiscal-params",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.listParametrosFiscales({ tipo: req.query.tipo }))
+);
+
+router.post(
+  "/accounting/rules",
+  requirePermission("accounting.rule.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return contabilidad.crearRegla({
+      evento: b.evento, cuentaDebeCodigo: b.cuenta_debe_codigo, cuentaHaberCodigo: b.cuenta_haber_codigo,
+      descripcion: b.descripcion || null, usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/accounting/rules",
+  requirePermission("accounting.query"),
+  handle(async () => contabilidad.listReglas())
+);
+
+router.post(
+  "/accounting/rules/:evento/toggle",
+  requirePermission("accounting.rule.manage"),
+  handle(async (req) => contabilidad.setReglaActiva({
+    evento: req.params.evento, activo: !!req.body?.activo, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
+router.post(
+  "/accounting/entries",
+  requirePermission("accounting.entry.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return contabilidad.crearAsientoManual({
+      fecha: b.fecha || null, glosa: b.glosa,
+      lineas: (b.lineas || []).map((l) => ({ cuenta_codigo: l.cuenta_codigo, debe: Number(l.debe || 0), haber: Number(l.haber || 0), proyecto_codigo: l.proyecto_codigo || null })),
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/accounting/entries/:numero/post",
+  requirePermission("accounting.entry.post"),
+  handle(async (req) => contabilidad.contabilizarAsiento({ numero: req.params.numero, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.post(
+  "/accounting/entries/:numero/void",
+  requirePermission("accounting.entry.void"),
+  handle(async (req) => contabilidad.anularAsiento({ numero: req.params.numero, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.get(
+  "/accounting/entries",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.listAsientos({ estado: req.query.estado, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/accounting/entries/:numero",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.getAsiento(req.params.numero))
 );
 
 // -------- Usuarios (solo ADMIN vía wildcard '*') --------
