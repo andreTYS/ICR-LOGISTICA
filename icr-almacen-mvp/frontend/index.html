@@ -155,11 +155,23 @@
           </div></div>
         </div>
 
-        <!-- ============ MÓDULOS FUTUROS (ver hoja de ruta del PRD) ============ -->
-        <div class="nav-group-header nav-group-placeholder" title="Fase 4 del roadmap — todavía no construido">
-          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 3h6l8 8-6 6-8-8V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7" cy="7" r="1.3" stroke="currentColor" stroke-width="1.4"/></svg>
-          <span>Ventas / CRM</span>
-          <span class="nav-soon-pill">Pronto</span>
+        <!-- ============ MÓDULO: VENTAS ============ -->
+        <div class="nav-group" data-group="ventas">
+          <button class="nav-group-header" type="button" onclick="toggleNavGroup('ventas')">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 3h6l8 8-6 6-8-8V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7" cy="7" r="1.3" stroke="currentColor" stroke-width="1.4"/></svg>
+            <span>Ventas</span>
+            <svg class="nav-group-chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="nav-submenu" id="nav-submenu-ventas"><div>
+            <button class="nav-item" data-view="sales-contracts">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h6M7 13h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Contratos</span>
+            </button>
+            <button class="nav-item" data-view="sales-receivables">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Cuentas por cobrar</span>
+            </button>
+          </div></div>
         </div>
         <!-- ============ MÓDULO: CONTABILIDAD ============ -->
         <div class="nav-group" data-group="contabilidad">
@@ -292,7 +304,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-7">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
           <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5 cursor-pointer hover:border-accent transition" data-goto="purchases">
             <div class="w-[42px] h-[42px] rounded-[10px] bg-cyan-50 text-accent-600 flex items-center justify-center shrink-0">
               <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M4 6h12l-1 9a1.5 1.5 0 0 1-1.5 1.3H6.5A1.5 1.5 0 0 1 5 15L4 6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -318,6 +330,15 @@
             <div>
               <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-accounting-draft">—</div>
               <div class="text-xs text-slate-500 mt-0.5">Asientos contables en borrador</div>
+            </div>
+          </div>
+          <div class="kpi-card bg-white border border-slate-200 rounded-xl p-[18px] flex items-center gap-3.5 cursor-pointer hover:border-accent transition" data-goto="sales-receivables">
+            <div class="w-[42px] h-[42px] rounded-[10px] bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-navy-950 leading-tight" id="kpi-sales-receivables">—</div>
+              <div class="text-xs text-slate-500 mt-0.5">Cuentas por cobrar pendientes/vencidas</div>
             </div>
           </div>
         </div>
@@ -811,6 +832,96 @@
         </div>
       </section>
 
+      <!-- ============ VENTAS: CONTRATOS ============ -->
+      <section class="view" id="view-sales-contracts">
+        <form class="form-card mb-7" id="form-contract-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo contrato</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">Código de contrato
+              <input name="codigo_contrato" required placeholder="ej. CONT-00003" class="field" />
+            </label>
+            <label class="field-label">RUC de cliente
+              <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
+            </label>
+            <label class="field-label">Proyecto vinculado (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+            </label>
+            <label class="field-label">Monto total
+              <input name="monto_total" type="number" min="0" step="0.01" required placeholder="ej. 25000" class="field" />
+            </label>
+            <label class="field-label">Fecha de firma (opcional)
+              <input name="fecha_firma" type="date" class="field" />
+            </label>
+          </div>
+          <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label flex-1 min-w-[160px]">Hito — descripción
+              <input id="hito-line-descripcion" placeholder="ej. Adelanto 30%" class="field" />
+            </label>
+            <label class="field-label w-32">Monto
+              <input id="hito-line-monto" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <label class="field-label w-40">Fecha esperada
+              <input id="hito-line-fecha" type="date" class="field" />
+            </label>
+            <button type="button" class="btn-secondary" onclick="addHitoDraftLine()">+ Agregar hito</button>
+          </div>
+          <table class="w-full border-collapse text-sm mb-4">
+            <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+              <th class="font-semibold py-1.5 pr-3">Descripción</th><th class="font-semibold py-1.5 pr-3">Monto</th>
+              <th class="font-semibold py-1.5 pr-3">Fecha esperada</th><th class="font-semibold py-1.5"></th>
+            </tr></thead>
+            <tbody id="hito-draft-lines-body"></tbody>
+          </table>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear contrato</span></button>
+        </form>
+        <div id="contract-create-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="contract-filter-estado" class="field w-auto" onchange="loadContracts(1)">
+            <option value="">Todos los estados</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="VIGENTE">Vigente</option>
+            <option value="FINALIZADO">Finalizado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Código</th><th class="text-left font-semibold px-3 py-2.5">Cliente</th>
+              <th class="text-left font-semibold px-3 py-2.5">Proyecto</th><th class="text-left font-semibold px-3 py-2.5">Monto total</th>
+              <th class="text-left font-semibold px-3 py-2.5">Cobrado</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="contracts-body"></tbody>
+          </table>
+          <div id="contracts-pager"></div>
+        </div>
+      </section>
+
+      <!-- ============ VENTAS: CUENTAS POR COBRAR ============ -->
+      <section class="view" id="view-sales-receivables">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6" id="receivables-cards"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2.5 mb-4">
+          <select id="receivables-filter-estado" class="field w-auto" onchange="loadReceivables()">
+            <option value="">Pendientes y vencidos</option>
+            <option value="PENDIENTE">Solo pendientes</option>
+            <option value="VENCIDO">Solo vencidos</option>
+          </select>
+          <button class="btn-secondary" onclick="exportReceivablesCsv()">Exportar CSV</button>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Contrato</th><th class="text-left font-semibold px-3 py-2.5">Cliente</th>
+              <th class="text-left font-semibold px-3 py-2.5">Hito</th><th class="text-left font-semibold px-3 py-2.5">Monto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Fecha esperada</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+            </tr></thead>
+            <tbody id="receivables-body"></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- ============ CONTABILIDAD: ASIENTOS ============ -->
       <section class="view" id="view-accounting-entries">
         <form class="form-card mb-7" id="form-entry-create">
@@ -1272,6 +1383,80 @@
           <button class="btn-secondary" type="submit">Registrar horas</button>
         </form>
         <div id="project-labor-result" class="result-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="contract-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeContractModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="contract-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="contract-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <div class="flex items-center gap-2" id="contract-status-actions">
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setContractStatus('VIGENTE')">Reactivar</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setContractStatus('FINALIZADO')">Finalizar</button>
+          <button class="btn-danger px-3 py-1.5 text-xs" onclick="setContractStatus('CANCELADO')">Cancelar</button>
+          <button onclick="closeContractModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6" id="contract-summary-cards"></div>
+
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Hitos de cobro</h3>
+        <table class="w-full border-collapse text-sm mb-3">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Descripción</th><th class="font-semibold py-1.5 pr-3">Monto</th>
+            <th class="font-semibold py-1.5 pr-3">Fecha esperada</th><th class="font-semibold py-1.5 pr-3">Estado</th>
+            <th class="font-semibold py-1.5 pr-3">Comprobante</th><th class="font-semibold py-1.5"></th>
+          </tr></thead>
+          <tbody id="contract-milestones-body"></tbody>
+        </table>
+
+        <form id="form-milestone-pay" class="hidden form-card mb-5">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Registrar pago del hito</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">Monto cobrado
+              <input name="monto_pagado" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <label class="field-label">Fecha de pago (opcional)
+              <input name="fecha_pago" type="date" class="field" />
+            </label>
+            <label class="field-label">Tipo de comprobante (opcional)
+              <select name="comprobante_tipo" class="field">
+                <option value="">— Sin comprobante —</option>
+                <option value="FACTURA">Factura</option>
+                <option value="BOLETA">Boleta</option>
+                <option value="RECIBO">Recibo</option>
+              </select>
+            </label>
+            <label class="field-label">Serie-número del comprobante
+              <input name="comprobante_serie_numero" placeholder="ej. F001-00123" class="field" />
+            </label>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar pago</span></button>
+            <button class="btn-secondary" type="button" onclick="closeMilestonePayForm()">Cancelar</button>
+          </div>
+        </form>
+        <div id="milestone-pay-result" class="result-box mb-5"></div>
+
+        <form id="form-milestone-add" class="flex flex-wrap items-end gap-2">
+          <label class="field-label flex-1 min-w-[160px]">Descripción del nuevo hito
+            <input name="descripcion" required placeholder="ej. Hito adicional" class="field" />
+          </label>
+          <label class="field-label w-32">Monto
+            <input name="monto" type="number" min="0" step="0.01" required class="field" />
+          </label>
+          <label class="field-label w-40">Fecha esperada
+            <input name="fecha_esperada" type="date" class="field" />
+          </label>
+          <button class="btn-secondary" type="submit">+ Agregar hito</button>
+        </form>
+        <div id="milestone-add-result" class="result-box mt-3"></div>
       </div>
     </div>
   </div>

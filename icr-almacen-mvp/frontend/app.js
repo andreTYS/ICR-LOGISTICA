@@ -192,6 +192,8 @@ const titles = {
   "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
   "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
+  "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
+  "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -234,6 +236,8 @@ function goToView(view) {
   if (view === "accounting-fiscal") loadFiscalParams();
   if (view === "rrhh-employees") loadEmployees();
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
+  if (view === "sales-contracts") loadContracts(1);
+  if (view === "sales-receivables") loadReceivables();
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -409,16 +413,18 @@ async function loadDashboard() {
 // un rol sin acceso a alguno de estos módulos simplemente ve "—" ahí,
 // en vez de romper el resto del dashboard.
 async function loadDashboardModuleSummary() {
-  const [ocEnviada, ocParcial, proyectosActivos, asientosBorrador] = await Promise.all([
+  const [ocEnviada, ocParcial, proyectosActivos, asientosBorrador, cuentasPorCobrar] = await Promise.all([
     api("/purchases/orders?estado=ENVIADA&page_size=1"),
     api("/purchases/orders?estado=PARCIAL&page_size=1"),
     api("/projects?estado=ACTIVO&page_size=1"),
     api("/accounting/entries?estado=BORRADOR&page_size=1"),
+    api("/sales-receivables"),
   ]);
   const purchasesPending = (ocEnviada.status === "success" ? ocEnviada.data.total : 0) + (ocParcial.status === "success" ? ocParcial.data.total : 0);
   document.getElementById("kpi-purchases-pending").textContent = (ocEnviada.status === "success") ? purchasesPending : "—";
   document.getElementById("kpi-projects-active").textContent = proyectosActivos.status === "success" ? proyectosActivos.data.total : "—";
   document.getElementById("kpi-accounting-draft").textContent = asientosBorrador.status === "success" ? asientosBorrador.data.total : "—";
+  document.getElementById("kpi-sales-receivables").textContent = cuentasPorCobrar.status === "success" ? cuentasPorCobrar.data.items.length : "—";
 }
 
 // -------- Gráfico de actividad (Ingresos vs Salidas, últimos 7 días) --------
@@ -1632,6 +1638,264 @@ async function loadAttendance(page) {
       </tr>`).join("")
     : emptyRow(6, "Sin registros de asistencia.", "inbox");
   renderPager("attendance-pager", r.data, (p) => loadAttendance(p));
+}
+
+// -------- Ventas: contratos --------
+let hitoDraftLines = [];
+let currentContractCodigo = null;
+let currentPayHitoId = null;
+
+function renderHitoDraftLines() {
+  const body = document.getElementById("hito-draft-lines-body");
+  body.innerHTML = hitoDraftLines.length
+    ? hitoDraftLines.map((h, i) => `<tr class="${TR}">
+        <td class="${TD}">${h.descripcion}</td><td class="${TD}">${money(h.monto)}</td>
+        <td class="${TD}">${h.fecha_esperada || "—"}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeHitoDraftLine(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Opcional: agrega un cronograma de hitos de cobro (puedes agregarlos después también).", "inbox");
+}
+
+function addHitoDraftLine() {
+  const descripcion = document.getElementById("hito-line-descripcion").value.trim();
+  const monto = Number(document.getElementById("hito-line-monto").value || 0);
+  const fecha = document.getElementById("hito-line-fecha").value;
+  if (!descripcion || monto <= 0) { toast("Ingresa descripción y monto (>0) del hito", false); return; }
+  hitoDraftLines.push({ descripcion, monto, fecha_esperada: fecha || undefined });
+  document.getElementById("hito-line-descripcion").value = "";
+  document.getElementById("hito-line-monto").value = "";
+  document.getElementById("hito-line-fecha").value = "";
+  renderHitoDraftLines();
+}
+function removeHitoDraftLine(i) {
+  hitoDraftLines.splice(i, 1);
+  renderHitoDraftLines();
+}
+renderHitoDraftLines();
+
+document.getElementById("form-contract-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    codigo_contrato: f.get("codigo_contrato"),
+    cliente_ruc: f.get("cliente_ruc"),
+    proyecto_codigo: f.get("proyecto_codigo") || null,
+    monto_total: Number(f.get("monto_total")),
+    fecha_firma: f.get("fecha_firma") || null,
+    hitos: hitoDraftLines,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/sales/contracts", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("contract-create-result", r);
+    if (r.status === "success") {
+      toast(`Contrato ${r.data.contrato.codigo_contrato} creado`);
+      e.target.reset();
+      hitoDraftLines = [];
+      renderHitoDraftLines();
+      loadContracts(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+const CONTRACT_STATUS_TONES = { BORRADOR: "pendiente", VIGENTE: "ok", FINALIZADO: "devolucion", CANCELADO: "low" };
+function contractStatusBadge(estado) {
+  return badge(estado, CONTRACT_STATUS_TONES[estado] || "devolucion");
+}
+const MILESTONE_STATUS_TONES = { PENDIENTE: "pendiente", PAGADO: "ok", VENCIDO: "low", ANULADO: "devolucion" };
+function milestoneStatusBadge(estado) {
+  return badge(estado, MILESTONE_STATUS_TONES[estado] || "devolucion");
+}
+
+async function loadContracts(page) {
+  const body = document.getElementById("contracts-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("contract-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/sales/contracts?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver contratos.", "lock");
+    document.getElementById("contracts-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((c) => `<tr class="${TR} cursor-pointer" onclick="openContractModal('${c.codigo_contrato}')">
+        <td class="${TD} font-semibold text-navy-900">${c.codigo_contrato}</td><td class="${TD}">${c.cliente_nombre || "—"}</td>
+        <td class="${TD}">${c.codigo_proyecto || "—"}</td><td class="${TD}">${c.moneda || "PEN"} ${money(c.monto_total)}</td>
+        <td class="${TD}">${c.moneda || "PEN"} ${money(c.monto_cobrado)}</td><td class="${TD}">${contractStatusBadge(c.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openContractModal('${c.codigo_contrato}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin contratos registrados.", "inbox");
+  renderPager("contracts-pager", r.data, (p) => loadContracts(p));
+}
+
+async function openContractModal(codigo) {
+  currentContractCodigo = codigo;
+  currentPayHitoId = null;
+  const modal = document.getElementById("contract-modal");
+  document.getElementById("contract-modal-title").textContent = codigo;
+  document.getElementById("contract-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("contract-summary-cards").innerHTML = "";
+  document.getElementById("contract-milestones-body").innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("milestone-add-result").innerHTML = "";
+  closeMilestonePayForm();
+  modal.classList.remove("hidden");
+
+  const r = await api(`/sales/contracts/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    document.getElementById("contract-modal-subtitle").textContent = r.error?.message || "No se pudo cargar el contrato";
+    return;
+  }
+  const c = r.data;
+  document.getElementById("contract-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${contractStatusBadge(c.estado)}`;
+
+  const isTerminal = c.estado === "FINALIZADO" || c.estado === "CANCELADO";
+  document.getElementById("contract-status-actions").querySelectorAll("button[onclick^='setContractStatus']").forEach((btn) => {
+    const target = btn.getAttribute("onclick").match(/'([A-Z]+)'/)[1];
+    btn.classList.toggle("hidden", target === c.estado || isTerminal);
+  });
+  document.getElementById("form-milestone-add").classList.toggle("hidden", isTerminal);
+
+  document.getElementById("contract-summary-cards").innerHTML = [
+    costeoCard("Monto total", `${c.moneda || "PEN"} ${money(c.monto_total)}`),
+    costeoCard("Cobrado", `${c.moneda || "PEN"} ${money(c.monto_cobrado)}`, "text-emerald-600"),
+    costeoCard("Saldo pendiente", `${c.moneda || "PEN"} ${money(c.saldo_pendiente)}`, c.saldo_pendiente > 0 ? "text-rose-600" : "text-navy-950"),
+  ].join("");
+
+  const body = document.getElementById("contract-milestones-body");
+  body.innerHTML = (c.hitos || []).length
+    ? c.hitos.map((h) => {
+        const comprobantesTxt = (h.comprobantes || []).map((cp) => `${cp.tipo} ${cp.serie_numero}`).join(", ");
+        const payable = h.estado === "PENDIENTE" || h.estado === "VENCIDO";
+        return `<tr class="${TR}">
+          <td class="${TD}">${h.descripcion}</td><td class="${TD}">${money(h.monto)}</td>
+          <td class="${TD}">${h.fecha_esperada ? new Date(h.fecha_esperada).toLocaleDateString("es-PE") : "—"}</td>
+          <td class="${TD}">${milestoneStatusBadge(h.estado)}</td>
+          <td class="${TD} text-xs text-slate-500">${comprobantesTxt || "—"}</td>
+          <td class="${TD}">${payable ? `<button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="openMilestonePayForm('${h.hito_id}', ${h.monto})">Registrar pago</button>` : "—"}</td>
+        </tr>`;
+      }).join("")
+    : emptyRow(6, "Sin hitos registrados todavía.", "inbox");
+}
+
+function closeContractModal() {
+  document.getElementById("contract-modal").classList.add("hidden");
+  currentContractCodigo = null;
+  currentPayHitoId = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeContractModal(); });
+
+async function setContractStatus(estado) {
+  if (!currentContractCodigo) return;
+  const labels = { VIGENTE: "reactivar", FINALIZADO: "finalizar", CANCELADO: "cancelar" };
+  if (!confirm(`¿Confirmas ${labels[estado] || estado.toLowerCase()} el contrato ${currentContractCodigo}?`)) return;
+  const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
+  if (r.status === "success") { toast(`Contrato ${estado.toLowerCase()}`); openContractModal(currentContractCodigo); loadContracts(1); }
+  else toast(r.error.message, false);
+}
+
+function openMilestonePayForm(hitoId, montoSugerido) {
+  currentPayHitoId = hitoId;
+  const form = document.getElementById("form-milestone-pay");
+  form.classList.remove("hidden");
+  form.querySelector('input[name="monto_pagado"]').value = montoSugerido;
+  document.getElementById("milestone-pay-result").innerHTML = "";
+  form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function closeMilestonePayForm() {
+  currentPayHitoId = null;
+  const form = document.getElementById("form-milestone-pay");
+  form.classList.add("hidden");
+  form.reset();
+}
+
+document.getElementById("form-milestone-pay").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentContractCodigo || !currentPayHitoId) return;
+  const f = new FormData(e.target);
+  const tipo = f.get("comprobante_tipo");
+  const payload = {
+    channel: "web",
+    monto_pagado: f.get("monto_pagado") ? Number(f.get("monto_pagado")) : null,
+    fecha_pago: f.get("fecha_pago") || null,
+    comprobante: tipo ? { tipo, serie_numero: f.get("comprobante_serie_numero"), fecha_emision: null } : null,
+  };
+  if (payload.comprobante && !payload.comprobante.serie_numero) { toast("Ingresa la serie-número del comprobante", false); return; }
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/milestones/${encodeURIComponent(currentPayHitoId)}/pay`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("milestone-pay-result", r);
+    if (r.status === "success") {
+      toast("Pago registrado");
+      closeMilestonePayForm();
+      openContractModal(currentContractCodigo);
+      loadContracts(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+document.getElementById("form-milestone-add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentContractCodigo) return;
+  const f = new FormData(e.target);
+  const payload = { channel: "web", descripcion: f.get("descripcion"), monto: Number(f.get("monto")), fecha_esperada: f.get("fecha_esperada") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/milestones`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("milestone-add-result", r);
+    if (r.status === "success") { toast("Hito agregado"); e.target.reset(); openContractModal(currentContractCodigo); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+// -------- Ventas: cuentas por cobrar --------
+async function fetchReceivables() {
+  const estado = document.getElementById("receivables-filter-estado").value;
+  const params = estado ? `?estado=${encodeURIComponent(estado)}` : "";
+  return api(`/sales-receivables${params}`);
+}
+
+async function loadReceivables() {
+  const body = document.getElementById("receivables-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("receivables-cards").innerHTML = "";
+  const r = await fetchReceivables();
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver cuentas por cobrar.", "lock");
+    return;
+  }
+  const { items, totales } = r.data;
+  document.getElementById("receivables-cards").innerHTML = [
+    costeoCard("Pendiente", `PEN ${money(totales.pendiente)}`, "text-amber-600"),
+    costeoCard("Vencido", `PEN ${money(totales.vencido)}`, totales.vencido > 0 ? "text-rose-600" : "text-navy-950"),
+  ].join("");
+  body.innerHTML = items.length
+    ? items.map((h) => `<tr class="${TR} cursor-pointer" onclick="openContractModal('${h.codigo_contrato}')">
+        <td class="${TD} font-semibold text-navy-900">${h.codigo_contrato}</td><td class="${TD}">${h.cliente_nombre || "—"}</td>
+        <td class="${TD}">${h.descripcion}</td><td class="${TD}">${money(h.monto)}</td>
+        <td class="${TD}">${h.fecha_esperada ? new Date(h.fecha_esperada).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${milestoneStatusBadge(h.estado)}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin cuentas por cobrar pendientes o vencidas.", "check");
+}
+
+async function exportReceivablesCsv() {
+  const r = await fetchReceivables();
+  const items = r.data?.items || [];
+  downloadCsv(
+    "cuentas-por-cobrar.csv",
+    ["Contrato", "Cliente", "Hito", "Monto", "Fecha esperada", "Estado"],
+    items.map((h) => [h.codigo_contrato, h.cliente_nombre || "", h.descripcion, h.monto, h.fecha_esperada || "", h.estado])
+  );
 }
 
 // -------- Reservas --------

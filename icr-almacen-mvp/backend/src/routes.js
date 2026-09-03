@@ -7,6 +7,7 @@ const compras = require("./services/comprasService");
 const proyectos = require("./services/proyectosService");
 const contabilidad = require("./services/contabilidadService");
 const rrhh = require("./services/rrhhService");
+const ventas = require("./services/ventasService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const { upload, processAndSaveImage } = require("./uploads");
@@ -612,6 +613,76 @@ router.get(
     empleadoId: req.query.empleado_id || null, fechaDesde: req.query.fecha_desde || null, fechaHasta: req.query.fecha_hasta || null,
     page: req.query.page, pageSize: req.query.page_size,
   }))
+);
+
+// -------- Ventas --------
+
+router.post(
+  "/sales/contracts",
+  requirePermission("sales.contract.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return ventas.crearContrato({
+      codigoContrato: b.codigo_contrato, clienteRuc: b.cliente_ruc, proyectoCodigo: b.proyecto_codigo || null,
+      montoTotal: Number(b.monto_total), moneda: b.moneda || null, fechaFirma: b.fecha_firma || null,
+      responsableId: b.responsable_id || null,
+      hitos: (b.hitos || []).map((h) => ({ descripcion: h.descripcion, monto: Number(h.monto), fecha_esperada: h.fecha_esperada || null })),
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/sales/contracts/:codigo/milestones",
+  requirePermission("sales.contract.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return ventas.agregarHito({
+      codigoContrato: req.params.codigo, descripcion: b.descripcion, monto: Number(b.monto), fechaEsperada: b.fecha_esperada || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/sales/contracts/:codigo/milestones/:hitoId/pay",
+  requirePermission("sales.contract.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return ventas.registrarPagoHito({
+      codigoContrato: req.params.codigo, hitoId: req.params.hitoId, fechaPago: b.fecha_pago || null,
+      montoPagado: b.monto_pagado != null ? Number(b.monto_pagado) : null,
+      comprobante: b.comprobante ? {
+        tipo: b.comprobante.tipo, serie_numero: b.comprobante.serie_numero,
+        fecha_emision: b.comprobante.fecha_emision || null, monto: b.comprobante.monto != null ? Number(b.comprobante.monto) : null,
+      } : null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/sales/contracts/:codigo/status",
+  requirePermission("sales.contract.manage"),
+  handle(async (req) => ventas.actualizarEstadoContrato({ codigoContrato: req.params.codigo, estado: req.body.estado, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.get(
+  "/sales/contracts",
+  requirePermission("sales.query"),
+  handle(async (req) => ventas.listContratos({ estado: req.query.estado, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/sales/contracts/:codigo",
+  requirePermission("sales.query"),
+  handle(async (req) => ventas.getContrato(req.params.codigo))
+);
+
+router.get(
+  "/sales-receivables",
+  requirePermission("sales.query"),
+  handle(async (req) => ventas.listCuentasPorCobrar({ estado: req.query.estado || null }))
 );
 
 // -------- Usuarios (solo ADMIN vía wildcard '*') --------

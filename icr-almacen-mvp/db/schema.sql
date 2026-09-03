@@ -325,6 +325,61 @@ CREATE TABLE recepcion_items (
     cantidad               NUMERIC(14,2) NOT NULL CHECK (cantidad > 0)
 );
 
+-- ---------- VENTAS ----------
+-- Ventas "básicas" (PRD §4.1): no es un CRM (eso queda fuera de alcance,
+-- PRD §4.2) ni facturación electrónica SUNAT (Fase 5, diferida) — es un
+-- contrato de venta con un cronograma de cobro (hitos) y el registro del
+-- comprobante emitido por fuera del sistema cuando se cobra cada hito.
+
+CREATE SEQUENCE contrato_numero_seq START 1;
+
+CREATE TABLE contratos (
+    contrato_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo_contrato   TEXT NOT NULL UNIQUE,
+    cliente_id        UUID NOT NULL REFERENCES clientes(cliente_id),
+    proyecto_id       UUID REFERENCES proyectos(proyecto_id),
+    monto_total       NUMERIC(14,2) NOT NULL CHECK (monto_total >= 0),
+    moneda            TEXT DEFAULT 'PEN',
+    fecha_firma       DATE NOT NULL DEFAULT CURRENT_DATE,
+    estado            TEXT NOT NULL DEFAULT 'VIGENTE' CHECK (estado IN
+                        ('BORRADOR','VIGENTE','FINALIZADO','CANCELADO')),
+    responsable_id    UUID REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cronograma de cobro de un contrato. Un hito PAGADO no se puede volver a
+-- pagar ni editar (ver validación en la app); ANULADO es para descartar un
+-- hito sin borrarlo (ej. renegociación de condiciones de pago).
+CREATE TABLE contrato_hitos (
+    hito_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contrato_id       UUID NOT NULL REFERENCES contratos(contrato_id) ON DELETE CASCADE,
+    descripcion       TEXT NOT NULL,
+    monto             NUMERIC(14,2) NOT NULL CHECK (monto > 0),
+    fecha_esperada    DATE,
+    orden             INT NOT NULL DEFAULT 1,
+    estado            TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN
+                        ('PENDIENTE','PAGADO','VENCIDO','ANULADO')),
+    fecha_pago        DATE,
+    monto_pagado      NUMERIC(14,2),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- No es facturación electrónica SUNAT — es solo el registro del número de
+-- comprobante emitido por fuera del sistema (a mano o por otro software) al
+-- cobrar un hito, para tener trazabilidad. Fase 5 (diferida) es la que
+-- integraría emisión real ante SUNAT.
+CREATE TABLE comprobantes (
+    comprobante_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hito_id           UUID NOT NULL REFERENCES contrato_hitos(hito_id),
+    tipo              TEXT NOT NULL CHECK (tipo IN ('FACTURA','BOLETA','RECIBO')),
+    serie_numero      TEXT NOT NULL,
+    fecha_emision     DATE NOT NULL DEFAULT CURRENT_DATE,
+    monto             NUMERIC(14,2) NOT NULL CHECK (monto >= 0),
+    registrado_por    UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tipo, serie_numero)
+);
+
 -- ---------- CONTABILIDAD ----------
 -- Motor de asientos por reglas de imputación (PRD §5.1) + parámetros
 -- fiscales versionados por vigencia (PRD §5.2). Un asiento nace en BORRADOR
@@ -477,3 +532,7 @@ CREATE INDEX idx_asientos_fecha ON asientos(fecha);
 CREATE INDEX idx_parametros_fiscales_tipo ON parametros_fiscales(tipo, vigente_desde);
 CREATE INDEX idx_asistencias_empleado ON asistencias(empleado_id);
 CREATE INDEX idx_asistencias_fecha ON asistencias(fecha);
+CREATE INDEX idx_contrato_hitos_contrato ON contrato_hitos(contrato_id);
+CREATE INDEX idx_contrato_hitos_estado ON contrato_hitos(estado);
+CREATE INDEX idx_comprobantes_hito ON comprobantes(hito_id);
+CREATE INDEX idx_contratos_cliente ON contratos(cliente_id);

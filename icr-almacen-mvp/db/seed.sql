@@ -115,7 +115,8 @@ INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
     ('UIT', 5350.0000, '2026-01-01', 'Unidad Impositiva Tributaria 2026');
 
 INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripcion) VALUES
-    ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor');
+    ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor'),
+    ('sales.milestone_paid', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000007', 'Cobro de un hito de contrato de venta');
 
 -- ---------- RRHH: ficha de empleado ligada a los usuarios técnicos/operativos ----------
 -- El costo_hora de acá es el que Proyectos sugiere al registrar mano de obra
@@ -127,3 +128,23 @@ VALUES
     ('80000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000005', 'Ejecutiva de Ventas', '41765432', 'Coordinadora de Proyectos', 'PLANILLA', CURRENT_DATE - INTERVAL '600 days', 28.00, true),
     ('80000000-0000-0000-0000-000000000004', NULL, 'Jorge Quispe Mamani', '47234567', 'Técnico Instalador Solar', 'LOCACION', CURRENT_DATE - INTERVAL '200 days', 22.00, true),
     ('80000000-0000-0000-0000-000000000005', NULL, 'Rosa Ttito Huamán', '48345678', 'Técnica Electricista', 'LOCACION', CURRENT_DATE - INTERVAL '150 days', 24.50, true);
+
+-- ---------- Ventas: contratos de ejemplo, uno por cada estado de hito ----------
+-- PROY-001/002/003 y sus clientes ya existen (ver arriba); un contrato de
+-- venta financia la obra que Proyectos ya costea de forma independiente.
+INSERT INTO contratos (contrato_id, codigo_contrato, cliente_id, proyecto_id, monto_total, moneda, fecha_firma, estado, responsable_id)
+VALUES
+    ('90000000-0000-0000-0000-000000000001', 'CONT-00001', '50000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', 185000.00, 'PEN', CURRENT_DATE - INTERVAL '20 days', 'VIGENTE', '00000000-0000-0000-0000-000000000005'),
+    ('90000000-0000-0000-0000-000000000002', 'CONT-00002', '50000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002', 420000.00, 'PEN', CURRENT_DATE - INTERVAL '8 days', 'VIGENTE', '00000000-0000-0000-0000-000000000005');
+
+INSERT INTO contrato_hitos (hito_id, contrato_id, descripcion, monto, fecha_esperada, orden, estado, fecha_pago, monto_pagado)
+VALUES
+    ('91000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 'Adelanto 30%', 55500.00, CURRENT_DATE - INTERVAL '20 days', 1, 'PAGADO', CURRENT_DATE - INTERVAL '18 days', 55500.00),
+    ('91000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000001', 'Contra avance de obra 40%', 74000.00, CURRENT_DATE + INTERVAL '10 days', 2, 'PENDIENTE', NULL, NULL),
+    ('91000000-0000-0000-0000-000000000003', '90000000-0000-0000-0000-000000000001', 'Entrega final 30%', 55500.00, CURRENT_DATE + INTERVAL '30 days', 3, 'PENDIENTE', NULL, NULL),
+    ('91000000-0000-0000-0000-000000000004', '90000000-0000-0000-0000-000000000002', 'Adelanto 50%', 210000.00, CURRENT_DATE - INTERVAL '5 days', 1, 'VENCIDO', NULL, NULL),
+    ('91000000-0000-0000-0000-000000000005', '90000000-0000-0000-0000-000000000002', 'Entrega final 50%', 210000.00, CURRENT_DATE + INTERVAL '25 days', 2, 'PENDIENTE', NULL, NULL);
+
+INSERT INTO comprobantes (comprobante_id, hito_id, tipo, serie_numero, fecha_emision, monto, registrado_por)
+VALUES
+    ('92000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', 'FACTURA', 'F001-00123', CURRENT_DATE - INTERVAL '18 days', 55500.00, '00000000-0000-0000-0000-000000000005');
