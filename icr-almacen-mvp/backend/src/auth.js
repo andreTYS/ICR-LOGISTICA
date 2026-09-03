@@ -18,23 +18,27 @@ const ROLE_PERMISSIONS = {
     "inventory.adjust", "inventory.adjust.approve", "inventory.alerts.get", "inventory.audit.get",
     "inventory.product.create", "inventory.product.update",
     "purchases.query", "purchases.replenishment.get",
+    "projects.create", "projects.update_status", "projects.labor.register", "projects.query",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
     "purchases.receive", "purchases.query",
+    "projects.labor.register", "projects.query",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
     "inventory.product.create", "inventory.product.update", "inventory.query",
     "purchases.create", "purchases.send", "purchases.cancel", "purchases.receive",
     "purchases.query", "purchases.replenishment.get",
+    "projects.query",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
+    "projects.query",
   ],
-  CONSULTA: ["inventory.stock.get", "inventory.stock.search", "inventory.query"],
+  CONSULTA: ["inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query"],
 };
 
 function can(rolCodigo, action) {

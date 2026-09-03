@@ -4,6 +4,7 @@ const router = express.Router();
 const multer = require("multer");
 const inventory = require("./services/inventoryService");
 const compras = require("./services/comprasService");
+const proyectos = require("./services/proyectosService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const { upload, processAndSaveImage } = require("./uploads");
@@ -355,6 +356,73 @@ router.get(
   "/purchases/suppliers",
   requirePermission("purchases.query"),
   handle(async () => compras.listProveedores())
+);
+
+// -------- Proyectos --------
+
+router.post(
+  "/projects",
+  requirePermission("projects.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.crearProyecto({
+      codigoProyecto: b.codigo_proyecto,
+      nombre: b.nombre,
+      clienteRuc: b.cliente_ruc || null,
+      responsableId: b.responsable_id || null,
+      presupuesto: b.presupuesto != null ? Number(b.presupuesto) : null,
+      moneda: b.moneda || null,
+      fechaInicio: b.fecha_inicio || null,
+      fechaFin: b.fecha_fin || null,
+      usuarioId: req.user.usuario_id,
+      canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/projects/:codigo/status",
+  requirePermission("projects.update_status"),
+  handle(async (req) => proyectos.actualizarEstado({
+    codigoProyecto: req.params.codigo, estado: req.body?.estado,
+    usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
+router.post(
+  "/projects/:codigo/labor",
+  requirePermission("projects.labor.register"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.registrarManoObra({
+      codigoProyecto: req.params.codigo,
+      tecnicoId: b.tecnico_id,
+      fecha: b.fecha || null,
+      horas: Number(b.horas),
+      costoHora: Number(b.costo_hora),
+      descripcion: b.descripcion || null,
+      usuarioId: req.user.usuario_id,
+      canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/projects",
+  requirePermission("projects.query"),
+  handle(async (req) => proyectos.listProyectos({ estado: req.query.estado, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/projects/:codigo",
+  requirePermission("projects.query"),
+  handle(async (req) => proyectos.getProyecto(req.params.codigo))
+);
+
+router.get(
+  "/projects-technicians",
+  requirePermission("projects.query"),
+  handle(async () => proyectos.listTecnicos())
 );
 
 // -------- Usuarios (solo ADMIN vía wildcard '*') --------
