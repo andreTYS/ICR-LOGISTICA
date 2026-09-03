@@ -147,6 +147,7 @@ function enterApp() {
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
+  loadEmployeeOptions();
   loadTechnicianOptions();
   loadDashboard();
 }
@@ -189,6 +190,8 @@ const titles = {
   "accounting-accounts": ["Plan de cuentas", "Estructura de cuentas contables"],
   "accounting-rules": ["Reglas de imputación", "Mapeo de eventos de negocio a cuentas debe/haber"],
   "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
+  "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
+  "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -229,6 +232,8 @@ function goToView(view) {
   if (view === "accounting-accounts") loadAccounts();
   if (view === "accounting-rules") loadRules();
   if (view === "accounting-fiscal") loadFiscalParams();
+  if (view === "rrhh-employees") loadEmployees();
+  if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -313,9 +318,39 @@ async function loadSupplierOptions() {
 async function loadTechnicianOptions() {
   const r = await api("/projects-technicians");
   if (r.status !== "success") return;
-  const opts = (r.data || []).map((t) => `<option value="${t.usuario_id}">${t.nombre_completo} (${t.rol_codigo})</option>`).join("");
+  const opts = (r.data || [])
+    .map((t) => `<option value="${t.usuario_id}" data-costo-hora="${t.costo_hora_sugerido ?? ""}">${t.nombre_completo} (${t.rol_codigo})</option>`)
+    .join("");
   document.querySelectorAll("select.technician-select").forEach((sel) => {
     sel.innerHTML = `<option value="">Selecciona…</option>${opts}`;
+  });
+  // El "usuario a vincular" del alta de empleado usa la misma lista de
+  // usuarios activos (no requiere el permiso users.manage, que es solo ADMIN).
+  document.querySelectorAll("select.employee-user-select").forEach((sel) => {
+    sel.innerHTML = `<option value="">— Sin cuenta de acceso —</option>${opts}`;
+  });
+}
+
+// Al elegir un técnico en el formulario de mano de obra, sugiere su
+// costo/hora desde RRHH (empleados.costo_hora) si tiene ficha vinculada;
+// el usuario puede seguir editándolo a mano si hace falta.
+document.querySelectorAll("select.technician-select").forEach((sel) => {
+  sel.addEventListener("change", () => {
+    const form = sel.closest("form");
+    const costoInput = form?.querySelector('input[name="costo_hora"]');
+    if (!costoInput) return;
+    const costo = sel.selectedOptions[0]?.dataset.costoHora;
+    if (costo) costoInput.value = costo;
+  });
+});
+
+async function loadEmployeeOptions() {
+  const r = await api("/rrhh/employees?activo=true&page_size=200");
+  if (r.status !== "success") return;
+  const opts = (r.data.items || []).map((e) => `<option value="${e.empleado_id}">${e.nombre_completo}</option>`).join("");
+  document.querySelectorAll("select.attendance-employee-select").forEach((sel) => {
+    const placeholder = sel.querySelector('option[value=""]')?.outerHTML || `<option value="">Selecciona…</option>`;
+    sel.innerHTML = placeholder + opts;
   });
 }
 
@@ -1475,6 +1510,128 @@ async function voidEntryAction() {
   const r = await api(`/accounting/entries/${encodeURIComponent(currentEntryNumero)}/void`, { method: "POST" });
   if (r.status === "success") { toast("Asiento anulado"); openEntryModal(currentEntryNumero); loadEntries(1); }
   else toast(r.error.message, false);
+}
+
+// -------- RRHH: empleados --------
+document.getElementById("form-employee-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    nombre_completo: f.get("nombre_completo"),
+    dni: f.get("dni") || null,
+    cargo: f.get("cargo") || null,
+    tipo_contrato: f.get("tipo_contrato") || null,
+    fecha_ingreso: f.get("fecha_ingreso") || null,
+    costo_hora: f.get("costo_hora") || null,
+    usuario_vinculado_id: f.get("usuario_vinculado_id") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/rrhh/employees", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("employee-create-result", r);
+    if (r.status === "success") {
+      toast(`Empleado ${r.data.empleado.nombre_completo} creado`);
+      e.target.reset();
+      loadEmployees();
+      loadEmployeeOptions();
+      loadTechnicianOptions();
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadEmployees() {
+  const body = document.getElementById("employees-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/rrhh/employees?page_size=200");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver empleados.", "lock");
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((emp) => `<tr class="${TR}">
+        <td class="${TD}">${emp.nombre_completo}</td><td class="${TD}">${emp.cargo || "—"}</td>
+        <td class="${TD}">${emp.tipo_contrato || "—"}</td><td class="${TD}">${emp.costo_hora != null ? money(emp.costo_hora) : "—"}</td>
+        <td class="${TD}">${emp.usuario_email || "—"}</td>
+        <td class="${TD}">
+          <button class="${emp.activo ? "btn-danger" : "btn-secondary"} px-3 py-1.5 text-xs" onclick="toggleEmployeeActive('${emp.empleado_id}', ${!emp.activo})">
+            ${emp.activo ? "Desactivar" : "Activar"}
+          </button>
+        </td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin empleados registrados.", "inbox");
+}
+
+async function toggleEmployeeActive(empleadoId, nextActive) {
+  const r = await api(`/rrhh/employees/${empleadoId}`, { method: "PUT", body: JSON.stringify({ channel: "web", activo: nextActive }) });
+  if (r.status === "success") { toast(`Empleado ${nextActive ? "activado" : "desactivado"}`); loadEmployees(); loadEmployeeOptions(); loadTechnicianOptions(); }
+  else toast(r.error.message, false);
+}
+
+// -------- RRHH: asistencia --------
+function setButtonLoading(btn, loading) {
+  btn.disabled = loading;
+  btn.classList.toggle("loading", loading);
+}
+
+document.getElementById("btn-check-in").addEventListener("click", async (e) => {
+  const btn = e.currentTarget; // capturado antes del await: currentTarget se anula una vez despachado el evento
+  const form = document.getElementById("form-attendance-mark");
+  const empleadoId = new FormData(form).get("empleado_id");
+  if (!empleadoId) { toast("Selecciona un empleado", false); return; }
+  setButtonLoading(btn, true);
+  try {
+    const r = await api("/rrhh/attendance/check-in", { method: "POST", body: JSON.stringify({ channel: "web", empleado_id: empleadoId }) });
+    renderResult("attendance-mark-result", r);
+    if (r.status === "success") { toast("Entrada registrada"); loadAttendance(); }
+    else toast(r.error.message, false);
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
+document.getElementById("btn-check-out").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const form = document.getElementById("form-attendance-mark");
+  const empleadoId = new FormData(form).get("empleado_id");
+  if (!empleadoId) { toast("Selecciona un empleado", false); return; }
+  setButtonLoading(btn, true);
+  try {
+    const r = await api("/rrhh/attendance/check-out", { method: "POST", body: JSON.stringify({ channel: "web", empleado_id: empleadoId }) });
+    renderResult("attendance-mark-result", r);
+    if (r.status === "success") { toast(`Salida registrada — ${r.data.asistencia.horas_trabajadas}h trabajadas`); loadAttendance(); }
+    else toast(r.error.message, false);
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
+async function loadAttendance(page) {
+  const body = document.getElementById("attendance-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const empleadoId = document.getElementById("attendance-filter-empleado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 30 });
+  if (empleadoId) params.set("empleado_id", empleadoId);
+  const r = await api(`/rrhh/attendance?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver asistencia.", "lock");
+    document.getElementById("attendance-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(a.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${a.empleado_nombre}</td>
+        <td class="${TD}">${a.hora_entrada ? new Date(a.hora_entrada).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+        <td class="${TD}">${a.hora_salida ? new Date(a.hora_salida).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+        <td class="${TD}">${a.horas_trabajadas != null ? a.horas_trabajadas : "—"}</td>
+        <td class="${TD} text-xs text-slate-500">${a.observaciones || "—"}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin registros de asistencia.", "inbox");
+  renderPager("attendance-pager", r.data, (p) => loadAttendance(p));
 }
 
 // -------- Reservas --------

@@ -173,9 +173,16 @@ async function listClientes() {
   return r.rows;
 }
 
+// El costo/hora sugerido viene de RRHH (empleados.costo_hora) cuando el
+// usuario tiene una ficha de empleado vinculada; si no la tiene, queda en
+// null y el formulario de mano de obra pide el valor a mano como antes.
 async function listTecnicos() {
   const r = await pool.query(
-    "SELECT usuario_id, nombre_completo, rol_codigo FROM usuarios WHERE activo = true ORDER BY nombre_completo"
+    `SELECT u.usuario_id, u.nombre_completo, u.rol_codigo, e.costo_hora AS costo_hora_sugerido
+     FROM usuarios u
+     LEFT JOIN empleados e ON e.usuario_id = u.usuario_id AND e.activo = true
+     WHERE u.activo = true
+     ORDER BY u.nombre_completo`
   );
   return r.rows;
 }

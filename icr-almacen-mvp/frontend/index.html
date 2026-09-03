@@ -187,10 +187,23 @@
             </button>
           </div></div>
         </div>
-        <div class="nav-group-header nav-group-placeholder" title="Prioridad media — todavía no construido">
-          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="5" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="10" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M11 8.5h4M11 11.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <span>RR. HH.</span>
-          <span class="nav-soon-pill">Pronto</span>
+        <!-- ============ MÓDULO: RR. HH. ============ -->
+        <div class="nav-group" data-group="rrhh">
+          <button class="nav-group-header" type="button" onclick="toggleNavGroup('rrhh')">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="5" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="10" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M11 8.5h4M11 11.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <span>RR. HH.</span>
+            <svg class="nav-group-chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="nav-submenu" id="nav-submenu-rrhh"><div>
+            <button class="nav-item" data-view="rrhh-employees">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Empleados</span>
+            </button>
+            <button class="nav-item" data-view="rrhh-attendance">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Asistencia</span>
+            </button>
+          </div></div>
         </div>
 
         <!-- ============ MÓDULO: ADMINISTRACIÓN ============ -->
@@ -965,6 +978,87 @@
             </tr></thead>
             <tbody id="fiscal-params-body"></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ============ RRHH: EMPLEADOS ============ -->
+      <section class="view" id="view-rrhh-employees">
+        <form class="form-card mb-7" id="form-employee-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo empleado</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">Nombre completo
+              <input name="nombre_completo" required placeholder="ej. Jorge Quispe Mamani" class="field" />
+            </label>
+            <label class="field-label">DNI (opcional)
+              <input name="dni" placeholder="ej. 47234567" class="field" />
+            </label>
+            <label class="field-label">Cargo (opcional)
+              <input name="cargo" placeholder="ej. Técnico Instalador Solar" class="field" />
+            </label>
+            <label class="field-label">Tipo de contrato (opcional)
+              <select name="tipo_contrato" class="field">
+                <option value="">— Sin especificar —</option>
+                <option value="PLANILLA">Planilla</option>
+                <option value="LOCACION">Locación de servicios</option>
+                <option value="PRACTICANTE">Practicante</option>
+              </select>
+            </label>
+            <label class="field-label">Fecha de ingreso (opcional)
+              <input name="fecha_ingreso" type="date" class="field" />
+            </label>
+            <label class="field-label">Costo por hora (S/)
+              <input name="costo_hora" type="number" min="0" step="0.01" placeholder="ej. 22.00" class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Usuario del sistema a vincular (opcional)
+              <select name="usuario_vinculado_id" class="field employee-user-select"><option value="">— Sin cuenta de acceso —</option></select>
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear empleado</span></button>
+        </form>
+        <div id="employee-create-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Nombre</th><th class="text-left font-semibold px-3 py-2.5">Cargo</th>
+              <th class="text-left font-semibold px-3 py-2.5">Contrato</th><th class="text-left font-semibold px-3 py-2.5">Costo/hora</th>
+              <th class="text-left font-semibold px-3 py-2.5">Usuario vinculado</th><th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="employees-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ RRHH: ASISTENCIA ============ -->
+      <section class="view" id="view-rrhh-attendance">
+        <form class="form-card mb-7" id="form-attendance-mark">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Marcar asistencia</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label sm:col-span-2">Empleado
+              <select name="empleado_id" required class="field attendance-employee-select"><option value="">Selecciona un empleado…</option></select>
+            </label>
+          </div>
+          <div class="flex flex-wrap gap-2.5">
+            <button class="btn-primary btn-loading" type="button" id="btn-check-in"><span class="btn-label">Marcar entrada</span></button>
+            <button class="btn-secondary btn-loading" type="button" id="btn-check-out"><span class="btn-label">Marcar salida</span></button>
+          </div>
+        </form>
+        <div id="attendance-mark-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="attendance-filter-empleado" class="field w-auto attendance-employee-select" onchange="loadAttendance()">
+            <option value="">Todos los empleados</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">Empleado</th>
+              <th class="text-left font-semibold px-3 py-2.5">Entrada</th><th class="text-left font-semibold px-3 py-2.5">Salida</th>
+              <th class="text-left font-semibold px-3 py-2.5">Horas</th><th class="text-left font-semibold px-3 py-2.5">Observaciones</th>
+            </tr></thead>
+            <tbody id="attendance-body"></tbody>
+          </table>
+          <div id="attendance-pager"></div>
         </div>
       </section>
 
