@@ -106,6 +106,35 @@ CREATE TABLE proyecto_mano_obra (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- RRHH ----------
+-- Ficha de empleado (opcionalmente ligada a un usuario del sistema) y
+-- fichaje de asistencia. No es una planilla completa (PRD §4.2 la deja
+-- fuera de este MVP): solo lo necesario para que Proyectos pueda sugerir
+-- un costo/hora por técnico en vez de escribirlo a mano cada vez.
+CREATE TABLE empleados (
+    empleado_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id      UUID UNIQUE REFERENCES usuarios(usuario_id),
+    nombre_completo TEXT NOT NULL,
+    dni             TEXT UNIQUE,
+    cargo           TEXT,
+    tipo_contrato   TEXT CHECK (tipo_contrato IN ('PLANILLA','LOCACION','PRACTICANTE')),
+    fecha_ingreso   DATE,
+    costo_hora      NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (costo_hora >= 0),
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE asistencias (
+    asistencia_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empleado_id       UUID NOT NULL REFERENCES empleados(empleado_id),
+    fecha             DATE NOT NULL DEFAULT CURRENT_DATE,
+    hora_entrada      TIMESTAMPTZ,
+    hora_salida       TIMESTAMPTZ,
+    horas_trabajadas  NUMERIC(6,2),
+    observaciones     TEXT,
+    UNIQUE (empleado_id, fecha)
+);
+
 CREATE TABLE productos (
     producto_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sku             TEXT NOT NULL UNIQUE,
@@ -446,3 +475,5 @@ CREATE INDEX idx_movimientos_proyecto ON movimientos(proyecto_id);
 CREATE INDEX idx_asiento_lineas_asiento ON asiento_lineas(asiento_id);
 CREATE INDEX idx_asientos_fecha ON asientos(fecha);
 CREATE INDEX idx_parametros_fiscales_tipo ON parametros_fiscales(tipo, vigente_desde);
+CREATE INDEX idx_asistencias_empleado ON asistencias(empleado_id);
+CREATE INDEX idx_asistencias_fecha ON asistencias(fecha);

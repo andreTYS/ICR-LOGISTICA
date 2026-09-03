@@ -116,3 +116,14 @@ INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
 
 INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripcion) VALUES
     ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor');
+
+-- ---------- RRHH: ficha de empleado ligada a los usuarios técnicos/operativos ----------
+-- El costo_hora de acá es el que Proyectos sugiere al registrar mano de obra
+-- (antes había que escribirlo a mano en cada registro).
+INSERT INTO empleados (empleado_id, usuario_id, nombre_completo, dni, cargo, tipo_contrato, fecha_ingreso, costo_hora, activo)
+VALUES
+    ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'Operario Almacén', '45123456', 'Técnico de Almacén', 'PLANILLA', CURRENT_DATE - INTERVAL '400 days', 18.50, true),
+    ('80000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003', 'Supervisor Almacén', '43987654', 'Supervisor de Operaciones', 'PLANILLA', CURRENT_DATE - INTERVAL '900 days', 32.00, true),
+    ('80000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000005', 'Ejecutiva de Ventas', '41765432', 'Coordinadora de Proyectos', 'PLANILLA', CURRENT_DATE - INTERVAL '600 days', 28.00, true),
+    ('80000000-0000-0000-0000-000000000004', NULL, 'Jorge Quispe Mamani', '47234567', 'Técnico Instalador Solar', 'LOCACION', CURRENT_DATE - INTERVAL '200 days', 22.00, true),
+    ('80000000-0000-0000-0000-000000000005', NULL, 'Rosa Ttito Huamán', '48345678', 'Técnica Electricista', 'LOCACION', CURRENT_DATE - INTERVAL '150 days', 24.50, true);

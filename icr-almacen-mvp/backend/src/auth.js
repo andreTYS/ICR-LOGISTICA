@@ -21,6 +21,7 @@ const ROLE_PERMISSIONS = {
     "projects.create", "projects.update_status", "projects.labor.register", "projects.query",
     "accounting.account.manage", "accounting.fiscal_param.manage", "accounting.rule.manage",
     "accounting.entry.create", "accounting.entry.post", "accounting.entry.void", "accounting.query",
+    "rrhh.employee.manage", "rrhh.attendance.mark", "rrhh.query",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
@@ -28,6 +29,7 @@ const ROLE_PERMISSIONS = {
     "purchases.receive", "purchases.query",
     "projects.labor.register", "projects.query",
     "accounting.query",
+    "rrhh.attendance.mark", "rrhh.query",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
@@ -35,13 +37,15 @@ const ROLE_PERMISSIONS = {
     "purchases.create", "purchases.send", "purchases.cancel", "purchases.receive",
     "purchases.query", "purchases.replenishment.get",
     "projects.query", "accounting.query",
+    "rrhh.attendance.mark", "rrhh.query",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
     "projects.query", "accounting.query",
+    "rrhh.attendance.mark", "rrhh.query",
   ],
-  CONSULTA: ["inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query"],
+  CONSULTA: ["inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query", "rrhh.query"],
 };
 
 function can(rolCodigo, action) {
