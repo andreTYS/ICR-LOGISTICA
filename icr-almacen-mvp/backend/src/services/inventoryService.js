@@ -49,6 +49,23 @@ async function lockOrCreateStockRow(client, productoId, almacenId, ubicacionId) 
   return r.rows[0];
 }
 
+// Busca un documento existente (tipo+número) o lo crea. Compartido por
+// inventory.receive y el flujo de recepción de compras.
+async function findOrCreateDocumento(client, documento) {
+  if (!documento?.tipo_documento || !documento?.numero_documento) return null;
+  const existing = await client.query(
+    "SELECT documento_id FROM documentos WHERE tipo_documento=$1 AND numero_documento=$2",
+    [documento.tipo_documento, documento.numero_documento]
+  );
+  if (existing.rows.length > 0) return existing.rows[0].documento_id;
+  const docR = await client.query(
+    `INSERT INTO documentos (tipo_documento, numero_documento, proveedor_id)
+     VALUES ($1,$2,$3) RETURNING documento_id`,
+    [documento.tipo_documento, documento.numero_documento, documento.proveedor_id || null]
+  );
+  return docR.rows[0].documento_id;
+}
+
 async function insertAuditoria(client, { usuarioId, canal, accion, entidad, entidadId, resultado, error, transactionId, valorNuevo }) {
   await client.query(
     `INSERT INTO auditoria (usuario_id, canal, accion, entidad, entidad_id, resultado, error, transaction_id, valor_nuevo)
@@ -106,23 +123,7 @@ async function receive({ sku, quantity, warehouseCode, locationCode, documento, 
     const almacen = await findWarehouseByCode(client, warehouseCode);
     const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
 
-    let documentoId = null;
-    if (documento?.tipo_documento && documento?.numero_documento) {
-      const existing = await client.query(
-        "SELECT documento_id FROM documentos WHERE tipo_documento=$1 AND numero_documento=$2",
-        [documento.tipo_documento, documento.numero_documento]
-      );
-      if (existing.rows.length > 0) {
-        documentoId = existing.rows[0].documento_id;
-      } else {
-        const docR = await client.query(
-          `INSERT INTO documentos (tipo_documento, numero_documento, proveedor_id)
-           VALUES ($1,$2,$3) RETURNING documento_id`,
-          [documento.tipo_documento, documento.numero_documento, documento.proveedor_id || null]
-        );
-        documentoId = docR.rows[0].documento_id;
-      }
-    }
+    const documentoId = await findOrCreateDocumento(client, documento);
 
     await lockOrCreateStockRow(client, producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null);
 
@@ -659,4 +660,6 @@ module.exports = {
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
   setProductPhoto, addKitItem, removeKitItem, getKitItems,
+  // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
+  withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
 };

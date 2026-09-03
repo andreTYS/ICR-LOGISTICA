@@ -3,6 +3,7 @@ const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const multer = require("multer");
 const inventory = require("./services/inventoryService");
+const compras = require("./services/comprasService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const { upload, processAndSaveImage } = require("./uploads");
@@ -284,6 +285,76 @@ router.get(
   handle(async (req) => inventory.getAuditLog({
     accion: req.query.accion, resultado: req.query.resultado, limit: req.query.limit,
   }))
+);
+
+// -------- Compras --------
+
+router.post(
+  "/purchases/orders",
+  requirePermission("purchases.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return compras.crearOrdenCompra({
+      proveedorRuc: b.proveedor_ruc,
+      warehouseCode: b.warehouse_code,
+      items: (b.items || []).map((it) => ({ sku: it.sku, quantity: Number(it.quantity), unitCost: it.unit_cost != null ? Number(it.unit_cost) : undefined })),
+      fechaEsperada: b.fecha_esperada || null,
+      observaciones: b.observaciones || null,
+      usuarioId: req.user.usuario_id,
+      canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/purchases/orders/:numero/send",
+  requirePermission("purchases.send"),
+  handle(async (req) => compras.enviarOrdenCompra({ numero: req.params.numero, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.post(
+  "/purchases/orders/:numero/cancel",
+  requirePermission("purchases.cancel"),
+  handle(async (req) => compras.cancelarOrdenCompra({ numero: req.params.numero, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.post(
+  "/purchases/orders/:numero/receive",
+  requirePermission("purchases.receive"),
+  handle(async (req) => {
+    const b = req.body;
+    return compras.recibirOrdenCompra({
+      numero: req.params.numero,
+      items: (b.items || []).map((it) => ({ sku: it.sku, quantity: Number(it.quantity) })),
+      documento: b.document,
+      usuarioId: req.user.usuario_id,
+      canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/purchases/orders",
+  requirePermission("purchases.query"),
+  handle(async (req) => compras.getOrdenesCompra({ estado: req.query.estado, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/purchases/orders/:numero",
+  requirePermission("purchases.query"),
+  handle(async (req) => compras.getOrdenCompra(req.params.numero))
+);
+
+router.get(
+  "/purchases/replenishment-suggestions",
+  requirePermission("purchases.replenishment.get"),
+  handle(async () => compras.getSugerenciasReabastecimiento())
+);
+
+router.get(
+  "/purchases/suppliers",
+  requirePermission("purchases.query"),
+  handle(async () => compras.listProveedores())
 );
 
 // -------- Usuarios (solo ADMIN vía wildcard '*') --------

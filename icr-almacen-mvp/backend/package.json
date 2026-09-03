@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "test": "PGDATABASE=icr_almacen_test node --test \"test/*.test.js\""
+    "test": "PGDATABASE=icr_almacen_test node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

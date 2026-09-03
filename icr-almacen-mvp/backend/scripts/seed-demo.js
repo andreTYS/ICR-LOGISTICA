@@ -9,10 +9,12 @@
 require("dotenv").config();
 const { pool } = require("../src/db");
 const inventory = require("../src/services/inventoryService");
+const compras = require("../src/services/comprasService");
 
 const ADMIN = "00000000-0000-0000-0000-000000000001";
 const ALMACENERO = "00000000-0000-0000-0000-000000000002";
 const SUPERVISOR = "00000000-0000-0000-0000-000000000003";
+const COMPRAS = "00000000-0000-0000-0000-000000000004";
 const VENTAS = "00000000-0000-0000-0000-000000000005";
 
 async function run() {
@@ -63,6 +65,42 @@ async function run() {
   await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "HERR-MULTIMETRO", quantity: 1 });
   await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "CONECTOR-MC4", quantity: 4 });
   await inventory.addKitItem({ kitSku: "MALETA-INSTALACION", itemSku: "CABLE-SOLAR-6MM", quantity: 10 });
+
+  console.log("Generando órdenes de compra de ejemplo (una por cada estado)...");
+  const ocRecibida = await compras.crearOrdenCompra({
+    proveedorRuc: "20100047218", warehouseCode: "ALM-001",
+    items: [{ sku: "PANEL-JA-550", quantity: 40 }, { sku: "CONECTOR-MC4", quantity: 200 }],
+    usuarioId: COMPRAS, canal: "web",
+  });
+  await compras.enviarOrdenCompra({ numero: ocRecibida.numero, usuarioId: COMPRAS, canal: "web" });
+  await compras.recibirOrdenCompra({
+    numero: ocRecibida.numero, items: [{ sku: "PANEL-JA-550", quantity: 40 }, { sku: "CONECTOR-MC4", quantity: 200 }],
+    documento: { tipo_documento: "FACTURA", numero_documento: "F002-5541" }, usuarioId: ALMACENERO, canal: "web",
+  });
+
+  const ocParcial = await compras.crearOrdenCompra({
+    proveedorRuc: "20605309489", warehouseCode: "ALM-002",
+    items: [{ sku: "BAT-DEYE-5.1", quantity: 8 }],
+    usuarioId: COMPRAS, canal: "web",
+  });
+  await compras.enviarOrdenCompra({ numero: ocParcial.numero, usuarioId: COMPRAS, canal: "web" });
+  await compras.recibirOrdenCompra({
+    numero: ocParcial.numero, items: [{ sku: "BAT-DEYE-5.1", quantity: 5 }],
+    documento: { tipo_documento: "GUIA", numero_documento: "G-77120" }, usuarioId: ALMACENERO, canal: "web",
+  });
+
+  const ocEnviada = await compras.crearOrdenCompra({
+    proveedorRuc: "20100047218", warehouseCode: "ALM-001",
+    items: [{ sku: "CABLE-SOLAR-6MM", quantity: 600 }],
+    usuarioId: COMPRAS, canal: "web",
+  });
+  await compras.enviarOrdenCompra({ numero: ocEnviada.numero, usuarioId: COMPRAS, canal: "web" });
+
+  await compras.crearOrdenCompra({
+    proveedorRuc: "20605309489", warehouseCode: "ALM-001",
+    items: [{ sku: "MONITOR-WIFI", quantity: 15 }],
+    usuarioId: COMPRAS, canal: "web",
+  });
 
   console.log("Movimientos generados. Redistribuyendo fechas en los últimos 8 días para el gráfico de actividad...");
 

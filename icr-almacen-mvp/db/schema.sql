@@ -228,6 +228,57 @@ CREATE TABLE movimientos (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- COMPRAS ----------
+-- Flujo: orden_compra (BORRADOR) -> ENVIADA -> recepcion(es) parciales
+-- registran cantidad_recibida por item y actualizan stock/movimientos como
+-- cualquier otro ingreso -> PARCIAL mientras falte algo, RECIBIDA cuando se
+-- completa. No se admite recibir más de lo pedido (ver CHECK y validación
+-- en la app).
+
+CREATE SEQUENCE oc_numero_seq START 1;
+
+CREATE TABLE ordenes_compra (
+    orden_compra_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero            TEXT NOT NULL UNIQUE,
+    proveedor_id      UUID NOT NULL REFERENCES proveedores(proveedor_id),
+    almacen_id        UUID NOT NULL REFERENCES almacenes(almacen_id),
+    estado            TEXT NOT NULL DEFAULT 'BORRADOR' CHECK (estado IN
+                        ('BORRADOR','ENVIADA','PARCIAL','RECIBIDA','CANCELADA')),
+    moneda            TEXT DEFAULT 'PEN',
+    fecha_emision     DATE NOT NULL DEFAULT CURRENT_DATE,
+    fecha_esperada    DATE,
+    observaciones     TEXT,
+    creado_por        UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE orden_compra_items (
+    orden_compra_item_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    orden_compra_id       UUID NOT NULL REFERENCES ordenes_compra(orden_compra_id) ON DELETE CASCADE,
+    producto_id           UUID NOT NULL REFERENCES productos(producto_id),
+    cantidad_pedida       NUMERIC(14,2) NOT NULL CHECK (cantidad_pedida > 0),
+    cantidad_recibida     NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (cantidad_recibida >= 0),
+    costo_unitario        NUMERIC(14,2) NOT NULL DEFAULT 0,
+    UNIQUE (orden_compra_id, producto_id),
+    CHECK (cantidad_recibida <= cantidad_pedida)
+);
+
+CREATE TABLE recepciones (
+    recepcion_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    orden_compra_id    UUID NOT NULL REFERENCES ordenes_compra(orden_compra_id),
+    documento_id       UUID REFERENCES documentos(documento_id),
+    usuario_id         UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE recepcion_items (
+    recepcion_item_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recepcion_id           UUID NOT NULL REFERENCES recepciones(recepcion_id) ON DELETE CASCADE,
+    orden_compra_item_id   UUID NOT NULL REFERENCES orden_compra_items(orden_compra_item_id),
+    cantidad               NUMERIC(14,2) NOT NULL CHECK (cantidad > 0)
+);
+
 -- ---------- MONITOREO ----------
 
 CREATE TABLE alertas (
@@ -308,3 +359,5 @@ CREATE INDEX idx_movimientos_fecha ON movimientos(created_at);
 CREATE INDEX idx_stock_producto_almacen ON stock(producto_id, almacen_id);
 CREATE INDEX idx_auditoria_fecha ON auditoria(created_at);
 CREATE INDEX idx_auditoria_transaction ON auditoria(transaction_id);
+CREATE INDEX idx_oc_items_orden ON orden_compra_items(orden_compra_id);
+CREATE INDEX idx_recepcion_items_recepcion ON recepcion_items(recepcion_id);

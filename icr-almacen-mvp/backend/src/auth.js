@@ -17,14 +17,18 @@ const ROLE_PERMISSIONS = {
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
     "inventory.adjust", "inventory.adjust.approve", "inventory.alerts.get", "inventory.audit.get",
     "inventory.product.create", "inventory.product.update",
+    "purchases.query", "purchases.replenishment.get",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
+    "purchases.receive", "purchases.query",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
     "inventory.product.create", "inventory.product.update", "inventory.query",
+    "purchases.create", "purchases.send", "purchases.cancel", "purchases.receive",
+    "purchases.query", "purchases.replenishment.get",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
