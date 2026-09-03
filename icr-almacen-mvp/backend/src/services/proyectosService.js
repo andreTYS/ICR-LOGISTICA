@@ -180,7 +180,62 @@ async function listTecnicos() {
   return r.rows;
 }
 
+// Reporte de rentabilidad (PRD Fase 4): costo real de cada proyecto activo
+// (materiales + mano de obra) contra su presupuesto, en una sola consulta
+// agregada por proyecto — evita el N+1 de llamar getProyecto() por fila.
+// Ordenado por margen ascendente: los proyectos con peor margen (o negativo)
+// aparecen primero, para que salten a la vista.
+async function getReporteRentabilidad({ estado } = {}) {
+  const conditions = ["pr.activo = true"];
+  const params = [];
+  if (estado) { params.push(estado); conditions.push(`pr.estado = $${params.length}`); }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const r = await pool.query(
+    `SELECT pr.proyecto_id, pr.codigo_proyecto, pr.nombre, pr.estado, pr.presupuesto, pr.moneda,
+            c.razon_social AS cliente_nombre,
+            COALESCE(mat.costo_materiales, 0) AS costo_materiales,
+            COALESCE(mo.costo_mano_obra, 0) AS costo_mano_obra,
+            COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0) AS costo_total,
+            CASE WHEN pr.presupuesto IS NOT NULL
+                 THEN pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0))
+                 ELSE NULL END AS margen,
+            CASE WHEN pr.presupuesto IS NOT NULL AND pr.presupuesto <> 0
+                 THEN ROUND((pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0))) / pr.presupuesto * 100, 2)
+                 ELSE NULL END AS margen_pct
+     FROM proyectos pr
+     LEFT JOIN clientes c ON c.cliente_id = pr.cliente_id
+     LEFT JOIN (
+       SELECT m.proyecto_id, SUM(m.cantidad * p.costo_unitario) AS costo_materiales
+       FROM movimientos m
+       JOIN productos p ON p.producto_id = m.producto_id
+       WHERE m.tipo_movimiento = 'SALIDA' AND m.proyecto_id IS NOT NULL
+       GROUP BY m.proyecto_id
+     ) mat ON mat.proyecto_id = pr.proyecto_id
+     LEFT JOIN (
+       SELECT proyecto_id, SUM(horas * costo_hora) AS costo_mano_obra
+       FROM proyecto_mano_obra
+       GROUP BY proyecto_id
+     ) mo ON mo.proyecto_id = pr.proyecto_id
+     ${where}
+     ORDER BY margen ASC NULLS LAST, pr.codigo_proyecto`,
+    params
+  );
+
+  const totales = r.rows.reduce(
+    (acc, row) => ({
+      presupuesto: acc.presupuesto + (row.presupuesto != null ? Number(row.presupuesto) : 0),
+      costo_total: acc.costo_total + Number(row.costo_total),
+      margen: acc.margen + (row.margen != null ? Number(row.margen) : 0),
+      con_presupuesto: acc.con_presupuesto + (row.presupuesto != null ? 1 : 0),
+    }),
+    { presupuesto: 0, costo_total: 0, margen: 0, con_presupuesto: 0 }
+  );
+
+  return { items: r.rows, totales };
+}
+
 module.exports = {
   crearProyecto, actualizarEstado, registrarManoObra,
-  listProyectos, getProyecto, listTecnicos, crearCliente, listClientes,
+  listProyectos, getProyecto, listTecnicos, crearCliente, listClientes, getReporteRentabilidad,
 };

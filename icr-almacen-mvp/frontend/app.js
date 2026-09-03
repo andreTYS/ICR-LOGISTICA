@@ -184,6 +184,7 @@ const titles = {
   "purchases-suppliers": ["Proveedores", "Catálogo de proveedores"],
   projects: ["Proyectos", "Obras con costeo real: materiales consumidos + mano de obra vs. presupuesto"],
   "projects-clients": ["Clientes", "Catálogo de clientes"],
+  "projects-profitability": ["Rentabilidad", "Costo real (materiales + mano de obra) vs. presupuesto, por proyecto"],
   "accounting-entries": ["Asientos contables", "Asientos manuales y generados automáticamente por las reglas de imputación"],
   "accounting-accounts": ["Plan de cuentas", "Estructura de cuentas contables"],
   "accounting-rules": ["Reglas de imputación", "Mapeo de eventos de negocio a cuentas debe/haber"],
@@ -223,6 +224,7 @@ function goToView(view) {
   if (view === "purchases-suppliers") loadSuppliers();
   if (view === "projects") loadProjects(1);
   if (view === "projects-clients") loadClients();
+  if (view === "projects-profitability") loadProfitabilityReport();
   if (view === "accounting-entries") loadEntries(1);
   if (view === "accounting-accounts") loadAccounts();
   if (view === "accounting-rules") loadRules();
@@ -1166,6 +1168,57 @@ async function loadClients() {
   body.innerHTML = items.length
     ? items.map((c) => `<tr class="${TR}"><td class="${TD}">${c.ruc}</td><td class="${TD}">${c.razon_social}</td><td class="${TD}">${c.contacto || "—"}</td></tr>`).join("")
     : emptyRow(3, "Sin clientes registrados.", "inbox");
+}
+
+// -------- Proyectos: rentabilidad --------
+function marginClass(n) {
+  return Number(n) < 0 ? "text-rose-600 font-semibold" : "text-emerald-600 font-semibold";
+}
+
+async function fetchProfitabilityReport() {
+  const estado = document.getElementById("profitability-filter-estado").value;
+  const params = estado ? `?estado=${encodeURIComponent(estado)}` : "";
+  return api(`/projects-profitability-report${params}`);
+}
+
+async function loadProfitabilityReport() {
+  const body = document.getElementById("profitability-body");
+  body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("profitability-cards").innerHTML = "";
+  const r = await fetchProfitabilityReport();
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(9, r.error?.message || "Tu rol no tiene permiso para ver el reporte de rentabilidad.", "lock");
+    return;
+  }
+  const { items, totales } = r.data;
+
+  document.getElementById("profitability-cards").innerHTML = [
+    costeoCard("Presupuesto total (proyectos con presupuesto)", money(totales.presupuesto)),
+    costeoCard("Costo real total", money(totales.costo_total)),
+    costeoCard("Margen agregado", money(totales.margen), marginClass(totales.margen)),
+  ].join("");
+
+  body.innerHTML = items.length
+    ? items.map((p) => `<tr class="${TR}">
+        <td class="${TD} font-semibold text-navy-900">${p.codigo_proyecto}</td><td class="${TD}">${p.nombre}</td>
+        <td class="${TD}">${p.cliente_nombre || "—"}</td>
+        <td class="${TD}">${p.presupuesto != null ? money(p.presupuesto) : "—"}</td>
+        <td class="${TD}">${money(p.costo_materiales)}</td><td class="${TD}">${money(p.costo_mano_obra)}</td>
+        <td class="${TD}">${money(p.costo_total)}</td>
+        <td class="${TD} ${p.margen != null ? marginClass(p.margen) : ""}">${p.margen != null ? money(p.margen) : "—"}</td>
+        <td class="${TD} ${p.margen_pct != null ? marginClass(p.margen_pct) : ""}">${p.margen_pct != null ? `${p.margen_pct}%` : "—"}</td>
+      </tr>`).join("")
+    : emptyRow(9, "Sin proyectos para este filtro.", "inbox");
+}
+
+async function exportProfitabilityCsv() {
+  const r = await fetchProfitabilityReport();
+  const items = r.data?.items || [];
+  downloadCsv(
+    "rentabilidad-proyectos.csv",
+    ["Código", "Nombre", "Cliente", "Presupuesto", "Materiales", "Mano de obra", "Costo total", "Margen", "Margen %"],
+    items.map((p) => [p.codigo_proyecto, p.nombre, p.cliente_nombre || "", p.presupuesto ?? "", p.costo_materiales, p.costo_mano_obra, p.costo_total, p.margen ?? "", p.margen_pct ?? ""])
+  );
 }
 
 // -------- Contabilidad: plan de cuentas --------
