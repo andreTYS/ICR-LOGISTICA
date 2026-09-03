@@ -146,6 +146,7 @@ function enterApp() {
   document.getElementById("app-shell").classList.remove("hidden");
   loadWarehouseOptions();
   loadSkuOptions();
+  loadSupplierOptions();
   loadDashboard();
 }
 
@@ -177,6 +178,7 @@ const titles = {
   products: ["Productos", "Catálogo de productos gestionados"],
   movements: ["Movimientos (ledger)", "Historial completo de movimientos de inventario"],
   alerts: ["Alertas de stock bajo", "Productos por debajo del punto de reorden"],
+  purchases: ["Compras", "Órdenes de compra, recepciones y sugerencias de reabastecimiento"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -195,6 +197,7 @@ function goToView(view) {
   if (view === "products") loadProducts();
   if (view === "movements") loadMovements();
   if (view === "alerts") loadAlerts();
+  if (view === "purchases") loadPurchases();
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -267,6 +270,13 @@ async function loadSkuOptions() {
   const r = await api("/inventory/products?q=&page_size=500");
   const list = document.getElementById("sku-list");
   list.innerHTML = (r.data?.items || []).map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
+}
+
+async function loadSupplierOptions() {
+  const r = await api("/purchases/suppliers");
+  const list = document.getElementById("supplier-list");
+  if (!list || r.status !== "success") return;
+  list.innerHTML = (r.data || []).map((s) => `<option value="${s.ruc}">${s.ruc} — ${s.razon_social}</option>`).join("");
 }
 
 // -------- Dashboard --------
@@ -411,6 +421,11 @@ function updateAlertsBadge(count) {
 
 function movTypeBadge(tipo) {
   return badge(tipo, tipo);
+}
+
+const OC_STATUS_TONES = { BORRADOR: "devolucion", ENVIADA: "transferencia", PARCIAL: "ajuste", RECIBIDA: "ok", CANCELADA: "low" };
+function ocStatusBadge(estado) {
+  return badge(estado, OC_STATUS_TONES[estado] || "devolucion");
 }
 
 // -------- Stock --------
@@ -658,6 +673,225 @@ function renderResult(elId, response) {
   el.className = `result-box ${response.status === "success" ? "ok" : "err"}`;
   el.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
 }
+
+// -------- Compras --------
+let ocDraftItems = [];
+let currentOcNumero = null;
+
+function renderOcDraftItems() {
+  const body = document.getElementById("oc-draft-items-body");
+  body.innerHTML = ocDraftItems.length
+    ? ocDraftItems.map((it, i) => `<tr class="${TR}">
+        <td class="${TD}">${it.sku}</td><td class="${TD}">${it.quantity}</td>
+        <td class="${TD}">${it.unit_cost ?? "—"}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeOcDraftItem(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Agrega al menos una línea antes de crear la orden.", "inbox");
+}
+
+function addOcDraftItem() {
+  const sku = document.getElementById("oc-item-sku").value.trim();
+  const quantity = Number(document.getElementById("oc-item-qty").value);
+  const costRaw = document.getElementById("oc-item-cost").value;
+  if (!sku || !quantity || quantity <= 0) { toast("Ingresa un SKU y una cantidad válida", false); return; }
+  ocDraftItems.push({ sku, quantity, unit_cost: costRaw ? Number(costRaw) : undefined });
+  document.getElementById("oc-item-sku").value = "";
+  document.getElementById("oc-item-qty").value = "";
+  document.getElementById("oc-item-cost").value = "";
+  renderOcDraftItems();
+}
+function removeOcDraftItem(i) {
+  ocDraftItems.splice(i, 1);
+  renderOcDraftItems();
+}
+renderOcDraftItems();
+
+document.getElementById("form-oc-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (ocDraftItems.length === 0) { toast("Agrega al menos una línea a la orden", false); return; }
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    proveedor_ruc: f.get("proveedor_ruc"),
+    warehouse_code: f.get("warehouse_code"),
+    fecha_esperada: f.get("fecha_esperada") || null,
+    observaciones: f.get("observaciones") || null,
+    items: ocDraftItems,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/purchases/orders", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("oc-create-result", r);
+    if (r.status === "success") {
+      toast(`Orden ${r.data.numero} creada en BORRADOR`);
+      e.target.reset();
+      ocDraftItems = [];
+      renderOcDraftItems();
+      loadPurchaseOrders(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadPurchases() {
+  loadReplenishmentSuggestions();
+  loadPurchaseOrders(1);
+}
+
+async function loadReplenishmentSuggestions() {
+  const body = document.getElementById("replenishment-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/purchases/replenishment-suggestions");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver sugerencias.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((s) => `<tr class="${TR}">
+        <td class="${TD}">${s.sku}</td><td class="${TD}">${s.producto_nombre}</td>
+        <td class="${TD}">${s.almacen_codigo}</td><td class="${TD}">${badge(s.stock_disponible, "low")}</td>
+        <td class="${TD}">${s.punto_reorden}</td><td class="${TD}">${s.cantidad_sugerida}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="prefillOcFromSuggestion('${s.sku}', ${s.cantidad_sugerida})">Agregar a la orden</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Todo el stock está por encima del punto de reorden.", "check");
+}
+
+function prefillOcFromSuggestion(sku, cantidad) {
+  ocDraftItems.push({ sku, quantity: Number(cantidad) });
+  renderOcDraftItems();
+  document.getElementById("form-oc-create").scrollIntoView({ behavior: "smooth", block: "center" });
+  toast(`${sku} agregado a la orden en construcción`);
+}
+
+async function loadPurchaseOrders(page) {
+  const body = document.getElementById("purchases-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("oc-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/purchases/orders?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver órdenes de compra.", "lock");
+    document.getElementById("purchases-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((oc) => `<tr class="${TR} cursor-pointer" onclick="openOcModal('${oc.numero}')">
+        <td class="${TD} font-semibold text-navy-900">${oc.numero}</td>
+        <td class="${TD}">${oc.proveedor_nombre}</td><td class="${TD}">${oc.almacen_codigo}</td>
+        <td class="${TD}">${new Date(oc.created_at).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}">${ocStatusBadge(oc.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openOcModal('${oc.numero}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin órdenes de compra registradas.", "inbox");
+  renderPager("purchases-pager", r.data, (p) => loadPurchaseOrders(p));
+  updatePurchasesBadge(items.filter((oc) => oc.estado === "ENVIADA" || oc.estado === "PARCIAL").length);
+}
+
+function updatePurchasesBadge(count) {
+  const el = document.getElementById("purchases-badge");
+  if (count > 0) { el.textContent = count > 99 ? "99+" : count; el.classList.remove("hidden"); }
+  else el.classList.add("hidden");
+}
+
+async function openOcModal(numero) {
+  currentOcNumero = numero;
+  const modal = document.getElementById("oc-modal");
+  document.getElementById("oc-modal-title").textContent = numero;
+  document.getElementById("oc-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("oc-items-body").innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("oc-receptions-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("oc-receive-result").innerHTML = "";
+  modal.classList.remove("hidden");
+
+  const r = await api(`/purchases/orders/${encodeURIComponent(numero)}`);
+  if (r.status !== "success") {
+    document.getElementById("oc-modal-subtitle").textContent = r.error?.message || "No se pudo cargar la orden";
+    return;
+  }
+  const oc = r.data;
+  document.getElementById("oc-modal-subtitle").innerHTML = `${oc.proveedor_nombre} · ${oc.almacen_codigo} · ${ocStatusBadge(oc.estado)}`;
+
+  const canReceive = oc.estado === "ENVIADA" || oc.estado === "PARCIAL";
+  document.getElementById("oc-send-btn").classList.toggle("hidden", oc.estado !== "BORRADOR");
+  document.getElementById("oc-cancel-btn").classList.toggle("hidden", oc.estado === "RECIBIDA" || oc.estado === "CANCELADA");
+  document.getElementById("form-oc-receive").classList.toggle("hidden", !canReceive);
+
+  const itemsBody = document.getElementById("oc-items-body");
+  itemsBody.innerHTML = (oc.items || []).map((it) => `<tr class="${TR}">
+      <td class="${TD}">${it.sku}</td><td class="${TD}">${it.producto_nombre}</td>
+      <td class="${TD}">${it.cantidad_pedida}</td><td class="${TD}">${it.cantidad_recibida}</td>
+      <td class="${TD}">${it.cantidad_pendiente}</td>
+      <td class="${TD}">${canReceive && Number(it.cantidad_pendiente) > 0
+        ? `<input type="number" min="0" max="${it.cantidad_pendiente}" step="0.01" class="field oc-receive-qty" data-sku="${it.sku}" placeholder="0" />`
+        : "—"}</td>
+    </tr>`).join("");
+
+  const recBody = document.getElementById("oc-receptions-body");
+  recBody.innerHTML = (oc.recepciones || []).length
+    ? oc.recepciones.map((rec) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(rec.created_at).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${rec.numero_documento ? `${rec.tipo_documento} ${rec.numero_documento}` : "—"}</td>
+        <td class="${TD}">${rec.usuario_nombre}</td>
+        <td class="${TD}">${rec.items.map((i) => `${i.sku} ×${i.cantidad}`).join(", ")}</td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin recepciones registradas todavía.", "inbox");
+}
+
+function closeOcModal() {
+  document.getElementById("oc-modal").classList.add("hidden");
+  currentOcNumero = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeOcModal(); });
+
+async function sendOcAction() {
+  if (!currentOcNumero) return;
+  if (!confirm(`¿Enviar la orden ${currentOcNumero} al proveedor?`)) return;
+  const r = await api(`/purchases/orders/${encodeURIComponent(currentOcNumero)}/send`, { method: "POST" });
+  if (r.status === "success") { toast("Orden enviada"); openOcModal(currentOcNumero); loadPurchaseOrders(1); }
+  else toast(r.error.message, false);
+}
+
+async function cancelOcAction() {
+  if (!currentOcNumero) return;
+  if (!confirm(`¿Cancelar la orden ${currentOcNumero}? Esta acción no se puede deshacer.`)) return;
+  const r = await api(`/purchases/orders/${encodeURIComponent(currentOcNumero)}/cancel`, { method: "POST" });
+  if (r.status === "success") { toast("Orden cancelada"); openOcModal(currentOcNumero); loadPurchaseOrders(1); }
+  else toast(r.error.message, false);
+}
+
+document.getElementById("form-oc-receive").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentOcNumero) return;
+  const f = new FormData(e.target);
+  const items = Array.from(document.querySelectorAll(".oc-receive-qty"))
+    .map((input) => ({ sku: input.dataset.sku, quantity: Number(input.value) }))
+    .filter((it) => it.quantity > 0);
+  if (items.length === 0) { toast("Ingresa la cantidad a recibir en al menos una línea", false); return; }
+  const numeroDocumento = f.get("numero_documento");
+  const payload = {
+    channel: "web",
+    items,
+    document: numeroDocumento ? { tipo_documento: f.get("tipo_documento"), numero_documento: numeroDocumento } : null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/purchases/orders/${encodeURIComponent(currentOcNumero)}/receive`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("oc-receive-result", r);
+    if (r.status === "success") {
+      toast(`Recepción registrada — orden ${r.data.orden_compra.estado}`);
+      e.target.reset();
+      openOcModal(currentOcNumero);
+      loadPurchaseOrders(1);
+      loadDashboard();
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
 
 // -------- Reservas --------
 document.getElementById("form-reserve").addEventListener("submit", async (e) => {

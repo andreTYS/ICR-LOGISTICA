@@ -87,6 +87,11 @@
           <span>Alertas</span>
           <span id="alerts-badge" class="hidden nav-badge">0</span>
         </button>
+        <button class="nav-item" data-view="purchases">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 6h12l-1 9a1.5 1.5 0 0 1-1.5 1.3H6.5A1.5 1.5 0 0 1 5 15L4 6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Compras</span>
+          <span id="purchases-badge" class="hidden nav-badge">0</span>
+        </button>
         <button class="nav-item" data-view="reservations">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 4h12v13l-3-2-3 2-3-2-3 2V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <span>Reservas</span>
@@ -445,6 +450,87 @@
         </div>
       </section>
 
+      <!-- ============ COMPRAS ============ -->
+      <section class="view" id="view-purchases">
+        <div class="mb-7">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Sugerencias de reabastecimiento</h3>
+          <div class="table-card">
+            <table class="w-full border-collapse text-sm">
+              <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+                <th class="text-left font-semibold px-3 py-2.5">SKU</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
+                <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Disponible</th>
+                <th class="text-left font-semibold px-3 py-2.5">P. reorden</th><th class="text-left font-semibold px-3 py-2.5">Sugerido</th>
+                <th class="text-left font-semibold px-3 py-2.5"></th>
+              </tr></thead>
+              <tbody id="replenishment-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <form class="form-card mb-7" id="form-oc-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva orden de compra</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">Proveedor (RUC)
+              <input name="proveedor_ruc" list="supplier-list" required placeholder="ej. 20100047218" class="field" />
+            </label>
+            <label class="field-label">Almacén de destino
+              <select name="warehouse_code" required class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label class="field-label">Fecha esperada (opcional)
+              <input name="fecha_esperada" type="date" class="field" />
+            </label>
+            <label class="field-label">Observaciones (opcional)
+              <input name="observaciones" placeholder="ej. Coordinar entrega en almacén" class="field" />
+            </label>
+          </div>
+
+          <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label flex-1 min-w-[160px]">SKU
+              <input id="oc-item-sku" list="sku-list" placeholder="ej. PANEL-JA-550" class="field" />
+            </label>
+            <label class="field-label w-28">Cantidad
+              <input id="oc-item-qty" type="number" min="0.01" step="0.01" class="field" />
+            </label>
+            <label class="field-label w-32">Costo unitario
+              <input id="oc-item-cost" type="number" min="0" step="0.01" placeholder="opcional" class="field" />
+            </label>
+            <button type="button" class="btn-secondary" onclick="addOcDraftItem()">+ Agregar línea</button>
+          </div>
+          <table class="w-full border-collapse text-sm mb-4">
+            <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+              <th class="font-semibold py-1.5">SKU</th><th class="font-semibold py-1.5">Cantidad</th>
+              <th class="font-semibold py-1.5">Costo unitario</th><th class="font-semibold py-1.5"></th>
+            </tr></thead>
+            <tbody id="oc-draft-items-body"></tbody>
+          </table>
+
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear orden de compra</span></button>
+        </form>
+        <div id="oc-create-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="oc-filter-estado" class="field w-auto" onchange="loadPurchaseOrders(1)">
+            <option value="">Todos los estados</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="ENVIADA">Enviada</option>
+            <option value="PARCIAL">Parcial</option>
+            <option value="RECIBIDA">Recibida</option>
+            <option value="CANCELADA">Cancelada</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">N°</th><th class="text-left font-semibold px-3 py-2.5">Proveedor</th>
+              <th class="text-left font-semibold px-3 py-2.5">Almacén</th><th class="text-left font-semibold px-3 py-2.5">Fecha</th>
+              <th class="text-left font-semibold px-3 py-2.5">Estado</th><th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="purchases-body"></tbody>
+          </table>
+          <div id="purchases-pager"></div>
+        </div>
+      </section>
+
       <!-- ============ RESERVAS ============ -->
       <section class="view" id="view-reservations">
         <form class="form-card mb-7" id="form-reserve">
@@ -594,7 +680,60 @@
       </section>
 
       <datalist id="sku-list"></datalist>
+      <datalist id="supplier-list"></datalist>
     </main>
+  </div>
+
+  <div id="oc-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeOcModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="oc-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="oc-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="oc-send-btn" onclick="sendOcAction()" class="btn-secondary px-3 py-1.5 text-xs">Enviar al proveedor</button>
+          <button id="oc-cancel-btn" onclick="cancelOcAction()" class="btn-danger px-3 py-1.5 text-xs">Cancelar orden</button>
+          <button onclick="closeOcModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Líneas de la orden</h3>
+        <table class="w-full border-collapse text-sm mb-2">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">SKU</th><th class="font-semibold py-1.5 pr-3">Producto</th>
+            <th class="font-semibold py-1.5 pr-3">Pedido</th><th class="font-semibold py-1.5 pr-3">Recibido</th>
+            <th class="font-semibold py-1.5 pr-3">Pendiente</th><th class="font-semibold py-1.5 w-28">Recibir ahora</th>
+          </tr></thead>
+          <tbody id="oc-items-body"></tbody>
+        </table>
+
+        <form id="form-oc-receive" class="flex flex-wrap items-end gap-2 mb-6">
+          <label class="field-label flex-1 min-w-[160px]">Documento del proveedor (opcional)
+            <input name="numero_documento" placeholder="ej. F001-2201" class="field" />
+          </label>
+          <label class="field-label w-36">Tipo de documento
+            <select name="tipo_documento" class="field">
+              <option value="GUIA">Guía</option>
+              <option value="FACTURA">Factura</option>
+            </select>
+          </label>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar recepción</span></button>
+        </form>
+        <div id="oc-receive-result" class="result-box mb-5"></div>
+
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Historial de recepciones</h3>
+        <table class="w-full border-collapse text-sm">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Fecha</th><th class="font-semibold py-1.5 pr-3">Documento</th>
+            <th class="font-semibold py-1.5 pr-3">Usuario</th><th class="font-semibold py-1.5">Items recibidos</th>
+          </tr></thead>
+          <tbody id="oc-receptions-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="kardex-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeKardex()">
