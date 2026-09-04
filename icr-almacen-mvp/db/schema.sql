@@ -380,6 +380,29 @@ CREATE TABLE comprobantes (
     UNIQUE (tipo, serie_numero)
 );
 
+-- ---------- GASTOS ----------
+-- Gastos operativos: hoy el motor contable solo reaccionaba a compras
+-- recibidas y cobros de contrato, pero una empresa gasta en muchas cosas más
+-- (combustible, viáticos, alquiler, servicios, honorarios) que antes no
+-- tenían dónde registrarse. Un gasto opcionalmente ligado a un proyecto
+-- entra al costeo real de esa obra (tercera fuente además de materiales y
+-- mano de obra); uno ligado a un empleado es un reembolso.
+CREATE TABLE gastos (
+    gasto_id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    categoria                 TEXT NOT NULL CHECK (categoria IN
+                                ('COMBUSTIBLE','VIATICOS','ALQUILER','SERVICIOS','SOFTWARE','MANTENIMIENTO','HONORARIOS','REEMBOLSO','OTROS')),
+    descripcion                TEXT NOT NULL,
+    monto                      NUMERIC(14,2) NOT NULL CHECK (monto > 0),
+    moneda                     TEXT DEFAULT 'PEN',
+    fecha                      DATE NOT NULL DEFAULT CURRENT_DATE,
+    proyecto_id                UUID REFERENCES proyectos(proyecto_id),
+    empleado_id                UUID REFERENCES empleados(empleado_id),
+    comprobante_tipo           TEXT CHECK (comprobante_tipo IN ('FACTURA','BOLETA','RECIBO')),
+    comprobante_serie_numero   TEXT,
+    registrado_por             UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- CONTABILIDAD ----------
 -- Motor de asientos por reglas de imputación (PRD §5.1) + parámetros
 -- fiscales versionados por vigencia (PRD §5.2). Un asiento nace en BORRADOR
@@ -536,3 +559,6 @@ CREATE INDEX idx_contrato_hitos_contrato ON contrato_hitos(contrato_id);
 CREATE INDEX idx_contrato_hitos_estado ON contrato_hitos(estado);
 CREATE INDEX idx_comprobantes_hito ON comprobantes(hito_id);
 CREATE INDEX idx_contratos_cliente ON contratos(cliente_id);
+CREATE INDEX idx_gastos_proyecto ON gastos(proyecto_id);
+CREATE INDEX idx_gastos_fecha ON gastos(fecha);
+CREATE INDEX idx_gastos_categoria ON gastos(categoria);

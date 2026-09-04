@@ -194,6 +194,7 @@ const titles = {
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
   "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
   "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
+  expenses: ["Gastos", "Gastos operativos: combustible, viáticos, alquiler, servicios, reembolsos y más"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -238,6 +239,7 @@ function goToView(view) {
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
   if (view === "sales-contracts") loadContracts(1);
   if (view === "sales-receivables") loadReceivables();
+  if (view === "expenses") loadExpenses(1);
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -407,6 +409,9 @@ async function loadDashboard() {
 
   renderActivityChart(allMov.data?.items || []);
   loadDashboardModuleSummary();
+  loadCashflowChart();
+  loadExpensesCategoryChart();
+  loadWorstMarginChart();
 }
 
 // Resumen de los demás módulos del ERP en el Panel. Tolerante a permisos:
@@ -488,23 +493,130 @@ function renderActivityChart(movements) {
     : emptyState("Sin movimientos en los últimos días.", "chart");
 }
 
-function showChartTip(evt, text) {
-  const tip = document.getElementById("chart-tip");
+// Tooltip genérico reusado por todos los gráficos de barras del Panel (cada
+// uno renderiza su propio <div id="tip-..."> dentro de su contenedor, para
+// que el posicionamiento absolute sea relativo al gráfico correcto).
+function showChartTip(evt, text, tipId = "chart-tip") {
+  const tip = document.getElementById(tipId);
   if (!tip) return;
   tip.textContent = text;
   tip.classList.add("visible");
-  moveChartTip(evt);
+  moveChartTip(evt, tipId);
 }
-function moveChartTip(evt) {
-  const tip = document.getElementById("chart-tip");
-  const container = document.getElementById("activity-chart");
+function moveChartTip(evt, tipId = "chart-tip") {
+  const tip = document.getElementById(tipId);
+  const container = tip?.parentElement;
   if (!tip || !container) return;
   const rect = container.getBoundingClientRect();
   tip.style.left = `${evt.clientX - rect.left}px`;
   tip.style.top = `${evt.clientY - rect.top - 10}px`;
 }
-function hideChartTip() {
-  document.getElementById("chart-tip")?.classList.remove("visible");
+function hideChartTip(tipId = "chart-tip") {
+  document.getElementById(tipId)?.classList.remove("visible");
+}
+
+// -------- Tablero: Ingresos vs. Gastos (últimos 6 meses) --------
+// Misma paleta validada que el gráfico de actividad (azul = dinero que
+// entra, naranja = dinero que sale) — ver skill dataviz.
+async function loadCashflowChart() {
+  const r = await api("/dashboard/cashflow?months=6");
+  const el = document.getElementById("cashflow-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  renderCashflowChart(r.data || []);
+}
+
+function renderCashflowChart(rows) {
+  const el = document.getElementById("cashflow-chart");
+  const points = rows.map((row) => ({
+    label: new Date(row.mes).toLocaleDateString("es-PE", { month: "short", year: "2-digit" }),
+    ingresos: Number(row.ingresos), gastos: Number(row.gastos),
+  }));
+  const max = Math.max(1, ...points.map((p) => Math.max(p.ingresos, p.gastos)));
+  const W = 700, H = 170, padBottom = 22, padTop = 8;
+  const groupW = W / Math.max(1, points.length);
+  const barW = Math.min(34, groupW / 2 - 8);
+  const scale = (v) => (v / max) * (H - padBottom - padTop);
+  const roundedTopBar = (x, y, w, h, r) => {
+    if (h <= 0) return "";
+    r = Math.min(r, h, w / 2);
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  };
+
+  let bars = "";
+  points.forEach((pt, i) => {
+    const gx = i * groupW + groupW / 2;
+    const x1 = gx - barW - 2, x2 = gx + 2;
+    const hIn = scale(pt.ingresos), hOut = scale(pt.gastos);
+    const yIn = H - padBottom - hIn, yOut = H - padBottom - hOut;
+    bars += `<path class="chart-bar" fill="#2a78d6" d="${roundedTopBar(x1, yIn, barW, hIn, 3)}"
+        onmouseenter="showChartTip(event,'Ingresos · ${pt.label}: PEN ${money(pt.ingresos)}','tip-cashflow')" onmousemove="moveChartTip(event,'tip-cashflow')" onmouseleave="hideChartTip('tip-cashflow')"></path>`;
+    bars += `<path class="chart-bar" fill="#eb6834" d="${roundedTopBar(x2, yOut, barW, hOut, 3)}"
+        onmouseenter="showChartTip(event,'Gastos · ${pt.label}: PEN ${money(pt.gastos)}','tip-cashflow')" onmousemove="moveChartTip(event,'tip-cashflow')" onmouseleave="hideChartTip('tip-cashflow')"></path>`;
+    bars += `<line x1="${i * groupW}" y1="${H - padBottom}" x2="${(i + 1) * groupW}" y2="${H - padBottom}" stroke="#e2e8f0" stroke-width="1"/>`;
+    bars += `<text x="${gx}" y="${H - 5}" text-anchor="middle" font-size="10.5" fill="#94a3b8">${pt.label}</text>`;
+  });
+
+  const hasData = points.some((p) => p.ingresos > 0 || p.gastos > 0);
+  el.innerHTML = hasData
+    ? `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="height:190px" role="img" aria-label="Ingresos y gastos de los últimos 6 meses">${bars}</svg>
+       <div id="tip-cashflow" class="chart-tip"></div>`
+    : emptyState("Sin cobros ni gastos registrados en este período.", "chart");
+}
+
+// -------- Tablero: Gasto por categoría (últimos 30 días) --------
+// Ranking por magnitud dentro de una sola categoría visual (no identidad):
+// una barra de un solo tono, con la categoría como etiqueta directa — no
+// hace falta paleta categórica ni leyenda.
+const EXPENSE_CATEGORY_LABELS = {
+  COMBUSTIBLE: "Combustible", VIATICOS: "Viáticos", ALQUILER: "Alquiler", SERVICIOS: "Servicios",
+  SOFTWARE: "Software", MANTENIMIENTO: "Mantenimiento", HONORARIOS: "Honorarios", REEMBOLSO: "Reembolso", OTROS: "Otros",
+};
+
+async function loadExpensesCategoryChart() {
+  const r = await api("/dashboard/expenses-by-category?days=30");
+  const el = document.getElementById("expenses-category-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = r.data || [];
+  if (!items.length) { el.innerHTML = emptyState("Sin gastos en los últimos 30 días.", "chart"); return; }
+  const max = Math.max(...items.map((i) => i.monto));
+  el.innerHTML = items.map((i) => `
+    <div class="mb-2.5">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-semibold text-navy-950">${EXPENSE_CATEGORY_LABELS[i.categoria] || i.categoria}</span>
+        <span class="text-slate-500">PEN ${money(i.monto)}</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div class="h-full rounded-full" style="width:${Math.max(3, (i.monto / max) * 100)}%; background:#1d3557"></div>
+      </div>
+    </div>`).join("");
+}
+
+// -------- Tablero: Proyectos con peor margen --------
+// Reusa el mismo reporte de rentabilidad que la pestaña Proyectos →
+// Rentabilidad (ya viene ordenado por margen ascendente); toma los 5
+// primeros. Codificación divergente (rojo = margen negativo, verde =
+// positivo) — mismo criterio de color que ya usa marginClass() en la tabla.
+async function loadWorstMarginChart() {
+  const r = await api("/projects-profitability-report");
+  const el = document.getElementById("worst-margin-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = (r.data?.items || []).filter((p) => p.margen != null).slice(0, 5);
+  if (!items.length) { el.innerHTML = emptyState("Sin proyectos con presupuesto definido todavía.", "chart"); return; }
+  const max = Math.max(1, ...items.map((p) => Math.abs(Number(p.margen))));
+  el.innerHTML = items.map((p) => {
+    const margen = Number(p.margen);
+    const negative = margen < 0;
+    return `
+    <div class="mb-2.5">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-semibold text-navy-950">${p.codigo_proyecto} <span class="font-normal text-slate-400">— ${p.nombre}</span></span>
+        <span class="${marginClass(margen)}">${p.moneda || "PEN"} ${money(margen)}</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div class="h-full rounded-full" style="width:${Math.max(3, (Math.abs(margen) / max) * 100)}%; background:${negative ? "#e11d48" : "#059669"}"></div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function updateAlertsBadge(count) {
@@ -1096,6 +1208,8 @@ async function openProjectModal(codigo) {
   document.getElementById("proj-costeo-cards").innerHTML = "";
   document.getElementById("proj-materials-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   document.getElementById("proj-labor-body").innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("proj-expenses-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("proj-expenses-hint").textContent = codigo;
   document.getElementById("project-labor-result").innerHTML = "";
   modal.classList.remove("hidden");
 
@@ -1118,6 +1232,7 @@ async function openProjectModal(codigo) {
   document.getElementById("proj-costeo-cards").innerHTML = [
     costeoCard("Materiales", `${p.moneda || "PEN"} ${money(c.costo_materiales)}`),
     costeoCard("Mano de obra", `${p.moneda || "PEN"} ${money(c.costo_mano_obra)}`),
+    costeoCard("Gastos", `${p.moneda || "PEN"} ${money(c.costo_gastos)}`),
     costeoCard("Costo total", `${p.moneda || "PEN"} ${money(c.costo_total)}`, "text-navy-950"),
     c.presupuesto != null
       ? costeoCard("Margen vs. presupuesto", `${p.moneda || "PEN"} ${money(c.margen)}`, c.margen >= 0 ? "text-emerald-600" : "text-rose-600")
@@ -1140,6 +1255,14 @@ async function openProjectModal(codigo) {
         <td class="${TD}">${money(m.horas * m.costo_hora)}</td><td class="${TD}">${m.descripcion || "—"}</td>
       </tr>`).join("")
     : emptyRow(6, "Sin horas registradas todavía.", "inbox");
+
+  const expensesBody = document.getElementById("proj-expenses-body");
+  expensesBody.innerHTML = (p.gastos || []).length
+    ? p.gastos.map((g) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(g.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${g.categoria}</td>
+        <td class="${TD}">${g.descripcion}</td><td class="${TD}">${money(g.monto)}</td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin gastos registrados todavía.", "inbox");
 }
 
 function closeProjectModal() {
@@ -1896,6 +2019,65 @@ async function exportReceivablesCsv() {
     ["Contrato", "Cliente", "Hito", "Monto", "Fecha esperada", "Estado"],
     items.map((h) => [h.codigo_contrato, h.cliente_nombre || "", h.descripcion, h.monto, h.fecha_esperada || "", h.estado])
   );
+}
+
+// -------- Gastos --------
+const EXPENSE_CATEGORY_TONES = { COMBUSTIBLE: "transferencia", VIATICOS: "transferencia", ALQUILER: "ajuste", SERVICIOS: "ajuste", SOFTWARE: "transferencia", MANTENIMIENTO: "ajuste", HONORARIOS: "devolucion", REEMBOLSO: "pendiente", OTROS: "devolucion" };
+function expenseCategoryBadge(categoria) {
+  return badge(EXPENSE_CATEGORY_LABELS[categoria] || categoria, EXPENSE_CATEGORY_TONES[categoria] || "devolucion");
+}
+
+document.getElementById("form-expense-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const tipo = f.get("comprobante_tipo");
+  const payload = {
+    channel: "web",
+    categoria: f.get("categoria"),
+    descripcion: f.get("descripcion"),
+    monto: Number(f.get("monto")),
+    fecha: f.get("fecha") || null,
+    proyecto_codigo: f.get("proyecto_codigo") || null,
+    empleado_id: f.get("empleado_id") || null,
+    comprobante: tipo ? { tipo, serie_numero: f.get("comprobante_serie_numero") } : null,
+  };
+  if (payload.comprobante && !payload.comprobante.serie_numero) { toast("Ingresa la serie-número del comprobante", false); return; }
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/expenses", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("expense-create-result", r);
+    if (r.status === "success") {
+      toast(`Gasto de ${money(r.data.gasto.monto)} registrado`);
+      e.target.reset();
+      loadExpenses(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadExpenses(page) {
+  const body = document.getElementById("expenses-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const categoria = document.getElementById("expense-filter-categoria").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 30 });
+  if (categoria) params.set("categoria", categoria);
+  const r = await api(`/expenses?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver gastos.", "lock");
+    document.getElementById("expenses-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((g) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(g.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${expenseCategoryBadge(g.categoria)}</td>
+        <td class="${TD}">${g.descripcion}</td><td class="${TD}">${money(g.monto)}</td>
+        <td class="${TD}">${g.codigo_proyecto || "—"}</td><td class="${TD}">${g.empleado_nombre || "—"}</td>
+        <td class="${TD} text-xs text-slate-500">${g.comprobante_tipo ? `${g.comprobante_tipo} ${g.comprobante_serie_numero}` : "—"}</td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin gastos registrados todavía.", "inbox");
+  renderPager("expenses-pager", r.data, (p) => loadExpenses(p));
 }
 
 // -------- Reservas --------
