@@ -8,6 +8,8 @@ const proyectos = require("./services/proyectosService");
 const contabilidad = require("./services/contabilidadService");
 const rrhh = require("./services/rrhhService");
 const ventas = require("./services/ventasService");
+const gastos = require("./services/gastosService");
+const dashboard = require("./services/dashboardService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const { upload, processAndSaveImage } = require("./uploads");
@@ -683,6 +685,45 @@ router.get(
   "/sales-receivables",
   requirePermission("sales.query"),
   handle(async (req) => ventas.listCuentasPorCobrar({ estado: req.query.estado || null }))
+);
+
+// -------- Gastos --------
+
+router.post(
+  "/expenses",
+  requirePermission("expenses.register"),
+  handle(async (req) => {
+    const b = req.body;
+    return gastos.registrarGasto({
+      categoria: b.categoria, descripcion: b.descripcion, monto: Number(b.monto), moneda: b.moneda || null,
+      fecha: b.fecha || null, proyectoCodigo: b.proyecto_codigo || null, empleadoId: b.empleado_id || null,
+      comprobante: b.comprobante ? { tipo: b.comprobante.tipo, serie_numero: b.comprobante.serie_numero } : null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/expenses",
+  requirePermission("expenses.query"),
+  handle(async (req) => gastos.listGastos({
+    categoria: req.query.categoria || null, proyectoCodigo: req.query.proyecto_codigo || null,
+    page: req.query.page, pageSize: req.query.page_size,
+  }))
+);
+
+// -------- Panel: tableros agregados --------
+
+router.get(
+  "/dashboard/cashflow",
+  requirePermission("accounting.query"),
+  handle(async (req) => dashboard.getCashflowSummary({ months: req.query.months ? Number(req.query.months) : 6 }))
+);
+
+router.get(
+  "/dashboard/expenses-by-category",
+  requirePermission("accounting.query"),
+  handle(async (req) => dashboard.getExpensesByCategory({ days: req.query.days ? Number(req.query.days) : 30 }))
 );
 
 // -------- Usuarios (solo ADMIN vía wildcard '*') --------

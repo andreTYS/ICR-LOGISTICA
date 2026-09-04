@@ -108,7 +108,8 @@ INSERT INTO plan_cuentas (cuenta_id, codigo, nombre, tipo) VALUES
     ('70000000-0000-0000-0000-000000000004', '42', 'Cuentas por pagar comerciales — terceros', 'PASIVO'),
     ('70000000-0000-0000-0000-000000000005', '60', 'Compras', 'GASTO'),
     ('70000000-0000-0000-0000-000000000006', '69', 'Costo de ventas', 'GASTO'),
-    ('70000000-0000-0000-0000-000000000007', '70', 'Ventas', 'INGRESO');
+    ('70000000-0000-0000-0000-000000000007', '70', 'Ventas', 'INGRESO'),
+    ('70000000-0000-0000-0000-000000000008', '63', 'Gastos de servicios prestados por terceros', 'GASTO');
 
 INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
     ('IGV', 18.0000, '2024-01-01', 'Impuesto General a las Ventas — tasa general Perú'),
@@ -116,7 +117,8 @@ INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
 
 INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripcion) VALUES
     ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor'),
-    ('sales.milestone_paid', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000007', 'Cobro de un hito de contrato de venta');
+    ('sales.milestone_paid', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000007', 'Cobro de un hito de contrato de venta'),
+    ('expenses.register', '70000000-0000-0000-0000-000000000008', '70000000-0000-0000-0000-000000000001', 'Registro de un gasto operativo');
 
 -- ---------- RRHH: ficha de empleado ligada a los usuarios técnicos/operativos ----------
 -- El costo_hora de acá es el que Proyectos sugiere al registrar mano de obra
@@ -148,3 +150,18 @@ VALUES
 INSERT INTO comprobantes (comprobante_id, hito_id, tipo, serie_numero, fecha_emision, monto, registrado_por)
 VALUES
     ('92000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', 'FACTURA', 'F001-00123', CURRENT_DATE - INTERVAL '18 days', 55500.00, '00000000-0000-0000-0000-000000000005');
+
+-- ---------- Gastos: ejemplos repartidos en los últimos meses (para el tablero de Ingresos vs. Gastos) ----------
+-- Uno ligado a PROY-001 (entra a su costeo real), uno de tipo REEMBOLSO ligado a un empleado.
+INSERT INTO gastos (categoria, descripcion, monto, fecha, proyecto_id, empleado_id, comprobante_tipo, comprobante_serie_numero, registrado_por)
+VALUES
+    ('COMBUSTIBLE', 'Combustible camioneta — visita a obra Fundo Vilca', 180.00, CURRENT_DATE - INTERVAL '15 days', '60000000-0000-0000-0000-000000000001', NULL, 'BOLETA', 'B001-00456', '00000000-0000-0000-0000-000000000003'),
+    ('VIATICOS', 'Viáticos instalación fuera de Arequipa', 350.00, CURRENT_DATE - INTERVAL '12 days', '60000000-0000-0000-0000-000000000001', NULL, NULL, NULL, '00000000-0000-0000-0000-000000000003'),
+    ('ALQUILER', 'Alquiler de almacén — mes actual', 1800.00, CURRENT_DATE - INTERVAL '10 days', NULL, NULL, 'FACTURA', 'F002-00089', '00000000-0000-0000-0000-000000000001'),
+    ('SERVICIOS', 'Recibo de luz y agua — oficina', 420.00, CURRENT_DATE - INTERVAL '8 days', NULL, NULL, 'RECIBO', 'REC-00234', '00000000-0000-0000-0000-000000000001'),
+    ('REEMBOLSO', 'Reembolso: herramientas menores compradas en obra', 95.50, CURRENT_DATE - INTERVAL '5 days', NULL, '80000000-0000-0000-0000-000000000001', 'BOLETA', 'B003-00112', '00000000-0000-0000-0000-000000000003'),
+    ('SOFTWARE', 'Suscripción mensual software de diseño solar', 250.00, CURRENT_DATE - INTERVAL '45 days', NULL, NULL, 'FACTURA', 'F004-00021', '00000000-0000-0000-0000-000000000001'),
+    ('ALQUILER', 'Alquiler de almacén — mes anterior', 1800.00, CURRENT_DATE - INTERVAL '40 days', NULL, NULL, 'FACTURA', 'F002-00071', '00000000-0000-0000-0000-000000000001'),
+    ('MANTENIMIENTO', 'Mantenimiento preventivo de camioneta', 480.00, CURRENT_DATE - INTERVAL '70 days', NULL, NULL, 'FACTURA', 'F005-00033', '00000000-0000-0000-0000-000000000003'),
+    ('HONORARIOS', 'Honorarios contador externo — cierre trimestral', 900.00, CURRENT_DATE - INTERVAL '95 days', NULL, NULL, 'RECIBO', 'REC-00198', '00000000-0000-0000-0000-000000000001'),
+    ('COMBUSTIBLE', 'Combustible camioneta — visita a obra Minera Altiplano', 220.00, CURRENT_DATE - INTERVAL '120 days', '60000000-0000-0000-0000-000000000002', NULL, 'BOLETA', 'B001-00312', '00000000-0000-0000-0000-000000000003');

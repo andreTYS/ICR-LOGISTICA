@@ -135,9 +135,17 @@ async function getProyecto(codigoProyecto) {
     [proyecto.proyecto_id]
   );
 
+  // Tercera fuente de costeo: gastos operativos (combustible, viáticos, etc.)
+  // opcionalmente ligados a este proyecto — ver módulo Gastos.
+  const gastosR = await pool.query(
+    `SELECT * FROM gastos WHERE proyecto_id = $1 ORDER BY fecha DESC, created_at DESC`,
+    [proyecto.proyecto_id]
+  );
+
   const costoMateriales = materialesR.rows.reduce((sum, row) => sum + Number(row.subtotal), 0);
   const costoManoObra = manoObraR.rows.reduce((sum, row) => sum + Number(row.horas) * Number(row.costo_hora), 0);
-  const costoTotal = costoMateriales + costoManoObra;
+  const costoGastos = gastosR.rows.reduce((sum, row) => sum + Number(row.monto), 0);
+  const costoTotal = costoMateriales + costoManoObra + costoGastos;
   const presupuesto = proyecto.presupuesto != null ? Number(proyecto.presupuesto) : null;
   const margen = presupuesto != null ? presupuesto - costoTotal : null;
 
@@ -145,9 +153,11 @@ async function getProyecto(codigoProyecto) {
     ...proyecto,
     materiales: materialesR.rows,
     mano_obra: manoObraR.rows,
+    gastos: gastosR.rows,
     costeo: {
       costo_materiales: costoMateriales,
       costo_mano_obra: costoManoObra,
+      costo_gastos: costoGastos,
       costo_total: costoTotal,
       presupuesto,
       margen,
@@ -203,12 +213,13 @@ async function getReporteRentabilidad({ estado } = {}) {
             c.razon_social AS cliente_nombre,
             COALESCE(mat.costo_materiales, 0) AS costo_materiales,
             COALESCE(mo.costo_mano_obra, 0) AS costo_mano_obra,
-            COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0) AS costo_total,
+            COALESCE(ga.costo_gastos, 0) AS costo_gastos,
+            COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0) + COALESCE(ga.costo_gastos, 0) AS costo_total,
             CASE WHEN pr.presupuesto IS NOT NULL
-                 THEN pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0))
+                 THEN pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0) + COALESCE(ga.costo_gastos, 0))
                  ELSE NULL END AS margen,
             CASE WHEN pr.presupuesto IS NOT NULL AND pr.presupuesto <> 0
-                 THEN ROUND((pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0))) / pr.presupuesto * 100, 2)
+                 THEN ROUND((pr.presupuesto - (COALESCE(mat.costo_materiales, 0) + COALESCE(mo.costo_mano_obra, 0) + COALESCE(ga.costo_gastos, 0))) / pr.presupuesto * 100, 2)
                  ELSE NULL END AS margen_pct
      FROM proyectos pr
      LEFT JOIN clientes c ON c.cliente_id = pr.cliente_id
@@ -224,6 +235,12 @@ async function getReporteRentabilidad({ estado } = {}) {
        FROM proyecto_mano_obra
        GROUP BY proyecto_id
      ) mo ON mo.proyecto_id = pr.proyecto_id
+     LEFT JOIN (
+       SELECT proyecto_id, SUM(monto) AS costo_gastos
+       FROM gastos
+       WHERE proyecto_id IS NOT NULL
+       GROUP BY proyecto_id
+     ) ga ON ga.proyecto_id = pr.proyecto_id
      ${where}
      ORDER BY margen ASC NULLS LAST, pr.codigo_proyecto`,
     params
