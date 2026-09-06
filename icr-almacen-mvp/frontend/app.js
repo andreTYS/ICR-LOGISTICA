@@ -2686,10 +2686,10 @@ document.getElementById("form-user").addEventListener("submit", async (e) => {
 
 async function loadUsers() {
   const body = document.getElementById("users-body");
-  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/users");
   if (r.status !== "success") {
-    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para gestionar usuarios.", "lock");
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para gestionar usuarios.", "lock");
     return;
   }
   const items = r.data || [];
@@ -2699,18 +2699,31 @@ async function loadUsers() {
         <td class="${TD}">${u.rol_codigo}</td>
         <td class="${TD}">${badge(u.activo ? "ACTIVO" : "INACTIVO", u.activo ? "ok" : "devolucion")}</td>
         <td class="${TD}">
+          <div class="flex items-center gap-1.5">
+            <input type="text" value="${u.telegram_id || ""}" placeholder="sin vincular" class="field w-28 text-xs py-1" id="telegram-id-${u.usuario_id}" />
+            <button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="saveTelegramId('${u.usuario_id}')">Guardar</button>
+          </div>
+        </td>
+        <td class="${TD}">
           <button class="${u.activo ? "btn-danger" : "btn-secondary"} px-3 py-1.5 text-xs" onclick="toggleUserActive('${u.usuario_id}', ${!u.activo})">
             ${u.activo ? "Desactivar" : "Activar"}
           </button>
         </td>
       </tr>`).join("")
-    : emptyRow(5, "Sin usuarios.", "inbox");
+    : emptyRow(6, "Sin usuarios.", "inbox");
 }
 
 async function toggleUserActive(usuarioId, nextActive) {
   if (!confirm(`¿${nextActive ? "Activar" : "Desactivar"} este usuario?`)) return;
   const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ activo: nextActive }) });
   if (r.status === "success") { toast(`Usuario ${nextActive ? "activado" : "desactivado"}`); loadUsers(); }
+  else toast(r.error.message, false);
+}
+
+async function saveTelegramId(usuarioId) {
+  const input = document.getElementById(`telegram-id-${usuarioId}`);
+  const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ telegram_id: input.value.trim() }) });
+  if (r.status === "success") { toast("Telegram ID actualizado"); loadUsers(); }
   else toast(r.error.message, false);
 }
 

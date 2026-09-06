@@ -17,6 +17,7 @@ const payables = require("./services/payablesService");
 const cotizaciones = require("./services/cotizacionesService");
 const assets = require("./services/assetsService");
 const aiChat = require("./services/aiChatService");
+const telegram = require("./services/telegramService");
 const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -76,6 +77,21 @@ router.get(
 router.get(
   "/settings",
   handle(async () => settings.getSettings())
+);
+
+// Pública (sin JWT): Telegram llama este endpoint directo. Se autentica con
+// el secret_token que Telegram reenvía en el header (configurado al hacer
+// setWebhook), nunca con el token de sesión del panel. Ver README
+// "Integración N8N / Telegram" para los pasos de activación — no hay
+// infraestructura de Telegram real en este entorno de desarrollo.
+router.post(
+  "/telegram/webhook",
+  handle(async (req) => {
+    if (!telegram.verifySecretToken(req.headers["x-telegram-bot-api-secret-token"])) {
+      throw new AppError("AUTH_INVALID", "Token secreto de Telegram inválido o no configurado", 401);
+    }
+    return telegram.handleUpdate(req.body);
+  })
 );
 
 // A partir de aquí, todo comando requiere sesión válida (Authorization: Bearer <token>)

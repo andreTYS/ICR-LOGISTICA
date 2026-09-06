@@ -6,7 +6,7 @@ const ROLES = ["ADMIN", "SUPERVISOR", "ALMACENERO", "COMPRAS", "VENTAS", "CONSUL
 
 async function listUsers() {
   const r = await pool.query(
-    `SELECT usuario_id, nombre_completo, email, rol_codigo, nivel_autorizacion, activo, created_at
+    `SELECT usuario_id, nombre_completo, email, rol_codigo, nivel_autorizacion, activo, telegram_id, created_at
      FROM usuarios ORDER BY nombre_completo`
   );
   return r.rows;
@@ -36,7 +36,7 @@ async function createUser({ nombre_completo, email, password, rol_codigo, nivel_
   return r.rows[0];
 }
 
-async function updateUser(usuarioId, { rol_codigo, nivel_autorizacion, activo, password }) {
+async function updateUser(usuarioId, { rol_codigo, nivel_autorizacion, activo, password, telegram_id }) {
   const existing = await pool.query("SELECT * FROM usuarios WHERE usuario_id = $1", [usuarioId]);
   if (existing.rows.length === 0) {
     throw new AppError("USER_NOT_FOUND", `Usuario '${usuarioId}' no existe`, 404);
@@ -45,15 +45,26 @@ async function updateUser(usuarioId, { rol_codigo, nivel_autorizacion, activo, p
     throw new AppError("SCHEMA_INVALID", `rol_codigo debe ser uno de: ${ROLES.join(", ")}`, 400);
   }
   const passwordHash = password ? bcrypt.hashSync(password, 10) : null;
+  // telegram_id es undefined cuando el campo no viene en el body (no tocar);
+  // "" (desvincular) se guarda como NULL; un valor viene tal cual.
+  const telegramIdProvided = telegram_id !== undefined;
+  const telegramIdValue = telegram_id === "" ? null : telegram_id;
+  if (telegramIdProvided && telegramIdValue) {
+    const dup = await pool.query("SELECT usuario_id FROM usuarios WHERE telegram_id = $1 AND usuario_id <> $2", [telegramIdValue, usuarioId]);
+    if (dup.rows.length > 0) {
+      throw new AppError("TELEGRAM_ID_TAKEN", `El telegram_id '${telegramIdValue}' ya está vinculado a otro usuario`, 409);
+    }
+  }
   const r = await pool.query(
     `UPDATE usuarios SET
        rol_codigo = COALESCE($1, rol_codigo),
        nivel_autorizacion = COALESCE($2, nivel_autorizacion),
        activo = COALESCE($3, activo),
-       password_hash = COALESCE($4, password_hash)
+       password_hash = COALESCE($4, password_hash),
+       telegram_id = CASE WHEN $6 THEN $7 ELSE telegram_id END
      WHERE usuario_id = $5
-     RETURNING usuario_id, nombre_completo, email, rol_codigo, nivel_autorizacion, activo, created_at`,
-    [rol_codigo || null, nivel_autorizacion ?? null, activo ?? null, passwordHash, usuarioId]
+     RETURNING usuario_id, nombre_completo, email, rol_codigo, nivel_autorizacion, activo, telegram_id, created_at`,
+    [rol_codigo || null, nivel_autorizacion ?? null, activo ?? null, passwordHash, usuarioId, telegramIdProvided, telegramIdValue]
   );
   return r.rows[0];
 }
