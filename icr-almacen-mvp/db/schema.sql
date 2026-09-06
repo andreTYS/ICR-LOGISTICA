@@ -392,6 +392,109 @@ CREATE TABLE comprobantes (
     UNIQUE (tipo, serie_numero)
 );
 
+-- ---------- COTIZACIONES ----------
+-- Etapa previa al contrato: cotizar antes de que el cliente firme. No es
+-- CRM (PRD §4.2 deja el pipeline comercial multi-etapa fuera de alcance) —
+-- es un documento con ítems que, si el cliente acepta, se convierte en un
+-- contrato de Ventas con un clic (mismo monto, sin hitos todavía: se
+-- agregan después con el flujo normal de contratos).
+CREATE SEQUENCE cotizacion_numero_seq START 1;
+
+CREATE TABLE cotizaciones (
+    cotizacion_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo            TEXT NOT NULL UNIQUE,
+    cliente_id        UUID NOT NULL REFERENCES clientes(cliente_id),
+    proyecto_id       UUID REFERENCES proyectos(proyecto_id),
+    moneda            TEXT DEFAULT 'PEN',
+    fecha_emision     DATE NOT NULL DEFAULT CURRENT_DATE,
+    validez_dias      INT NOT NULL DEFAULT 15 CHECK (validez_dias > 0),
+    estado            TEXT NOT NULL DEFAULT 'BORRADOR' CHECK (estado IN
+                        ('BORRADOR','ENVIADA','ACEPTADA','RECHAZADA','CONVERTIDA')),
+    contrato_id       UUID REFERENCES contratos(contrato_id),
+    responsable_id    UUID REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE cotizacion_items (
+    cotizacion_item_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cotizacion_id       UUID NOT NULL REFERENCES cotizaciones(cotizacion_id) ON DELETE CASCADE,
+    descripcion         TEXT NOT NULL,
+    cantidad            NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    precio_unitario     NUMERIC(14,2) NOT NULL CHECK (precio_unitario >= 0),
+    orden               INT NOT NULL DEFAULT 1
+);
+
+-- ---------- CUENTAS POR PAGAR ----------
+-- Simétrico a Cuentas por cobrar de Ventas, pero del lado de los
+-- proveedores: registrar la factura que llega (opcionalmente ligada a una
+-- orden de compra) y sus pagos, parciales o totales. El código lo genera el
+-- sistema (FP-00001...) — el número de factura del proveedor es solo
+-- informativo, no es globalmente único entre proveedores distintos.
+CREATE SEQUENCE factura_proveedor_numero_seq START 1;
+
+CREATE TABLE facturas_proveedor (
+    factura_proveedor_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo                TEXT NOT NULL UNIQUE,
+    numero_proveedor      TEXT,
+    proveedor_id          UUID NOT NULL REFERENCES proveedores(proveedor_id),
+    orden_compra_id       UUID REFERENCES ordenes_compra(orden_compra_id),
+    monto_total           NUMERIC(14,2) NOT NULL CHECK (monto_total >= 0),
+    moneda                TEXT DEFAULT 'PEN',
+    fecha_emision         DATE NOT NULL DEFAULT CURRENT_DATE,
+    fecha_vencimiento     DATE,
+    estado                TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN
+                            ('PENDIENTE','PARCIAL','PAGADA','VENCIDA','ANULADA')),
+    registrado_por        UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE pagos_proveedor (
+    pago_proveedor_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    factura_proveedor_id  UUID NOT NULL REFERENCES facturas_proveedor(factura_proveedor_id) ON DELETE CASCADE,
+    monto                 NUMERIC(14,2) NOT NULL CHECK (monto > 0),
+    fecha_pago            DATE NOT NULL DEFAULT CURRENT_DATE,
+    metodo                TEXT,
+    registrado_por        UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- ACTIVOS Y MANTENIMIENTO ----------
+-- Un equipo instalado en casa del cliente (panel, inversor, batería) es un
+-- activo con garantía y ciclo de mantenimiento — dato que hoy vive a medias
+-- en `series` (garantia_inicio/garantia_fin/estado ya existen ahí pero sin
+-- UI) pero no tenía pantalla propia. serie_id es opcional: no todo activo
+-- instalado viene de un producto con control de número de serie.
+CREATE TABLE activos_instalados (
+    activo_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    serie_id           UUID REFERENCES series(serie_id),
+    producto_id        UUID REFERENCES productos(producto_id),
+    descripcion        TEXT NOT NULL,
+    cliente_id         UUID REFERENCES clientes(cliente_id),
+    proyecto_id        UUID REFERENCES proyectos(proyecto_id),
+    fecha_instalacion  DATE,
+    garantia_inicio    DATE,
+    garantia_fin       DATE,
+    estado             TEXT NOT NULL DEFAULT 'OPERATIVO' CHECK (estado IN
+                         ('OPERATIVO','EN_MANTENIMIENTO','FUERA_DE_SERVICIO','RETIRADO')),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (garantia_fin IS NULL OR garantia_inicio IS NULL OR garantia_fin >= garantia_inicio)
+);
+
+CREATE TABLE mantenimientos (
+    mantenimiento_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    activo_id          UUID NOT NULL REFERENCES activos_instalados(activo_id),
+    tipo               TEXT NOT NULL CHECK (tipo IN ('PREVENTIVO','CORRECTIVO')),
+    descripcion        TEXT,
+    fecha_programada   DATE,
+    fecha_realizada    DATE,
+    tecnico_id         UUID REFERENCES usuarios(usuario_id),
+    estado             TEXT NOT NULL DEFAULT 'PROGRAMADO' CHECK (estado IN
+                         ('PROGRAMADO','EN_PROCESO','COMPLETADO','CANCELADO')),
+    observaciones      TEXT,
+    registrado_por     UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- GASTOS ----------
 -- Gastos operativos: hoy el motor contable solo reaccionaba a compras
 -- recibidas y cobros de contrato, pero una empresa gasta en muchas cosas más
@@ -574,3 +677,13 @@ CREATE INDEX idx_contratos_cliente ON contratos(cliente_id);
 CREATE INDEX idx_gastos_proyecto ON gastos(proyecto_id);
 CREATE INDEX idx_gastos_fecha ON gastos(fecha);
 CREATE INDEX idx_gastos_categoria ON gastos(categoria);
+CREATE INDEX idx_facturas_proveedor_proveedor ON facturas_proveedor(proveedor_id);
+CREATE INDEX idx_facturas_proveedor_estado ON facturas_proveedor(estado);
+CREATE INDEX idx_pagos_proveedor_factura ON pagos_proveedor(factura_proveedor_id);
+CREATE INDEX idx_cotizaciones_cliente ON cotizaciones(cliente_id);
+CREATE INDEX idx_cotizaciones_estado ON cotizaciones(estado);
+CREATE INDEX idx_cotizacion_items_cotizacion ON cotizacion_items(cotizacion_id);
+CREATE INDEX idx_activos_cliente ON activos_instalados(cliente_id);
+CREATE INDEX idx_activos_proyecto ON activos_instalados(proyecto_id);
+CREATE INDEX idx_mantenimientos_activo ON mantenimientos(activo_id);
+CREATE INDEX idx_mantenimientos_estado ON mantenimientos(estado);

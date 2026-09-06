@@ -118,7 +118,8 @@ INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
 INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripcion) VALUES
     ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor'),
     ('sales.milestone_paid', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000007', 'Cobro de un hito de contrato de venta'),
-    ('expenses.register', '70000000-0000-0000-0000-000000000008', '70000000-0000-0000-0000-000000000001', 'Registro de un gasto operativo');
+    ('expenses.register', '70000000-0000-0000-0000-000000000008', '70000000-0000-0000-0000-000000000001', 'Registro de un gasto operativo'),
+    ('payables.invoice_paid', '70000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-000000000001', 'Pago de una factura de proveedor');
 
 -- ---------- RRHH: ficha de empleado ligada a los usuarios técnicos/operativos ----------
 -- El costo_hora de acá es el que Proyectos sugiere al registrar mano de obra
@@ -138,6 +139,11 @@ INSERT INTO contratos (contrato_id, codigo_contrato, cliente_id, proyecto_id, mo
 VALUES
     ('90000000-0000-0000-0000-000000000001', 'CONT-00001', '50000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', 185000.00, 'PEN', CURRENT_DATE - INTERVAL '20 days', 'VIGENTE', '00000000-0000-0000-0000-000000000005'),
     ('90000000-0000-0000-0000-000000000002', 'CONT-00002', '50000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002', 420000.00, 'PEN', CURRENT_DATE - INTERVAL '8 days', 'VIGENTE', '00000000-0000-0000-0000-000000000005');
+
+-- Los códigos de arriba son fijos (no salen de contrato_numero_seq); se
+-- adelanta la secuencia para que la próxima conversión de Cotizaciones no
+-- choque con CONT-00001/00002 ya existentes.
+SELECT setval('contrato_numero_seq', 2, true);
 
 INSERT INTO contrato_hitos (hito_id, contrato_id, descripcion, monto, fecha_esperada, orden, estado, fecha_pago, monto_pagado)
 VALUES
@@ -165,3 +171,38 @@ VALUES
     ('MANTENIMIENTO', 'Mantenimiento preventivo de camioneta', 480.00, CURRENT_DATE - INTERVAL '70 days', NULL, NULL, 'FACTURA', 'F005-00033', '00000000-0000-0000-0000-000000000003'),
     ('HONORARIOS', 'Honorarios contador externo — cierre trimestral', 900.00, CURRENT_DATE - INTERVAL '95 days', NULL, NULL, 'RECIBO', 'REC-00198', '00000000-0000-0000-0000-000000000001'),
     ('COMBUSTIBLE', 'Combustible camioneta — visita a obra Minera Altiplano', 220.00, CURRENT_DATE - INTERVAL '120 days', '60000000-0000-0000-0000-000000000002', NULL, 'BOLETA', 'B001-00312', '00000000-0000-0000-0000-000000000003');
+
+-- ---------- Cuentas por pagar: una factura pagada y una parcial ----------
+INSERT INTO facturas_proveedor (factura_proveedor_id, codigo, numero_proveedor, proveedor_id, monto_total, moneda, fecha_emision, fecha_vencimiento, estado, registrado_por)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001', 'FP-00001', 'F001-00789', '40000000-0000-0000-0000-000000000001', 8500.00, 'PEN', CURRENT_DATE - INTERVAL '25 days', CURRENT_DATE - INTERVAL '5 days', 'PAGADA', '00000000-0000-0000-0000-000000000004'),
+    ('a0000000-0000-0000-0000-000000000002', 'FP-00002', 'F002-00456', '40000000-0000-0000-0000-000000000002', 12000.00, 'PEN', CURRENT_DATE - INTERVAL '10 days', CURRENT_DATE + INTERVAL '20 days', 'PARCIAL', '00000000-0000-0000-0000-000000000004');
+SELECT setval('factura_proveedor_numero_seq', 2, true);
+
+INSERT INTO pagos_proveedor (pago_proveedor_id, factura_proveedor_id, monto, fecha_pago, metodo, registrado_por)
+VALUES
+    ('a1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 8500.00, CURRENT_DATE - INTERVAL '5 days', 'Transferencia bancaria', '00000000-0000-0000-0000-000000000004'),
+    ('a1000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 5000.00, CURRENT_DATE - INTERVAL '3 days', 'Transferencia bancaria', '00000000-0000-0000-0000-000000000004');
+
+-- ---------- Cotizaciones: una aceptada (lista para convertir), una enviada ----------
+INSERT INTO cotizaciones (cotizacion_id, codigo, cliente_id, proyecto_id, moneda, fecha_emision, validez_dias, estado, responsable_id)
+VALUES
+    ('b0000000-0000-0000-0000-000000000001', 'COT-00001', '50000000-0000-0000-0000-000000000003', NULL, 'PEN', CURRENT_DATE - INTERVAL '6 days', 15, 'ACEPTADA', '00000000-0000-0000-0000-000000000005'),
+    ('b0000000-0000-0000-0000-000000000002', 'COT-00002', '50000000-0000-0000-0000-000000000005', NULL, 'PEN', CURRENT_DATE - INTERVAL '2 days', 15, 'ENVIADA', '00000000-0000-0000-0000-000000000005');
+SELECT setval('cotizacion_numero_seq', 2, true);
+
+INSERT INTO cotizacion_items (cotizacion_item_id, cotizacion_id, descripcion, cantidad, precio_unitario, orden)
+VALUES
+    ('b1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'Panel Solar Jinko 450W', 40, 520.00, 1),
+    ('b1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'Instalación y mano de obra', 1, 12000.00, 2),
+    ('b1000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'Inversor Growatt 5kW', 2, 2100.00, 1);
+
+-- ---------- Activos instalados: uno operativo con mantenimiento programado, otro sin incidencias ----------
+INSERT INTO activos_instalados (activo_id, producto_id, descripcion, cliente_id, proyecto_id, fecha_instalacion, garantia_inicio, garantia_fin, estado)
+VALUES
+    ('c0000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', 'Inversor Growatt 5kW instalado en Fundo Vilca', '50000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', CURRENT_DATE - INTERVAL '18 days', CURRENT_DATE - INTERVAL '18 days', CURRENT_DATE + INTERVAL '712 days', 'EN_MANTENIMIENTO'),
+    ('c0000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000003', 'Batería BESS Pylontech instalada en Hotel Colca Valley', '50000000-0000-0000-0000-000000000004', '60000000-0000-0000-0000-000000000003', CURRENT_DATE - INTERVAL '3 days', CURRENT_DATE - INTERVAL '3 days', CURRENT_DATE + INTERVAL '727 days', 'OPERATIVO');
+
+INSERT INTO mantenimientos (mantenimiento_id, activo_id, tipo, descripcion, fecha_programada, tecnico_id, estado, registrado_por)
+VALUES
+    ('c1000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'PREVENTIVO', 'Revisión semestral de inversor', CURRENT_DATE + INTERVAL '10 days', '00000000-0000-0000-0000-000000000002', 'PROGRAMADO', '00000000-0000-0000-0000-000000000002');

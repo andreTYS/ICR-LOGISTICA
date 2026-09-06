@@ -129,6 +129,10 @@
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 17c.7-3.3 3-5 5.5-5s4.8 1.7 5.5 5M14 5.5c1.5.3 2.5 1.5 2.5 3s-1 2.7-2.5 3M17.5 17c-.5-2.3-1.6-3.8-3.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Proveedores</span>
             </button>
+            <button class="nav-item" data-view="payables">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h14" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 11.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Cuentas por pagar</span>
+            </button>
           </div></div>
         </div>
 
@@ -163,6 +167,10 @@
             <svg class="nav-group-chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <div class="nav-submenu" id="nav-submenu-ventas"><div>
+            <button class="nav-item" data-view="quotes">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="m7 13 1.5 1.5L12 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Cotizaciones</span>
+            </button>
             <button class="nav-item" data-view="sales-contracts">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M7 6h6M7 9.5h6M7 13h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
               <span>Contratos</span>
@@ -219,6 +227,25 @@
             <button class="nav-item" data-view="rrhh-attendance">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span>Asistencia</span>
+            </button>
+          </div></div>
+        </div>
+
+        <!-- ============ MÓDULO: ACTIVOS Y MANTENIMIENTO ============ -->
+        <div class="nav-group" data-group="assets">
+          <button class="nav-group-header" type="button" onclick="toggleNavGroup('assets')">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M12.5 3.5a3.5 3.5 0 0 0-4.6 4.6L3 13v3h3l4.9-4.9a3.5 3.5 0 0 0 4.6-4.6l-2.3 2.3-1.7-1.7 2.3-2.3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <span>Activos</span>
+            <svg class="nav-group-chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="nav-submenu" id="nav-submenu-assets"><div>
+            <button class="nav-item" data-view="assets">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>
+              <span>Activos instalados</span>
+            </button>
+            <button class="nav-item" data-view="maintenance">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Mantenimientos</span>
             </button>
           </div></div>
         </div>
@@ -765,6 +792,59 @@
         </div>
       </section>
 
+      <!-- ============ COMPRAS: CUENTAS POR PAGAR ============ -->
+      <section class="view" id="view-payables">
+        <form class="form-card mb-7" id="form-payable-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva factura de proveedor</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">RUC de proveedor
+              <input name="proveedor_ruc" required placeholder="ej. 20100047218" class="field" />
+            </label>
+            <label class="field-label">Número de factura del proveedor (opcional)
+              <input name="numero_proveedor" placeholder="ej. F001-00456" class="field" />
+            </label>
+            <label class="field-label">Orden de compra vinculada (opcional)
+              <input name="orden_compra_numero" placeholder="ej. OC-00001" class="field" />
+            </label>
+            <label class="field-label">Monto total
+              <input name="monto_total" type="number" min="0" step="0.01" required placeholder="ej. 5000" class="field" />
+            </label>
+            <label class="field-label">Fecha de emisión (opcional)
+              <input name="fecha_emision" type="date" class="field" />
+            </label>
+            <label class="field-label">Fecha de vencimiento (opcional)
+              <input name="fecha_vencimiento" type="date" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar factura</span></button>
+        </form>
+        <div id="payable-create-result" class="result-box mb-5"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6" id="payables-cards"></div>
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="payable-filter-estado" class="field w-auto" onchange="loadFacturas(1)">
+            <option value="">Todos los estados</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="PARCIAL">Parcial</option>
+            <option value="PAGADA">Pagada</option>
+            <option value="VENCIDA">Vencida</option>
+            <option value="ANULADA">Anulada</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Código</th><th class="text-left font-semibold px-3 py-2.5">Proveedor</th>
+              <th class="text-left font-semibold px-3 py-2.5">Monto total</th><th class="text-left font-semibold px-3 py-2.5">Pagado</th>
+              <th class="text-left font-semibold px-3 py-2.5">Vencimiento</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="payables-body"></tbody>
+          </table>
+          <div id="payables-pager"></div>
+        </div>
+      </section>
+
       <!-- ============ PROYECTOS ============ -->
       <section class="view" id="view-projects">
         <form class="form-card mb-7" id="form-project-create">
@@ -868,6 +948,70 @@
             </tr></thead>
             <tbody id="profitability-body"></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ============ VENTAS: COTIZACIONES ============ -->
+      <section class="view" id="view-quotes">
+        <form class="form-card mb-7" id="form-quote-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva cotización</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">RUC de cliente
+              <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
+            </label>
+            <label class="field-label">Proyecto vinculado (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+            </label>
+            <label class="field-label">Fecha de emisión (opcional)
+              <input name="fecha_emision" type="date" class="field" />
+            </label>
+            <label class="field-label">Validez (días)
+              <input name="validez_dias" type="number" min="1" placeholder="15" class="field" />
+            </label>
+          </div>
+          <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label flex-1 min-w-[160px]">Ítem — descripción
+              <input id="quote-line-descripcion" placeholder="ej. Panel solar 550W" class="field" />
+            </label>
+            <label class="field-label w-28">Cantidad
+              <input id="quote-line-cantidad" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <label class="field-label w-32">Precio unitario
+              <input id="quote-line-precio" type="number" min="0" step="0.01" class="field" />
+            </label>
+            <button type="button" class="btn-secondary" onclick="addQuoteDraftLine()">+ Agregar ítem</button>
+          </div>
+          <table class="w-full border-collapse text-sm mb-4">
+            <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+              <th class="font-semibold py-1.5 pr-3">Descripción</th><th class="font-semibold py-1.5 pr-3">Cantidad</th>
+              <th class="font-semibold py-1.5 pr-3">Precio unitario</th><th class="font-semibold py-1.5 pr-3">Subtotal</th><th class="font-semibold py-1.5"></th>
+            </tr></thead>
+            <tbody id="quote-draft-lines-body"></tbody>
+          </table>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear cotización</span></button>
+        </form>
+        <div id="quote-create-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="quote-filter-estado" class="field w-auto" onchange="loadCotizaciones(1)">
+            <option value="">Todos los estados</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="ENVIADA">Enviada</option>
+            <option value="ACEPTADA">Aceptada</option>
+            <option value="RECHAZADA">Rechazada</option>
+            <option value="CONVERTIDA">Convertida</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Código</th><th class="text-left font-semibold px-3 py-2.5">Cliente</th>
+              <th class="text-left font-semibold px-3 py-2.5">Proyecto</th><th class="text-left font-semibold px-3 py-2.5">Total</th>
+              <th class="text-left font-semibold px-3 py-2.5">Estado</th><th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="quotes-body"></tbody>
+          </table>
+          <div id="quotes-pager"></div>
         </div>
       </section>
 
@@ -1290,6 +1434,87 @@
         </div>
       </section>
 
+      <!-- ============ ACTIVOS: ACTIVOS INSTALADOS ============ -->
+      <section class="view" id="view-assets">
+        <form class="form-card mb-7" id="form-asset-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo activo instalado</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label sm:col-span-2">Descripción
+              <input name="descripcion" required placeholder="ej. Inversor Growatt 5kW instalado en techo" class="field" />
+            </label>
+            <label class="field-label">SKU de producto (opcional)
+              <input name="sku" list="sku-list" placeholder="ej. INV-GROWATT-5K" class="field" />
+            </label>
+            <label class="field-label">Número de serie (opcional)
+              <input name="serie_numero" placeholder="si el producto tiene control por serie" class="field" />
+            </label>
+            <label class="field-label">RUC de cliente (opcional)
+              <input name="cliente_ruc" placeholder="ej. 20512345678" class="field" />
+            </label>
+            <label class="field-label">Proyecto vinculado (opcional)
+              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+            </label>
+            <label class="field-label">Fecha de instalación (opcional)
+              <input name="fecha_instalacion" type="date" class="field" />
+            </label>
+            <label class="field-label">Garantía — inicio (opcional)
+              <input name="garantia_inicio" type="date" class="field" />
+            </label>
+            <label class="field-label">Garantía — fin (opcional)
+              <input name="garantia_fin" type="date" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar activo</span></button>
+        </form>
+        <div id="asset-create-result" class="result-box mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="asset-filter-estado" class="field w-auto" onchange="loadActivos(1)">
+            <option value="">Todos los estados</option>
+            <option value="OPERATIVO">Operativo</option>
+            <option value="EN_MANTENIMIENTO">En mantenimiento</option>
+            <option value="FUERA_DE_SERVICIO">Fuera de servicio</option>
+            <option value="RETIRADO">Retirado</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Descripción</th><th class="text-left font-semibold px-3 py-2.5">Producto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Cliente</th><th class="text-left font-semibold px-3 py-2.5">Proyecto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Garantía hasta</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="assets-body"></tbody>
+          </table>
+          <div id="assets-pager"></div>
+        </div>
+      </section>
+
+      <!-- ============ ACTIVOS: MANTENIMIENTOS ============ -->
+      <section class="view" id="view-maintenance">
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <select id="maintenance-filter-estado" class="field w-auto" onchange="loadMantenimientos(1)">
+            <option value="">Todos los estados</option>
+            <option value="PROGRAMADO">Programado</option>
+            <option value="EN_PROCESO">En proceso</option>
+            <option value="COMPLETADO">Completado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+        </div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Activo</th><th class="text-left font-semibold px-3 py-2.5">Tipo</th>
+              <th class="text-left font-semibold px-3 py-2.5">Fecha programada</th><th class="text-left font-semibold px-3 py-2.5">Técnico</th>
+              <th class="text-left font-semibold px-3 py-2.5">Estado</th><th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="maintenance-body"></tbody>
+          </table>
+          <div id="maintenance-pager"></div>
+        </div>
+      </section>
+
       <!-- ============ RESERVAS ============ -->
       <section class="view" id="view-reservations">
         <form class="form-card mb-7" id="form-reserve">
@@ -1602,6 +1827,126 @@
           <button class="btn-secondary" type="submit">+ Agregar hito</button>
         </form>
         <div id="milestone-add-result" class="result-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="asset-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeAssetModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="asset-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="asset-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <div class="flex items-center gap-2" id="asset-status-actions">
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setAssetStatus('OPERATIVO')">Operativo</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setAssetStatus('FUERA_DE_SERVICIO')">Fuera de servicio</button>
+          <button class="btn-danger px-3 py-1.5 text-xs" onclick="setAssetStatus('RETIRADO')">Retirar</button>
+          <button onclick="closeAssetModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Mantenimientos</h3>
+        <table class="w-full border-collapse text-sm mb-5">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Tipo</th><th class="font-semibold py-1.5 pr-3">Fecha programada</th>
+            <th class="font-semibold py-1.5 pr-3">Técnico</th><th class="font-semibold py-1.5 pr-3">Estado</th><th class="font-semibold py-1.5"></th>
+          </tr></thead>
+          <tbody id="asset-maintenance-body"></tbody>
+        </table>
+
+        <form id="form-asset-maintenance-schedule" class="flex flex-wrap items-end gap-2">
+          <label class="field-label w-40">Tipo
+            <select name="tipo" required class="field">
+              <option value="PREVENTIVO">Preventivo</option>
+              <option value="CORRECTIVO">Correctivo</option>
+            </select>
+          </label>
+          <label class="field-label flex-1 min-w-[160px]">Descripción (opcional)
+            <input name="descripcion" placeholder="ej. Revisión semestral" class="field" />
+          </label>
+          <label class="field-label w-40">Fecha programada
+            <input name="fecha_programada" type="date" class="field" />
+          </label>
+          <button class="btn-secondary" type="submit">+ Programar mantenimiento</button>
+        </form>
+        <div id="asset-maintenance-result" class="result-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="quote-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeQuoteModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="quote-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="quote-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <div class="flex items-center gap-2" id="quote-status-actions">
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setQuoteStatus('ENVIADA')">Enviar</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setQuoteStatus('ACEPTADA')">Marcar aceptada</button>
+          <button class="btn-danger px-3 py-1.5 text-xs" onclick="setQuoteStatus('RECHAZADA')">Rechazar</button>
+          <button class="btn-primary px-3 py-1.5 text-xs" onclick="convertQuote()">Convertir en contrato</button>
+          <button onclick="closeQuoteModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <table class="w-full border-collapse text-sm mb-3">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Descripción</th><th class="font-semibold py-1.5 pr-3">Cantidad</th>
+            <th class="font-semibold py-1.5 pr-3">Precio unitario</th><th class="font-semibold py-1.5">Subtotal</th>
+          </tr></thead>
+          <tbody id="quote-items-body"></tbody>
+        </table>
+        <div id="quote-total-line" class="text-right text-sm font-semibold text-navy-950 mb-2"></div>
+        <div id="quote-convert-result" class="result-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="payable-modal" class="hidden modal-overlay" onclick="if(event.target===this) closePayableModal()">
+    <div class="modal-card">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <div id="payable-modal-title" class="text-lg font-bold text-navy-950">—</div>
+          <div id="payable-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
+        </div>
+        <button onclick="closePayableModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+          <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="px-6 py-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6" id="payable-summary-cards"></div>
+
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Pagos registrados</h3>
+        <table class="w-full border-collapse text-sm mb-5">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Fecha</th><th class="font-semibold py-1.5 pr-3">Monto</th>
+            <th class="font-semibold py-1.5">Método</th>
+          </tr></thead>
+          <tbody id="payable-payments-body"></tbody>
+        </table>
+
+        <form id="form-payable-pay" class="form-card">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Registrar pago</h3>
+          <div class="grid sm:grid-cols-2 gap-4 mb-4">
+            <label class="field-label">Monto
+              <input name="monto" type="number" min="0" step="0.01" required class="field" />
+            </label>
+            <label class="field-label">Fecha de pago (opcional)
+              <input name="fecha_pago" type="date" class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Método (opcional)
+              <input name="metodo" placeholder="ej. Transferencia bancaria" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar pago</span></button>
+        </form>
+        <div id="payable-pay-result" class="result-box mt-3"></div>
       </div>
     </div>
   </div>

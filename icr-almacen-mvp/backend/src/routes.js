@@ -13,6 +13,9 @@ const dashboard = require("./services/dashboardService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
 const moduleAccess = require("./services/moduleAccessService");
+const payables = require("./services/payablesService");
+const cotizaciones = require("./services/cotizacionesService");
+const assets = require("./services/assetsService");
 const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -711,6 +714,157 @@ router.get(
     categoria: req.query.categoria || null, proyectoCodigo: req.query.proyecto_codigo || null,
     page: req.query.page, pageSize: req.query.page_size,
   }))
+);
+
+// -------- Cuentas por pagar --------
+
+router.post(
+  "/payables/invoices",
+  requirePermission("payables.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return payables.registrarFactura({
+      proveedorRuc: b.proveedor_ruc, ordenCompraNumero: b.orden_compra_numero || null, numeroProveedor: b.numero_proveedor || null,
+      montoTotal: Number(b.monto_total), moneda: b.moneda || null, fechaEmision: b.fecha_emision || null, fechaVencimiento: b.fecha_vencimiento || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/payables/invoices/:codigo/payments",
+  requirePermission("payables.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return payables.registrarPago({
+      codigo: req.params.codigo, monto: Number(b.monto), fechaPago: b.fecha_pago || null, metodo: b.metodo || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/payables/invoices",
+  requirePermission("payables.query"),
+  handle(async (req) => payables.listFacturas({
+    proveedorRuc: req.query.proveedor_ruc || null, estado: req.query.estado || null,
+    page: req.query.page, pageSize: req.query.page_size,
+  }))
+);
+
+router.get(
+  "/payables/invoices/:codigo",
+  requirePermission("payables.query"),
+  handle(async (req) => payables.getFactura(req.params.codigo))
+);
+
+router.get(
+  "/payables-report",
+  requirePermission("payables.query"),
+  handle(async (req) => payables.listCuentasPorPagar({ estado: req.query.estado || null }))
+);
+
+// -------- Cotizaciones --------
+
+router.post(
+  "/quotes",
+  requirePermission("quotes.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return cotizaciones.crearCotizacion({
+      clienteRuc: b.cliente_ruc, proyectoCodigo: b.proyecto_codigo || null, moneda: b.moneda || null,
+      fechaEmision: b.fecha_emision || null, validezDias: b.validez_dias || null, items: b.items || [],
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/quotes/:codigo/status",
+  requirePermission("quotes.manage"),
+  handle(async (req) => cotizaciones.actualizarEstado({ codigo: req.params.codigo, estado: req.body.estado, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.post(
+  "/quotes/:codigo/convert",
+  requirePermission("quotes.manage"),
+  handle(async (req) => cotizaciones.convertirAContrato({ codigo: req.params.codigo, fechaFirma: req.body?.fecha_firma || null, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.get(
+  "/quotes",
+  requirePermission("quotes.query"),
+  handle(async (req) => cotizaciones.listCotizaciones({ estado: req.query.estado || null, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/quotes/:codigo",
+  requirePermission("quotes.query"),
+  handle(async (req) => cotizaciones.getCotizacion(req.params.codigo))
+);
+
+// -------- Activos y Mantenimiento --------
+
+router.post(
+  "/assets",
+  requirePermission("assets.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return assets.crearActivo({
+      serieNumero: b.serie_numero || null, sku: b.sku || null, descripcion: b.descripcion,
+      clienteRuc: b.cliente_ruc || null, proyectoCodigo: b.proyecto_codigo || null,
+      fechaInstalacion: b.fecha_instalacion || null, garantiaInicio: b.garantia_inicio || null, garantiaFin: b.garantia_fin || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/assets/:id/status",
+  requirePermission("assets.manage"),
+  handle(async (req) => assets.actualizarEstadoActivo({ activoId: req.params.id, estado: req.body.estado, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))
+);
+
+router.get(
+  "/assets",
+  requirePermission("assets.query"),
+  handle(async (req) => assets.listActivos({
+    clienteRuc: req.query.cliente_ruc || null, proyectoCodigo: req.query.proyecto_codigo || null, estado: req.query.estado || null,
+    page: req.query.page, pageSize: req.query.page_size,
+  }))
+);
+
+router.get(
+  "/assets/:id",
+  requirePermission("assets.query"),
+  handle(async (req) => assets.getActivo(req.params.id))
+);
+
+router.post(
+  "/maintenance",
+  requirePermission("assets.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return assets.programarMantenimiento({
+      activoId: b.activo_id, tipo: b.tipo, descripcion: b.descripcion || null, fechaProgramada: b.fecha_programada || null, tecnicoId: b.tecnico_id || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/maintenance/:id/complete",
+  requirePermission("assets.manage"),
+  handle(async (req) => assets.completarMantenimiento({
+    mantenimientoId: req.params.id, fechaRealizada: req.body?.fecha_realizada || null, observaciones: req.body?.observaciones || null,
+    usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
+router.get(
+  "/maintenance",
+  requirePermission("assets.query"),
+  handle(async (req) => assets.listMantenimientos({ estado: req.query.estado || null, activoId: req.query.activo_id || null, page: req.query.page, pageSize: req.query.page_size }))
 );
 
 // -------- Panel: tableros agregados --------
