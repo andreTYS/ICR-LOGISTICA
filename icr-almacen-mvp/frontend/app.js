@@ -129,6 +129,10 @@ document.getElementById("logout-btn").addEventListener("click", () => {
   clearSession();
   document.getElementById("app-shell").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("ai-chat-widget").classList.add("hidden");
+  document.getElementById("ai-chat-panel").classList.add("hidden");
+  aiChatHistory = [];
+  document.getElementById("ai-chat-messages").innerHTML = "";
 });
 
 function initials(name) {
@@ -144,6 +148,7 @@ function enterApp() {
   document.getElementById("user-avatar").textContent = initials(user?.nombre_completo);
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
+  document.getElementById("ai-chat-widget").classList.remove("hidden");
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
@@ -284,6 +289,7 @@ async function api(path, options = {}) {
     clearSession();
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
+    document.getElementById("ai-chat-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   const json = await res.json();
@@ -302,6 +308,7 @@ async function uploadFile(path, formData) {
     clearSession();
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
+    document.getElementById("ai-chat-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   return res.json();
@@ -2869,3 +2876,56 @@ async function removeKitItemAction(kitSku, itemSku) {
   if (r.status === "success") { toast("Item quitado del kit"); loadKitItems(kitSku); loadProducts(); }
   else toast(r.error.message, false);
 }
+
+// -------- Asistente de IA (chat flotante, Gemini) --------
+let aiChatHistory = [];
+let aiChatBusy = false;
+
+function toggleAiChat() {
+  const panel = document.getElementById("ai-chat-panel");
+  panel.classList.toggle("hidden");
+  if (!panel.classList.contains("hidden")) {
+    document.getElementById("ai-chat-input").focus();
+    if (!aiChatHistory.length) {
+      appendAiChatMessage("assistant", "Hola, soy el asistente del ERP. Puedo consultar stock, compras, proyectos, ventas, gastos, cuentas por pagar/cobrar, cotizaciones y activos — pregúntame lo que necesites saber.");
+    }
+  }
+}
+
+function appendAiChatMessage(kind, text) {
+  const container = document.getElementById("ai-chat-messages");
+  const div = document.createElement("div");
+  div.className = `ai-chat-msg ${kind}`;
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+document.getElementById("form-ai-chat").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (aiChatBusy) return;
+  const input = document.getElementById("ai-chat-input");
+  const mensaje = input.value.trim();
+  if (!mensaje) return;
+  input.value = "";
+  appendAiChatMessage("user", mensaje);
+  const pending = appendAiChatMessage("pending", "Pensando…");
+  aiChatBusy = true;
+  try {
+    const r = await api("/ai/chat", { method: "POST", body: JSON.stringify({ channel: "web", mensaje, historial: aiChatHistory }) });
+    pending.remove();
+    if (r.status === "success") {
+      appendAiChatMessage("assistant", r.data.respuesta);
+      aiChatHistory.push({ role: "user", parts: [{ text: mensaje }] });
+      aiChatHistory.push({ role: "model", parts: [{ text: r.data.respuesta }] });
+    } else {
+      appendAiChatMessage("error", r.error?.message || "No se pudo consultar al asistente.");
+    }
+  } catch (err) {
+    pending.remove();
+    appendAiChatMessage("error", "No se pudo conectar con el asistente.");
+  } finally {
+    aiChatBusy = false;
+  }
+});

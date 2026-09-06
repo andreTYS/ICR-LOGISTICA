@@ -17,6 +17,7 @@ const MODULES = [
   { code: "payables", label: "Cuentas por pagar" },
   { code: "quotes", label: "Cotizaciones" },
   { code: "assets", label: "Activos y Mantenimiento" },
+  { code: "ai", label: "Asistente IA" },
 ];
 const MODULE_CODES = MODULES.map((m) => m.code);
 const TOGGLEABLE_ROLES = ["SUPERVISOR", "ALMACENERO", "COMPRAS", "VENTAS", "CONSULTA"];

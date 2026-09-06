@@ -16,6 +16,7 @@ const moduleAccess = require("./services/moduleAccessService");
 const payables = require("./services/payablesService");
 const cotizaciones = require("./services/cotizacionesService");
 const assets = require("./services/assetsService");
+const aiChat = require("./services/aiChatService");
 const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -917,6 +918,20 @@ router.post(
     return moduleAccess.setModuleAccess({
       modulo: b.modulo, rolCodigo: b.rol_codigo, habilitado: !!b.habilitado,
       usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+// -------- Asistente de IA (consulta del ERP, Gemini) --------
+
+router.post(
+  "/ai/chat",
+  requirePermission("ai.chat"),
+  handle(async (req) => {
+    const b = req.body;
+    return aiChat.chat({
+      mensaje: b.mensaje, historial: b.historial || [],
+      usuarioId: req.user.usuario_id, rolCodigo: req.user.rol_codigo, canal: b.channel || "web",
     });
   })
 );

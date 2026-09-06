@@ -28,6 +28,7 @@ const ROLE_PERMISSIONS = {
     "payables.manage", "payables.query",
     "quotes.manage", "quotes.query",
     "assets.manage", "assets.query",
+    "ai.chat",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
@@ -41,6 +42,7 @@ const ROLE_PERMISSIONS = {
     "payables.query",
     "quotes.query",
     "assets.manage", "assets.query",
+    "ai.chat",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
@@ -54,6 +56,7 @@ const ROLE_PERMISSIONS = {
     "payables.manage", "payables.query",
     "quotes.query",
     "assets.query",
+    "ai.chat",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
@@ -65,10 +68,12 @@ const ROLE_PERMISSIONS = {
     "payables.query",
     "quotes.manage", "quotes.query",
     "assets.query",
+    "ai.chat",
   ],
   CONSULTA: [
     "inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query", "rrhh.query", "sales.query", "expenses.query",
     "payables.query", "quotes.query", "assets.query",
+    "ai.chat",
   ],
 };
 
