@@ -129,6 +129,10 @@ document.getElementById("logout-btn").addEventListener("click", () => {
   clearSession();
   document.getElementById("app-shell").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("ai-chat-widget").classList.add("hidden");
+  document.getElementById("ai-chat-panel").classList.add("hidden");
+  aiChatHistory = [];
+  document.getElementById("ai-chat-messages").innerHTML = "";
 });
 
 function initials(name) {
@@ -144,6 +148,7 @@ function enterApp() {
   document.getElementById("user-avatar").textContent = initials(user?.nombre_completo);
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
+  document.getElementById("ai-chat-widget").classList.remove("hidden");
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
@@ -183,6 +188,7 @@ const titles = {
   purchases: ["Órdenes de compra", "Crear, enviar y recibir órdenes de compra"],
   "purchases-replenishment": ["Reabastecimiento", "Productos por debajo del punto de reorden, con cantidad sugerida"],
   "purchases-suppliers": ["Proveedores", "Catálogo de proveedores"],
+  payables: ["Cuentas por pagar", "Facturas de proveedor y sus pagos, parciales o totales"],
   projects: ["Proyectos", "Obras con costeo real: materiales consumidos + mano de obra vs. presupuesto"],
   "projects-clients": ["Clientes", "Catálogo de clientes"],
   "projects-profitability": ["Rentabilidad", "Costo real (materiales + mano de obra) vs. presupuesto, por proyecto"],
@@ -192,9 +198,12 @@ const titles = {
   "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
   "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
+  quotes: ["Cotizaciones", "Cotizar antes del contrato; una cotización aceptada se convierte en contrato con un clic"],
   "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
   "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
   expenses: ["Gastos", "Gastos operativos: combustible, viáticos, alquiler, servicios, reembolsos y más"],
+  assets: ["Activos instalados", "Equipos instalados en clientes, con garantía y ciclo de mantenimiento"],
+  maintenance: ["Mantenimientos", "Mantenimientos preventivos y correctivos, de todos los activos"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
@@ -229,6 +238,7 @@ function goToView(view) {
   if (view === "purchases") loadPurchaseOrders(1);
   if (view === "purchases-replenishment") loadReplenishmentSuggestions();
   if (view === "purchases-suppliers") loadSuppliers();
+  if (view === "payables") loadFacturas(1);
   if (view === "projects") loadProjects(1);
   if (view === "projects-clients") loadClients();
   if (view === "projects-profitability") loadProfitabilityReport();
@@ -238,9 +248,12 @@ function goToView(view) {
   if (view === "accounting-fiscal") loadFiscalParams();
   if (view === "rrhh-employees") loadEmployees();
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
+  if (view === "quotes") loadCotizaciones(1);
   if (view === "sales-contracts") loadContracts(1);
   if (view === "sales-receivables") loadReceivables();
   if (view === "expenses") loadExpenses(1);
+  if (view === "assets") loadActivos(1);
+  if (view === "maintenance") loadMantenimientos(1);
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
@@ -276,6 +289,7 @@ async function api(path, options = {}) {
     clearSession();
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
+    document.getElementById("ai-chat-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   const json = await res.json();
@@ -294,6 +308,7 @@ async function uploadFile(path, formData) {
     clearSession();
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
+    document.getElementById("ai-chat-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   return res.json();
@@ -1144,6 +1159,124 @@ async function loadSuppliers() {
     : emptyRow(3, "Sin proveedores registrados.", "inbox");
 }
 
+// -------- Compras: cuentas por pagar --------
+let currentPayableCodigo = null;
+const PAYABLE_STATUS_TONES = { PENDIENTE: "pendiente", PARCIAL: "pendiente", PAGADA: "ok", VENCIDA: "low", ANULADA: "devolucion" };
+function payableStatusBadge(estado) {
+  return badge(estado, PAYABLE_STATUS_TONES[estado] || "devolucion");
+}
+
+document.getElementById("form-payable-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    proveedor_ruc: f.get("proveedor_ruc"), numero_proveedor: f.get("numero_proveedor") || null,
+    orden_compra_numero: f.get("orden_compra_numero") || null, monto_total: Number(f.get("monto_total")),
+    fecha_emision: f.get("fecha_emision") || null, fecha_vencimiento: f.get("fecha_vencimiento") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/payables/invoices", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("payable-create-result", r);
+    if (r.status === "success") { toast(`Factura ${r.data.factura.codigo} registrada`); e.target.reset(); loadFacturas(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadFacturas(page) {
+  const body = document.getElementById("payables-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("payable-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/payables/invoices?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver cuentas por pagar.", "lock");
+    document.getElementById("payables-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((f) => `<tr class="${TR} cursor-pointer" onclick="openPayableModal('${f.codigo}')">
+        <td class="${TD} font-semibold text-navy-900">${f.codigo}</td><td class="${TD}">${f.proveedor_nombre || "—"}</td>
+        <td class="${TD}">${f.moneda || "PEN"} ${money(f.monto_total)}</td><td class="${TD}">${f.moneda || "PEN"} ${money(f.monto_pagado)}</td>
+        <td class="${TD}">${f.fecha_vencimiento ? new Date(f.fecha_vencimiento).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${payableStatusBadge(f.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openPayableModal('${f.codigo}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin facturas de proveedor registradas.", "inbox");
+  renderPager("payables-pager", r.data, (p) => loadFacturas(p));
+
+  const rep = await api("/payables-report");
+  if (rep.status === "success") {
+    document.getElementById("payables-cards").innerHTML = [
+      costeoCard("Pendiente", `PEN ${money(rep.data.totales.pendiente)}`, "text-amber-600"),
+      costeoCard("Vencido", `PEN ${money(rep.data.totales.vencido)}`, rep.data.totales.vencido > 0 ? "text-rose-600" : "text-navy-950"),
+    ].join("");
+  }
+}
+
+async function openPayableModal(codigo) {
+  currentPayableCodigo = codigo;
+  const modal = document.getElementById("payable-modal");
+  document.getElementById("payable-modal-title").textContent = codigo;
+  document.getElementById("payable-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("payable-summary-cards").innerHTML = "";
+  document.getElementById("payable-payments-body").innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("payable-pay-result").innerHTML = "";
+  document.getElementById("form-payable-pay").reset();
+  modal.classList.remove("hidden");
+
+  const r = await api(`/payables/invoices/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    document.getElementById("payable-modal-subtitle").textContent = r.error?.message || "No se pudo cargar la factura";
+    return;
+  }
+  const f = r.data;
+  document.getElementById("payable-modal-subtitle").innerHTML = `${f.proveedor_nombre || "—"} · ${payableStatusBadge(f.estado)}`;
+  const isTerminal = f.estado === "PAGADA" || f.estado === "ANULADA";
+  document.getElementById("form-payable-pay").classList.toggle("hidden", isTerminal);
+
+  document.getElementById("payable-summary-cards").innerHTML = [
+    costeoCard("Monto total", `${f.moneda || "PEN"} ${money(f.monto_total)}`),
+    costeoCard("Pagado", `${f.moneda || "PEN"} ${money(f.monto_pagado)}`, "text-emerald-600"),
+    costeoCard("Saldo pendiente", `${f.moneda || "PEN"} ${money(f.saldo_pendiente)}`, f.saldo_pendiente > 0 ? "text-rose-600" : "text-navy-950"),
+  ].join("");
+
+  const body = document.getElementById("payable-payments-body");
+  body.innerHTML = (f.pagos || []).length
+    ? f.pagos.map((p) => `<tr class="${TR}">
+        <td class="${TD}">${p.fecha_pago ? new Date(p.fecha_pago).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${money(p.monto)}</td><td class="${TD}">${p.metodo || "—"}</td>
+      </tr>`).join("")
+    : emptyRow(3, "Sin pagos registrados todavía.", "inbox");
+}
+
+function closePayableModal() {
+  document.getElementById("payable-modal").classList.add("hidden");
+  currentPayableCodigo = null;
+}
+
+document.getElementById("form-payable-pay").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentPayableCodigo) return;
+  const f = new FormData(e.target);
+  const payload = { channel: "web", monto: Number(f.get("monto")), fecha_pago: f.get("fecha_pago") || null, metodo: f.get("metodo") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/payables/invoices/${encodeURIComponent(currentPayableCodigo)}/payments`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("payable-pay-result", r);
+    if (r.status === "success") { toast("Pago registrado"); openPayableModal(currentPayableCodigo); loadFacturas(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePayableModal(); });
+
 // -------- Proyectos --------
 let currentProjectCodigo = null;
 
@@ -1765,6 +1898,152 @@ async function loadAttendance(page) {
   renderPager("attendance-pager", r.data, (p) => loadAttendance(p));
 }
 
+// -------- Ventas: cotizaciones --------
+let quoteDraftLines = [];
+let currentQuoteCodigo = null;
+
+function renderQuoteDraftLines() {
+  const body = document.getElementById("quote-draft-lines-body");
+  body.innerHTML = quoteDraftLines.length
+    ? quoteDraftLines.map((it, i) => `<tr class="${TR}">
+        <td class="${TD}">${it.descripcion}</td><td class="${TD}">${it.cantidad}</td>
+        <td class="${TD}">${money(it.precio_unitario)}</td><td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeQuoteDraftLine(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(5, "Agrega al menos un ítem para poder crear la cotización.", "inbox");
+}
+
+function addQuoteDraftLine() {
+  const descripcion = document.getElementById("quote-line-descripcion").value.trim();
+  const cantidad = Number(document.getElementById("quote-line-cantidad").value || 0);
+  const precio_unitario = Number(document.getElementById("quote-line-precio").value || 0);
+  if (!descripcion || cantidad <= 0 || precio_unitario < 0) { toast("Ingresa descripción, cantidad (>0) y precio unitario (>=0) del ítem", false); return; }
+  quoteDraftLines.push({ descripcion, cantidad, precio_unitario });
+  document.getElementById("quote-line-descripcion").value = "";
+  document.getElementById("quote-line-cantidad").value = "";
+  document.getElementById("quote-line-precio").value = "";
+  renderQuoteDraftLines();
+}
+function removeQuoteDraftLine(i) {
+  quoteDraftLines.splice(i, 1);
+  renderQuoteDraftLines();
+}
+renderQuoteDraftLines();
+
+document.getElementById("form-quote-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (quoteDraftLines.length === 0) { toast("Agrega al menos un ítem", false); return; }
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    cliente_ruc: f.get("cliente_ruc"), proyecto_codigo: f.get("proyecto_codigo") || null,
+    fecha_emision: f.get("fecha_emision") || null, validez_dias: f.get("validez_dias") ? Number(f.get("validez_dias")) : null,
+    items: quoteDraftLines,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/quotes", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("quote-create-result", r);
+    if (r.status === "success") {
+      toast(`Cotización ${r.data.cotizacion.codigo} creada`);
+      e.target.reset();
+      quoteDraftLines = [];
+      renderQuoteDraftLines();
+      loadCotizaciones(1);
+    } else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+const QUOTE_STATUS_TONES = { BORRADOR: "pendiente", ENVIADA: "pendiente", ACEPTADA: "ok", RECHAZADA: "low", CONVERTIDA: "devolucion" };
+function quoteStatusBadge(estado) {
+  return badge(estado, QUOTE_STATUS_TONES[estado] || "devolucion");
+}
+
+async function loadCotizaciones(page) {
+  const body = document.getElementById("quotes-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("quote-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/quotes?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver cotizaciones.", "lock");
+    document.getElementById("quotes-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((c) => `<tr class="${TR} cursor-pointer" onclick="openQuoteModal('${c.codigo}')">
+        <td class="${TD} font-semibold text-navy-900">${c.codigo}</td><td class="${TD}">${c.cliente_nombre || "—"}</td>
+        <td class="${TD}">${c.codigo_proyecto || "—"}</td><td class="${TD}">${c.moneda || "PEN"} ${money(c.total)}</td>
+        <td class="${TD}">${quoteStatusBadge(c.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openQuoteModal('${c.codigo}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin cotizaciones registradas.", "inbox");
+  renderPager("quotes-pager", r.data, (p) => loadCotizaciones(p));
+}
+
+async function openQuoteModal(codigo) {
+  currentQuoteCodigo = codigo;
+  const modal = document.getElementById("quote-modal");
+  document.getElementById("quote-modal-title").textContent = codigo;
+  document.getElementById("quote-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("quote-items-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("quote-total-line").textContent = "";
+  document.getElementById("quote-convert-result").innerHTML = "";
+  modal.classList.remove("hidden");
+
+  const r = await api(`/quotes/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    document.getElementById("quote-modal-subtitle").textContent = r.error?.message || "No se pudo cargar la cotización";
+    return;
+  }
+  const c = r.data;
+  document.getElementById("quote-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${quoteStatusBadge(c.estado)}`;
+
+  const isTerminal = c.estado === "CONVERTIDA" || c.estado === "RECHAZADA";
+  const actions = document.getElementById("quote-status-actions");
+  actions.querySelector("button[onclick=\"setQuoteStatus('ENVIADA')\"]").classList.toggle("hidden", isTerminal || c.estado !== "BORRADOR");
+  actions.querySelector("button[onclick=\"setQuoteStatus('ACEPTADA')\"]").classList.toggle("hidden", isTerminal || c.estado === "ACEPTADA");
+  actions.querySelector("button[onclick=\"setQuoteStatus('RECHAZADA')\"]").classList.toggle("hidden", isTerminal);
+  actions.querySelector("button[onclick=\"convertQuote()\"]").classList.toggle("hidden", c.estado !== "ACEPTADA");
+
+  document.getElementById("quote-items-body").innerHTML = (c.items || []).length
+    ? c.items.map((it) => `<tr class="${TR}">
+        <td class="${TD}">${it.descripcion}</td><td class="${TD}">${it.cantidad}</td>
+        <td class="${TD}">${money(it.precio_unitario)}</td><td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin ítems.", "inbox");
+  document.getElementById("quote-total-line").textContent = `Total: ${c.moneda || "PEN"} ${money(c.total)}`;
+}
+
+function closeQuoteModal() {
+  document.getElementById("quote-modal").classList.add("hidden");
+  currentQuoteCodigo = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeQuoteModal(); });
+
+async function setQuoteStatus(estado) {
+  if (!currentQuoteCodigo) return;
+  const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
+  if (r.status === "success") { toast(`Cotización ${estado.toLowerCase()}`); openQuoteModal(currentQuoteCodigo); loadCotizaciones(1); }
+  else toast(r.error.message, false);
+}
+
+async function convertQuote() {
+  if (!currentQuoteCodigo) return;
+  if (!confirm(`¿Convertir la cotización ${currentQuoteCodigo} en un contrato de Ventas?`)) return;
+  const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/convert`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  renderResult("quote-convert-result", r);
+  if (r.status === "success") {
+    toast(`Contrato ${r.data.contrato.codigo_contrato} creado a partir de la cotización`);
+    loadCotizaciones(1);
+    openQuoteModal(currentQuoteCodigo);
+  } else toast(r.error.message, false);
+}
+
 // -------- Ventas: contratos --------
 let hitoDraftLines = [];
 let currentContractCodigo = null;
@@ -2082,6 +2361,171 @@ async function loadExpenses(page) {
   renderPager("expenses-pager", r.data, (p) => loadExpenses(p));
 }
 
+// -------- Activos: activos instalados --------
+let currentAssetId = null;
+const ASSET_STATUS_TONES = { OPERATIVO: "ok", EN_MANTENIMIENTO: "pendiente", FUERA_DE_SERVICIO: "low", RETIRADO: "devolucion" };
+function assetStatusBadge(estado) {
+  return badge(estado, ASSET_STATUS_TONES[estado] || "devolucion");
+}
+const MAINTENANCE_STATUS_TONES = { PROGRAMADO: "pendiente", EN_PROCESO: "pendiente", COMPLETADO: "ok", CANCELADO: "devolucion" };
+function maintenanceStatusBadge(estado) {
+  return badge(estado, MAINTENANCE_STATUS_TONES[estado] || "devolucion");
+}
+
+document.getElementById("form-asset-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    descripcion: f.get("descripcion"), sku: f.get("sku") || null, serie_numero: f.get("serie_numero") || null,
+    cliente_ruc: f.get("cliente_ruc") || null, proyecto_codigo: f.get("proyecto_codigo") || null,
+    fecha_instalacion: f.get("fecha_instalacion") || null, garantia_inicio: f.get("garantia_inicio") || null, garantia_fin: f.get("garantia_fin") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/assets", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("asset-create-result", r);
+    if (r.status === "success") { toast("Activo registrado"); e.target.reset(); loadActivos(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadActivos(page) {
+  const body = document.getElementById("assets-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("asset-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/assets?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver activos.", "lock");
+    document.getElementById("assets-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR} cursor-pointer" onclick="openAssetModal('${a.activo_id}')">
+        <td class="${TD} font-semibold text-navy-900">${a.descripcion}</td><td class="${TD}">${a.sku || "—"}</td>
+        <td class="${TD}">${a.cliente_nombre || "—"}</td><td class="${TD}">${a.codigo_proyecto || "—"}</td>
+        <td class="${TD}">${a.garantia_fin ? new Date(a.garantia_fin).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${assetStatusBadge(a.estado)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openAssetModal('${a.activo_id}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin activos registrados.", "inbox");
+  renderPager("assets-pager", r.data, (p) => loadActivos(p));
+}
+
+async function openAssetModal(activoId) {
+  currentAssetId = activoId;
+  const modal = document.getElementById("asset-modal");
+  document.getElementById("asset-modal-title").textContent = "Cargando…";
+  document.getElementById("asset-modal-subtitle").textContent = "";
+  document.getElementById("asset-maintenance-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("asset-maintenance-result").innerHTML = "";
+  document.getElementById("form-asset-maintenance-schedule").reset();
+  modal.classList.remove("hidden");
+
+  const r = await api(`/assets/${encodeURIComponent(activoId)}`);
+  if (r.status !== "success") {
+    document.getElementById("asset-modal-subtitle").textContent = r.error?.message || "No se pudo cargar el activo";
+    return;
+  }
+  const a = r.data;
+  document.getElementById("asset-modal-title").textContent = a.descripcion;
+  document.getElementById("asset-modal-subtitle").innerHTML = `${a.cliente_nombre || "—"} ${a.codigo_proyecto ? `· Proyecto ${a.codigo_proyecto}` : ""} · ${assetStatusBadge(a.estado)}`;
+
+  const actions = document.getElementById("asset-status-actions");
+  actions.querySelector("button[onclick=\"setAssetStatus('OPERATIVO')\"]").classList.toggle("hidden", a.estado === "OPERATIVO" || a.estado === "RETIRADO");
+  actions.querySelector("button[onclick=\"setAssetStatus('FUERA_DE_SERVICIO')\"]").classList.toggle("hidden", a.estado === "FUERA_DE_SERVICIO" || a.estado === "RETIRADO");
+  actions.querySelector("button[onclick=\"setAssetStatus('RETIRADO')\"]").classList.toggle("hidden", a.estado === "RETIRADO");
+  document.getElementById("form-asset-maintenance-schedule").classList.toggle("hidden", a.estado === "RETIRADO");
+
+  const body = document.getElementById("asset-maintenance-body");
+  body.innerHTML = (a.mantenimientos || []).length
+    ? a.mantenimientos.map((m) => {
+        const abierto = m.estado === "PROGRAMADO" || m.estado === "EN_PROCESO";
+        return `<tr class="${TR}">
+          <td class="${TD}">${m.tipo}</td><td class="${TD}">${m.fecha_programada ? new Date(m.fecha_programada).toLocaleDateString("es-PE") : "—"}</td>
+          <td class="${TD}">${m.tecnico_nombre || "—"}</td><td class="${TD}">${maintenanceStatusBadge(m.estado)}</td>
+          <td class="${TD}">${abierto ? `<button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="completeMaintenance('${m.mantenimiento_id}')">Completar</button>` : "—"}</td>
+        </tr>`;
+      }).join("")
+    : emptyRow(5, "Sin mantenimientos registrados todavía.", "inbox");
+}
+
+function closeAssetModal() {
+  document.getElementById("asset-modal").classList.add("hidden");
+  currentAssetId = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAssetModal(); });
+
+async function setAssetStatus(estado) {
+  if (!currentAssetId) return;
+  const r = await api(`/assets/${encodeURIComponent(currentAssetId)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
+  if (r.status === "success") { toast("Estado actualizado"); openAssetModal(currentAssetId); loadActivos(1); }
+  else toast(r.error.message, false);
+}
+
+document.getElementById("form-asset-maintenance-schedule").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentAssetId) return;
+  const f = new FormData(e.target);
+  const payload = { channel: "web", activo_id: currentAssetId, tipo: f.get("tipo"), descripcion: f.get("descripcion") || null, fecha_programada: f.get("fecha_programada") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/maintenance", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("asset-maintenance-result", r);
+    if (r.status === "success") { toast("Mantenimiento programado"); openAssetModal(currentAssetId); loadActivos(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function completeMaintenance(mantenimientoId) {
+  if (!confirm("¿Marcar este mantenimiento como completado?")) return;
+  const r = await api(`/maintenance/${encodeURIComponent(mantenimientoId)}/complete`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  if (r.status === "success") { toast("Mantenimiento completado"); openAssetModal(currentAssetId); loadActivos(1); }
+  else toast(r.error.message, false);
+}
+
+// -------- Activos: mantenimientos (listado global) --------
+async function loadMantenimientos(page) {
+  const body = document.getElementById("maintenance-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("maintenance-filter-estado").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 30 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/maintenance?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver mantenimientos.", "lock");
+    document.getElementById("maintenance-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((m) => {
+        const abierto = m.estado === "PROGRAMADO" || m.estado === "EN_PROCESO";
+        return `<tr class="${TR} cursor-pointer" onclick="openAssetModal('${m.activo_id}')">
+          <td class="${TD} font-semibold text-navy-900">${m.activo_descripcion}</td><td class="${TD}">${m.tipo}</td>
+          <td class="${TD}">${m.fecha_programada ? new Date(m.fecha_programada).toLocaleDateString("es-PE") : "—"}</td>
+          <td class="${TD}">${m.tecnico_nombre || "—"}</td><td class="${TD}">${maintenanceStatusBadge(m.estado)}</td>
+          <td class="${TD}">${abierto ? `<button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); completeMaintenanceFromList('${m.mantenimiento_id}')">Completar</button>` : "—"}</td>
+        </tr>`;
+      }).join("")
+    : emptyRow(6, "Sin mantenimientos registrados.", "inbox");
+  renderPager("maintenance-pager", r.data, (p) => loadMantenimientos(p));
+}
+
+async function completeMaintenanceFromList(mantenimientoId) {
+  if (!confirm("¿Marcar este mantenimiento como completado?")) return;
+  const r = await api(`/maintenance/${encodeURIComponent(mantenimientoId)}/complete`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  if (r.status === "success") { toast("Mantenimiento completado"); loadMantenimientos(1); }
+  else toast(r.error.message, false);
+}
+
 // -------- Reservas --------
 document.getElementById("form-reserve").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2242,10 +2686,10 @@ document.getElementById("form-user").addEventListener("submit", async (e) => {
 
 async function loadUsers() {
   const body = document.getElementById("users-body");
-  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/users");
   if (r.status !== "success") {
-    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para gestionar usuarios.", "lock");
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para gestionar usuarios.", "lock");
     return;
   }
   const items = r.data || [];
@@ -2255,18 +2699,31 @@ async function loadUsers() {
         <td class="${TD}">${u.rol_codigo}</td>
         <td class="${TD}">${badge(u.activo ? "ACTIVO" : "INACTIVO", u.activo ? "ok" : "devolucion")}</td>
         <td class="${TD}">
+          <div class="flex items-center gap-1.5">
+            <input type="text" value="${u.telegram_id || ""}" placeholder="sin vincular" class="field w-28 text-xs py-1" id="telegram-id-${u.usuario_id}" />
+            <button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="saveTelegramId('${u.usuario_id}')">Guardar</button>
+          </div>
+        </td>
+        <td class="${TD}">
           <button class="${u.activo ? "btn-danger" : "btn-secondary"} px-3 py-1.5 text-xs" onclick="toggleUserActive('${u.usuario_id}', ${!u.activo})">
             ${u.activo ? "Desactivar" : "Activar"}
           </button>
         </td>
       </tr>`).join("")
-    : emptyRow(5, "Sin usuarios.", "inbox");
+    : emptyRow(6, "Sin usuarios.", "inbox");
 }
 
 async function toggleUserActive(usuarioId, nextActive) {
   if (!confirm(`¿${nextActive ? "Activar" : "Desactivar"} este usuario?`)) return;
   const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ activo: nextActive }) });
   if (r.status === "success") { toast(`Usuario ${nextActive ? "activado" : "desactivado"}`); loadUsers(); }
+  else toast(r.error.message, false);
+}
+
+async function saveTelegramId(usuarioId) {
+  const input = document.getElementById(`telegram-id-${usuarioId}`);
+  const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ telegram_id: input.value.trim() }) });
+  if (r.status === "success") { toast("Telegram ID actualizado"); loadUsers(); }
   else toast(r.error.message, false);
 }
 
@@ -2432,3 +2889,56 @@ async function removeKitItemAction(kitSku, itemSku) {
   if (r.status === "success") { toast("Item quitado del kit"); loadKitItems(kitSku); loadProducts(); }
   else toast(r.error.message, false);
 }
+
+// -------- Asistente de IA (chat flotante, Gemini) --------
+let aiChatHistory = [];
+let aiChatBusy = false;
+
+function toggleAiChat() {
+  const panel = document.getElementById("ai-chat-panel");
+  panel.classList.toggle("hidden");
+  if (!panel.classList.contains("hidden")) {
+    document.getElementById("ai-chat-input").focus();
+    if (!aiChatHistory.length) {
+      appendAiChatMessage("assistant", "Hola, soy el asistente del ERP. Puedo consultar stock, compras, proyectos, ventas, gastos, cuentas por pagar/cobrar, cotizaciones y activos — pregúntame lo que necesites saber.");
+    }
+  }
+}
+
+function appendAiChatMessage(kind, text) {
+  const container = document.getElementById("ai-chat-messages");
+  const div = document.createElement("div");
+  div.className = `ai-chat-msg ${kind}`;
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+document.getElementById("form-ai-chat").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (aiChatBusy) return;
+  const input = document.getElementById("ai-chat-input");
+  const mensaje = input.value.trim();
+  if (!mensaje) return;
+  input.value = "";
+  appendAiChatMessage("user", mensaje);
+  const pending = appendAiChatMessage("pending", "Pensando…");
+  aiChatBusy = true;
+  try {
+    const r = await api("/ai/chat", { method: "POST", body: JSON.stringify({ channel: "web", mensaje, historial: aiChatHistory }) });
+    pending.remove();
+    if (r.status === "success") {
+      appendAiChatMessage("assistant", r.data.respuesta);
+      aiChatHistory.push({ role: "user", parts: [{ text: mensaje }] });
+      aiChatHistory.push({ role: "model", parts: [{ text: r.data.respuesta }] });
+    } else {
+      appendAiChatMessage("error", r.error?.message || "No se pudo consultar al asistente.");
+    }
+  } catch (err) {
+    pending.remove();
+    appendAiChatMessage("error", "No se pudo conectar con el asistente.");
+  } finally {
+    aiChatBusy = false;
+  }
+});

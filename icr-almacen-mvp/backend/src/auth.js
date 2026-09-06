@@ -25,6 +25,10 @@ const ROLE_PERMISSIONS = {
     "rrhh.employee.manage", "rrhh.attendance.mark", "rrhh.query",
     "sales.contract.manage", "sales.query",
     "expenses.register", "expenses.query",
+    "payables.manage", "payables.query",
+    "quotes.manage", "quotes.query",
+    "assets.manage", "assets.query",
+    "ai.chat",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
@@ -35,6 +39,10 @@ const ROLE_PERMISSIONS = {
     "rrhh.attendance.mark", "rrhh.query",
     "sales.query",
     "expenses.register", "expenses.query",
+    "payables.query",
+    "quotes.query",
+    "assets.manage", "assets.query",
+    "ai.chat",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
@@ -45,6 +53,10 @@ const ROLE_PERMISSIONS = {
     "rrhh.attendance.mark", "rrhh.query",
     "sales.query",
     "expenses.register", "expenses.query",
+    "payables.manage", "payables.query",
+    "quotes.query",
+    "assets.query",
+    "ai.chat",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
@@ -53,8 +65,16 @@ const ROLE_PERMISSIONS = {
     "rrhh.attendance.mark", "rrhh.query",
     "sales.contract.manage", "sales.query",
     "expenses.register", "expenses.query",
+    "payables.query",
+    "quotes.manage", "quotes.query",
+    "assets.query",
+    "ai.chat",
   ],
-  CONSULTA: ["inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query", "rrhh.query", "sales.query", "expenses.query"],
+  CONSULTA: [
+    "inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query", "rrhh.query", "sales.query", "expenses.query",
+    "payables.query", "quotes.query", "assets.query",
+    "ai.chat",
+  ],
 };
 
 function can(rolCodigo, action) {
