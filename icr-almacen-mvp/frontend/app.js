@@ -199,6 +199,7 @@ const titles = {
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
   users: ["Usuarios", "Altas y roles de acceso al panel (solo administradores)"],
+  "module-access": ["Módulos", "Activar o desactivar módulos completos por rol (solo administradores)"],
   settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
@@ -244,6 +245,7 @@ function goToView(view) {
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
   if (view === "users") loadUsers();
+  if (view === "module-access") loadModuleAccess();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -2266,6 +2268,38 @@ async function toggleUserActive(usuarioId, nextActive) {
   const r = await api(`/users/${usuarioId}`, { method: "PATCH", body: JSON.stringify({ activo: nextActive }) });
   if (r.status === "success") { toast(`Usuario ${nextActive ? "activado" : "desactivado"}`); loadUsers(); }
   else toast(r.error.message, false);
+}
+
+// -------- Switch de módulos --------
+const MODULE_ACCESS_ROLES = ["SUPERVISOR", "ALMACENERO", "COMPRAS", "VENTAS", "CONSULTA"];
+
+function moduleToggleSwitch(modulo, rol, checked) {
+  return `<label class="relative inline-flex items-center cursor-pointer">
+    <input type="checkbox" class="sr-only peer" ${checked ? "checked" : ""} onchange="toggleModuleAccess('${modulo}','${rol}', this.checked)" />
+    <div class="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 transition-colors"></div>
+    <div class="absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+  </label>`;
+}
+
+async function loadModuleAccess() {
+  const body = document.getElementById("module-access-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/admin/module-access");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para gestionar módulos.", "lock");
+    return;
+  }
+  const { access } = r.data;
+  body.innerHTML = access.map((row) => `<tr class="${TR}">
+      <td class="${TD} font-semibold text-navy-900">${row.label}</td>
+      ${MODULE_ACCESS_ROLES.map((rol) => `<td class="${TD} text-center">${moduleToggleSwitch(row.modulo, rol, row.roles[rol])}</td>`).join("")}
+    </tr>`).join("");
+}
+
+async function toggleModuleAccess(modulo, rol, habilitado) {
+  const r = await api("/admin/module-access", { method: "POST", body: JSON.stringify({ channel: "web", modulo, rol_codigo: rol, habilitado }) });
+  if (r.status === "success") toast(`Módulo ${habilitado ? "habilitado" : "deshabilitado"} para ${rol}`);
+  else { toast(r.error.message, false); loadModuleAccess(); }
 }
 
 // -------- Configuración: logo --------

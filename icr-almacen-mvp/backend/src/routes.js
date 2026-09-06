@@ -12,6 +12,7 @@ const gastos = require("./services/gastosService");
 const dashboard = require("./services/dashboardService");
 const users = require("./services/userService");
 const settings = require("./services/settingsService");
+const moduleAccess = require("./services/moduleAccessService");
 const { upload, processAndSaveImage } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -744,6 +745,26 @@ router.patch(
   "/users/:id",
   requirePermission("users.manage"),
   handle(async (req) => users.updateUser(req.params.id, req.body))
+);
+
+// -------- Switch de módulos (solo ADMIN vía wildcard '*') --------
+
+router.get(
+  "/admin/module-access",
+  requirePermission("users.manage"),
+  handle(async () => moduleAccess.listModuleAccess())
+);
+
+router.post(
+  "/admin/module-access",
+  requirePermission("users.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return moduleAccess.setModuleAccess({
+      modulo: b.modulo, rolCodigo: b.rol_codigo, habilitado: !!b.habilitado,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
 );
 
 // -------- Configuración (logo, solo ADMIN vía wildcard '*') --------

@@ -27,6 +27,18 @@ CREATE TABLE catalogos (
     UNIQUE (tipo, codigo)
 );
 
+-- El ADMIN nunca aparece acá — siempre ve todos los módulos, para que nadie
+-- pueda bloquearse el propio acceso por error. La ausencia de una fila para
+-- un (modulo, rol) significa habilitado (true) por defecto: activar esto no
+-- rompe nada de lo que ya existía antes de este switch.
+CREATE TABLE modulo_acceso (
+    modulo_acceso_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    modulo            TEXT NOT NULL,
+    rol_codigo        TEXT NOT NULL CHECK (rol_codigo IN ('SUPERVISOR','ALMACENERO','COMPRAS','VENTAS','CONSULTA')),
+    habilitado        BOOLEAN NOT NULL DEFAULT true,
+    UNIQUE (modulo, rol_codigo)
+);
+
 -- ---------- MAESTROS ----------
 
 CREATE TABLE usuarios (
