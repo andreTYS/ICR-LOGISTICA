@@ -4,6 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const routes = require("./routes");
 const { uploadsDir } = require("./uploads");
+const { reloadModuleAccessCache } = require("./services/moduleAccessService");
 
 const app = express();
 
@@ -27,6 +28,10 @@ app.use(express.static(path.join(__dirname, "..", "..", "frontend")));
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`ICR Almacén backend escuchando en puerto ${PORT}`);
-});
+reloadModuleAccessCache()
+  .catch((err) => console.error("No se pudo cargar el switch de módulos al arrancar (se asume todo habilitado)", err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`ICR Almacén backend escuchando en puerto ${PORT}`);
+    });
+  });

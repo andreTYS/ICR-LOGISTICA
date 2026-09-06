@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { pool } = require("./db");
 const { AppError } = require("./errors");
+const { isModuleEnabledForRole } = require("./services/moduleAccessService");
 
 if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET es obligatorio en producción (NODE_ENV=production). Define la variable de entorno antes de arrancar.");
@@ -108,7 +109,11 @@ function requireAuth(req, res, next) {
   }
 }
 
-// Middleware factory: exige que el rol del usuario autenticado permita esta acción
+// Middleware factory: exige que el rol del usuario autenticado permita esta
+// acción Y que el módulo al que pertenece (prefijo antes del primer punto,
+// ej. "purchases" en "purchases.create") esté habilitado para su rol — el
+// switch de módulos del admin actúa acá, encima del mapa de permisos fijo.
+// ADMIN nunca pasa por el switch: siempre ve todo.
 function requirePermission(action) {
   return (req, res, next) => {
     if (!req.user) {
@@ -118,6 +123,13 @@ function requirePermission(action) {
       return res.status(403).json({
         status: "error", data: null,
         error: { code: "AUTH_FORBIDDEN", message: `El rol ${req.user.rol_codigo} no tiene permiso para ${action}` },
+      });
+    }
+    const modulo = action.split(".")[0];
+    if (req.user.rol_codigo !== "ADMIN" && !isModuleEnabledForRole(modulo, req.user.rol_codigo)) {
+      return res.status(403).json({
+        status: "error", data: null,
+        error: { code: "MODULE_DISABLED", message: `El módulo '${modulo}' está desactivado para tu rol` },
       });
     }
     next();
