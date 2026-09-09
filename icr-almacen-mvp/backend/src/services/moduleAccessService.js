@@ -20,6 +20,7 @@ const MODULES = [
   { code: "ai", label: "Asistente IA" },
   { code: "crm", label: "CRM / Pipeline comercial" },
   { code: "documents", label: "Gestión documental" },
+  { code: "calendar", label: "Calendario" },
 ];
 const MODULE_CODES = MODULES.map((m) => m.code);
 const TOGGLEABLE_ROLES = ["SUPERVISOR", "ALMACENERO", "COMPRAS", "VENTAS", "CONSULTA"];

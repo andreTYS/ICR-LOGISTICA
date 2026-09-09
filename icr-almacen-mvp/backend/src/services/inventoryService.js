@@ -353,6 +353,87 @@ async function createProduct(data) {
   return r.rows[0];
 }
 
+// Parser de CSV mínimo (RFC 4180: campos entre comillas, comas y saltos de
+// línea escapados con "" dentro de la comilla) — no se suma una librería
+// externa solo para esto, es una gramática chica y estable.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      row.push(field); field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== "" || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.filter((r) => !(r.length === 1 && r[0].trim() === ""));
+}
+
+// Importación masiva de productos vía CSV desde el panel. Cada fila se
+// intenta de forma independiente (no es una transacción única): un SKU
+// duplicado o inválido en una fila no aborta el resto, así un archivo con
+// 200 filas y 3 errores igual crea las otras 197. Mismo criterio de
+// permiso/validación que crear un producto uno por uno.
+async function importProductsCsv(csvText) {
+  if (!csvText || !csvText.trim()) {
+    throw new AppError("SCHEMA_INVALID", "El archivo CSV está vacío", 400);
+  }
+  const rows = parseCsv(csvText.trim());
+  if (rows.length < 2) {
+    throw new AppError("SCHEMA_INVALID", "El CSV debe tener una fila de encabezado y al menos una fila de datos", 400);
+  }
+  const headers = rows[0].map((h) => h.trim().toLowerCase());
+  for (const col of ["sku", "nombre", "tipo_control"]) {
+    if (!headers.includes(col)) {
+      throw new AppError("SCHEMA_INVALID", `Falta la columna obligatoria "${col}" en el encabezado del CSV`, 400);
+    }
+  }
+
+  const detalle = [];
+  for (let i = 1; i < rows.length; i++) {
+    const values = rows[i];
+    const data = {};
+    headers.forEach((h, idx) => { data[h] = (values[idx] ?? "").trim(); });
+    try {
+      await createProduct({
+        sku: data.sku, nombre: data.nombre, marca: data.marca || null, modelo: data.modelo || null,
+        unidad_medida: data.unidad_medida || null, tipo_control: data.tipo_control,
+        stock_minimo: data.stock_minimo ? Number(data.stock_minimo) : 0,
+        punto_reorden: data.punto_reorden ? Number(data.punto_reorden) : 0,
+        stock_maximo: data.stock_maximo ? Number(data.stock_maximo) : null,
+        costo_unitario: data.costo_unitario ? Number(data.costo_unitario) : 0,
+      });
+      detalle.push({ fila: i + 1, sku: data.sku, ok: true });
+    } catch (err) {
+      const mensaje = err.code === "23505" ? `El SKU '${data.sku}' ya existe` : (err.message || "Error desconocido");
+      detalle.push({ fila: i + 1, sku: data.sku, ok: false, error: mensaje });
+    }
+  }
+  return {
+    total: detalle.length,
+    exitosos: detalle.filter((d) => d.ok).length,
+    fallidos: detalle.filter((d) => !d.ok).length,
+    detalle,
+  };
+}
+
 async function setProductPhoto(sku, imagenUrl) {
   const r = await pool.query(
     "UPDATE productos SET imagen_url = $1 WHERE sku = $2 AND activo = true RETURNING *",
@@ -732,7 +813,7 @@ async function getAuditLog({ accion, resultado, limit = 100 }) {
 
 module.exports = {
   receive, remove, transfer,
-  getStock, searchProducts, createProduct, getMovements, getAlerts, listWarehouses,
+  getStock, searchProducts, createProduct, importProductsCsv, getMovements, getAlerts, listWarehouses,
   listWarehousesManaged, crearAlmacen, actualizarAlmacen, crearUbicacion, actualizarUbicacion,
   reserve, releaseReservation, getReservations,
   adjustCreate, adjustDecide, getAdjustments,

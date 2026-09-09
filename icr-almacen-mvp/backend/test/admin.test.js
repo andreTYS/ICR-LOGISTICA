@@ -25,6 +25,7 @@ test("getIntegrationsStatus nunca devuelve el valor de las variables, solo si es
     let status = admin.getIntegrationsStatus();
     assert.equal(status.gemini.configurado, false);
     assert.equal(status.telegram_bot.configurado, false);
+    assert.equal(status.google_drive.configurado, false);
     assert.ok(!JSON.stringify(status).includes("secreto-de-prueba"));
 
     process.env.GEMINI_API_KEY = "secreto-de-prueba";

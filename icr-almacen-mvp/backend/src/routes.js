@@ -21,6 +21,9 @@ const telegram = require("./services/telegramService");
 const admin = require("./services/adminService");
 const crm = require("./services/crmService");
 const archivos = require("./services/archivosService");
+const calendario = require("./services/calendarioService");
+const openapi = require("./openapi");
+const driveService = require("./services/driveService");
 const { upload, processAndSaveImage, uploadDocument, saveDocumentFile } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -97,6 +100,15 @@ router.post(
   })
 );
 
+// Pública: documentación exportable para integradores (N8N y similares) —
+// generada leyendo las rutas reales, nunca queda desactualizada. Devuelve
+// el documento OpenAPI tal cual (sin el sobre {status,data,error} del resto
+// de la API) porque se espera importar esta respuesta directo en un cliente
+// OpenAPI (Swagger UI, el importador de N8N, etc).
+router.get("/openapi.json", (req, res) => {
+  res.json(openapi.buildOpenApiSpec());
+});
+
 // A partir de aquí, todo comando requiere sesión válida (Authorization: Bearer <token>)
 router.use(requireAuth);
 
@@ -160,6 +172,12 @@ router.post(
   "/inventory/product",
   requirePermission("inventory.product.create"),
   handle(async (req) => inventory.createProduct(req.body))
+);
+
+router.post(
+  "/inventory/products/import-csv",
+  requirePermission("inventory.product.create"),
+  handle(async (req) => inventory.importProductsCsv(req.body.csv))
 );
 
 router.post(
@@ -1031,7 +1049,15 @@ router.post(
   uploadDocument.single("archivo"),
   handle(async (req) => {
     if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
-    const { url, tipoArchivo, tamanoBytes } = await saveDocumentFile(req.file);
+    let url, tipoArchivo, tamanoBytes;
+    if (req.body.destino === "drive") {
+      const drive = await driveService.uploadFile({ buffer: req.file.buffer, filename: req.body.nombre || req.file.originalname, mimeType: req.file.mimetype });
+      url = drive.webViewLink;
+      tipoArchivo = req.file.mimetype;
+      tamanoBytes = req.file.buffer.length;
+    } else {
+      ({ url, tipoArchivo, tamanoBytes } = await saveDocumentFile(req.file));
+    }
     return archivos.subirArchivo({
       entidadTipo: req.body.entidad_tipo, entidadId: req.body.entidad_id, nombre: req.body.nombre || req.file.originalname,
       url, tipoArchivo, tamanoBytes, usuarioId: req.user.usuario_id, canal: req.body.channel || "web",
@@ -1119,6 +1145,34 @@ router.get(
   handle(async () => admin.getIntegrationsStatus())
 );
 
+// -------- Tokens de servicio para integraciones (N8N y similares, solo ADMIN) --------
+
+router.get(
+  "/admin/api-tokens",
+  requirePermission("users.manage"),
+  handle(async () => admin.listApiTokens())
+);
+
+router.post(
+  "/admin/api-tokens",
+  requirePermission("users.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return admin.crearApiToken({
+      actuaComoUsuarioId: b.usuario_id, etiqueta: b.etiqueta, expiraDias: b.expira_dias ? Number(b.expira_dias) : null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/admin/api-tokens/:id/revoke",
+  requirePermission("users.manage"),
+  handle(async (req) => admin.revocarApiToken({
+    apiTokenId: req.params.id, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
 // -------- Asistente de IA (consulta del ERP, Gemini) --------
 
 router.post(
@@ -1131,6 +1185,18 @@ router.post(
       usuarioId: req.user.usuario_id, rolCodigo: req.user.rol_codigo, canal: b.channel || "web",
     });
   })
+);
+
+// -------- Calendario (agenda unificada de solo lectura) --------
+
+router.get(
+  "/calendar/events",
+  requirePermission("calendar.query"),
+  handle(async (req) => calendario.getEventos({
+    desde: req.query.desde || null,
+    hasta: req.query.hasta || null,
+    tipos: req.query.tipos ? String(req.query.tipos).split(",") : null,
+  }))
 );
 
 // -------- Configuración (logo, solo ADMIN vía wildcard '*') --------
