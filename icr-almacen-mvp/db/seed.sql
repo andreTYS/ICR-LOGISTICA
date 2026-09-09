@@ -206,3 +206,22 @@ VALUES
 INSERT INTO mantenimientos (mantenimiento_id, activo_id, tipo, descripcion, fecha_programada, tecnico_id, estado, registrado_por)
 VALUES
     ('c1000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'PREVENTIVO', 'Revisión semestral de inversor', CURRENT_DATE + INTERVAL '10 days', '00000000-0000-0000-0000-000000000002', 'PROGRAMADO', '00000000-0000-0000-0000-000000000002');
+
+-- Un tercer activo con garantía por vencer pronto, para que la pantalla de
+-- Activos → Garantías por vencer tenga algo que mostrar desde el día uno.
+INSERT INTO activos_instalados (activo_id, producto_id, descripcion, cliente_id, proyecto_id, fecha_instalacion, garantia_inicio, garantia_fin, estado)
+VALUES
+    ('c0000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000001', 'Panel Solar JA Solar 550W instalado en Fundo Vilca', '50000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', CURRENT_DATE - INTERVAL '700 days', CURRENT_DATE - INTERVAL '700 days', CURRENT_DATE + INTERVAL '25 days', 'OPERATIVO');
+
+-- ---------- CRM: leads en distintas etapas del pipeline ----------
+INSERT INTO leads (lead_id, codigo, nombre_contacto, empresa, telefono, email, cliente_id, origen, etapa, monto_estimado, moneda, responsable_id, fecha_proximo_seguimiento, notas)
+VALUES
+    ('d0000000-0000-0000-0000-000000000001', 'LEAD-00001', 'Rosa Medina', 'Agroindustrias Majes S.A.C.', '954112233', 'rmedina@agromajes.example', '50000000-0000-0000-0000-000000000003', 'REFERIDO', 'CONTACTADO', 18000.00, 'PEN', '00000000-0000-0000-0000-000000000005', CURRENT_DATE + INTERVAL '3 days', 'Interesada en sistema híbrido para planta de empaque'),
+    ('d0000000-0000-0000-0000-000000000002', 'LEAD-00002', 'Carlos Huamán', NULL, '987654321', 'carlos.huaman@example.com', NULL, 'WEB', 'NUEVO', NULL, 'PEN', '00000000-0000-0000-0000-000000000005', CURRENT_DATE + INTERVAL '1 days', 'Consulta desde el formulario web, todavía sin calificar'),
+    ('d0000000-0000-0000-0000-000000000003', 'LEAD-00003', 'Municipalidad de Yanque — Obras', 'Municipalidad Distrital de Yanque', '958221144', NULL, '50000000-0000-0000-0000-000000000005', 'LLAMADA', 'PERDIDO', 45000.00, 'PEN', '00000000-0000-0000-0000-000000000005', NULL, NULL);
+UPDATE leads SET motivo_perdida = 'Se adjudicó a otro proveedor en la licitación' WHERE lead_id = 'd0000000-0000-0000-0000-000000000003';
+SELECT setval('lead_numero_seq', 3, true);
+
+INSERT INTO lead_actividades (actividad_id, lead_id, tipo, descripcion, fecha, registrado_por)
+VALUES
+    ('d1000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', 'LLAMADA', 'Primera llamada: explicó su consumo eléctrico mensual y pidió una propuesta técnica', CURRENT_DATE - INTERVAL '2 days', '00000000-0000-0000-0000-000000000005');

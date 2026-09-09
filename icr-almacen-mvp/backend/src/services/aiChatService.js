@@ -10,6 +10,7 @@ const dashboard = require("./dashboardService");
 const payables = require("./payablesService");
 const cotizaciones = require("./cotizacionesService");
 const assets = require("./assetsService");
+const crm = require("./crmService");
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const MAX_TOOL_CALLS = 4;
@@ -91,6 +92,13 @@ const TOOLS = [
     permission: "assets.query",
     parameters: { type: "object", properties: { estado: { type: "string", description: "Estado a filtrar (opcional)." } } },
     handler: async (args) => assets.listActivos({ estado: args?.estado || null, pageSize: 50 }),
+  },
+  {
+    name: "get_leads",
+    description: "Lista de leads/oportunidades del pipeline comercial (CRM), opcionalmente filtrados por etapa (NUEVO, CONTACTADO, CALIFICADO, PROPUESTA, GANADO, PERDIDO).",
+    permission: "crm.query",
+    parameters: { type: "object", properties: { etapa: { type: "string", description: "Etapa a filtrar (opcional)." } } },
+    handler: async (args) => crm.listLeads({ etapa: args?.etapa || null, pageSize: 50 }),
   },
   {
     name: "get_expenses",

@@ -17,7 +17,7 @@ const ROLE_PERMISSIONS = {
     "inventory.receive", "inventory.remove", "inventory.transfer",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
     "inventory.adjust", "inventory.adjust.approve", "inventory.alerts.get", "inventory.audit.get",
-    "inventory.product.create", "inventory.product.update",
+    "inventory.product.create", "inventory.product.update", "inventory.warehouse.manage",
     "purchases.query", "purchases.replenishment.get",
     "projects.create", "projects.update_status", "projects.labor.register", "projects.query",
     "accounting.account.manage", "accounting.fiscal_param.manage", "accounting.rule.manage",
@@ -29,6 +29,8 @@ const ROLE_PERMISSIONS = {
     "quotes.manage", "quotes.query",
     "assets.manage", "assets.query",
     "ai.chat",
+    "crm.manage", "crm.query",
+    "documents.manage", "documents.query",
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
@@ -43,6 +45,8 @@ const ROLE_PERMISSIONS = {
     "quotes.query",
     "assets.manage", "assets.query",
     "ai.chat",
+    "crm.query",
+    "documents.manage", "documents.query",
   ],
   COMPRAS: [
     "inventory.stock.get", "inventory.stock.search", "inventory.alerts.get",
@@ -57,6 +61,8 @@ const ROLE_PERMISSIONS = {
     "quotes.query",
     "assets.query",
     "ai.chat",
+    "crm.query",
+    "documents.query",
   ],
   VENTAS: [
     "inventory.reserve", "inventory.release_reservation",
@@ -69,11 +75,15 @@ const ROLE_PERMISSIONS = {
     "quotes.manage", "quotes.query",
     "assets.query",
     "ai.chat",
+    "crm.manage", "crm.query",
+    "documents.manage", "documents.query",
   ],
   CONSULTA: [
     "inventory.stock.get", "inventory.stock.search", "inventory.query", "projects.query", "accounting.query", "rrhh.query", "sales.query", "expenses.query",
     "payables.query", "quotes.query", "assets.query",
     "ai.chat",
+    "crm.query",
+    "documents.query",
   ],
 };
 
@@ -156,4 +166,4 @@ function requirePermission(action) {
   };
 }
 
-module.exports = { login, requireAuth, requirePermission, can };
+module.exports = { login, requireAuth, requirePermission, can, ROLE_PERMISSIONS };
