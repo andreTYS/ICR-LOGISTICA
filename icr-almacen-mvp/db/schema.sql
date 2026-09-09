@@ -54,6 +54,24 @@ CREATE TABLE usuarios (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Tokens de servicio de larga duración para integraciones (N8N y similares)
+-- que necesitan llamar a la API sin un login interactivo de 12h. No es un
+-- rol nuevo: el token "actúa como" un usuario existente (normalmente una
+-- cuenta de servicio dedicada) y hereda sus permisos tal cual. Solo se
+-- guarda el hash — el valor en claro se muestra una única vez al crearlo.
+CREATE TABLE api_tokens (
+    api_token_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    etiqueta        TEXT NOT NULL,
+    token_hash      TEXT NOT NULL UNIQUE,
+    prefijo         TEXT NOT NULL,
+    usuario_id      UUID NOT NULL REFERENCES usuarios(usuario_id),
+    creado_por      UUID NOT NULL REFERENCES usuarios(usuario_id),
+    expira_en       TIMESTAMPTZ,
+    revocado        BOOLEAN NOT NULL DEFAULT false,
+    ultimo_uso      TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE almacenes (
     almacen_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     codigo          TEXT NOT NULL UNIQUE,
@@ -710,6 +728,86 @@ SELECT *
 FROM vw_inventario_disponible
 WHERE stock_disponible <= punto_reorden;
 
+-- Espejo de calendarioService.getEventos() como vista real, para que un
+-- workflow de N8N (o cualquier herramienta de BI) pueda consultarla directo
+-- por SQL sin pasar por la API REST. No es una fuente de datos nueva —
+-- cada fila sigue viviendo en su tabla de origen; esto solo la expone
+-- unificada para lectura. Sin filtro de fecha acá (a diferencia del
+-- servicio) para que quien consulte decida su propio rango con WHERE.
+CREATE VIEW vw_n8n_calendario_eventos AS
+SELECT l.fecha_proximo_seguimiento AS fecha, 'LEAD_SEGUIMIENTO' AS tipo,
+       l.codigo AS titulo, l.nombre_contacto || COALESCE(' — ' || l.empresa, '') AS subtitulo,
+       l.etapa AS estado, 'lead' AS entidad_tipo, l.lead_id AS entidad_id
+FROM leads l
+WHERE l.fecha_proximo_seguimiento IS NOT NULL AND l.etapa NOT IN ('GANADO','PERDIDO')
+UNION ALL
+SELECT m.fecha_programada, 'MANTENIMIENTO',
+       a.descripcion, m.tipo || COALESCE(': ' || m.descripcion, ''),
+       m.estado, 'activo', a.activo_id
+FROM mantenimientos m JOIN activos_instalados a ON a.activo_id = m.activo_id
+WHERE m.fecha_programada IS NOT NULL AND m.estado NOT IN ('COMPLETADO','CANCELADO')
+UNION ALL
+SELECT h.fecha_esperada, 'HITO_CONTRATO',
+       c.codigo_contrato, h.descripcion,
+       h.estado, 'contrato', c.contrato_id
+FROM contrato_hitos h JOIN contratos c ON c.contrato_id = h.contrato_id
+WHERE h.fecha_esperada IS NOT NULL AND h.estado IN ('PENDIENTE','VENCIDO')
+UNION ALL
+SELECT a.garantia_fin, 'GARANTIA_VENCE',
+       a.descripcion, 'Vence garantía',
+       a.estado, 'activo', a.activo_id
+FROM activos_instalados a
+WHERE a.garantia_fin IS NOT NULL AND a.estado <> 'RETIRADO';
+
+-- Consolidado de cuentas por cobrar (hitos de contrato) y por pagar
+-- (facturas de proveedor) para reportes de caja armados fuera del panel.
+CREATE VIEW vw_n8n_cuentas_por_cobrar AS
+SELECT h.hito_id, c.codigo_contrato, cl.razon_social AS cliente, h.descripcion, h.monto,
+       h.fecha_esperada, h.estado, h.fecha_pago, h.monto_pagado
+FROM contrato_hitos h
+JOIN contratos c ON c.contrato_id = h.contrato_id
+JOIN clientes cl ON cl.cliente_id = c.cliente_id
+WHERE h.estado IN ('PENDIENTE','VENCIDO');
+
+CREATE VIEW vw_n8n_cuentas_por_pagar AS
+SELECT f.factura_proveedor_id, f.codigo, p.razon_social AS proveedor, f.monto_total,
+       f.monto_total - COALESCE(pg.monto_pagado, 0) AS saldo_pendiente,
+       f.fecha_emision, f.fecha_vencimiento, f.estado
+FROM facturas_proveedor f
+JOIN proveedores p ON p.proveedor_id = f.proveedor_id
+LEFT JOIN (
+  SELECT factura_proveedor_id, SUM(monto) AS monto_pagado
+  FROM pagos_proveedor GROUP BY factura_proveedor_id
+) pg ON pg.factura_proveedor_id = f.factura_proveedor_id
+WHERE f.estado IN ('PENDIENTE','PARCIAL','VENCIDA');
+
+-- ---------- ROL DE SOLO LECTURA PARA INTEGRACIONES (N8N y similares) ----------
+-- Segundo camino de consulta además de la API REST: un nodo Postgres de N8N
+-- puede conectarse directo con este rol para reportes, sin pasar por HTTP.
+-- Nunca puede escribir (no tiene INSERT/UPDATE/DELETE en nada) y solo ve
+-- las vistas de arriba, no las tablas base completas (evita exponer
+-- columnas sensibles como password_hash de usuarios). Se crea sin
+-- contraseña (NOLOGIN) a propósito — activarlo en un servidor real es
+-- responsabilidad de quien despliega:
+--   ALTER ROLE n8n_readonly WITH LOGIN PASSWORD 'una-contraseña-fuerte-propia';
+-- (nunca se guarda una contraseña por defecto en este repositorio).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'n8n_readonly') THEN
+    CREATE ROLE n8n_readonly NOLOGIN;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO n8n_readonly', current_database());
+END $$;
+GRANT USAGE ON SCHEMA public TO n8n_readonly;
+GRANT SELECT ON
+  vw_inventario_disponible, vw_stock_bajo,
+  vw_n8n_calendario_eventos, vw_n8n_cuentas_por_cobrar, vw_n8n_cuentas_por_pagar
+TO n8n_readonly;
+
 -- ============================================================
 -- ÍNDICES DE APOYO
 -- ============================================================
@@ -749,3 +847,4 @@ CREATE INDEX idx_leads_etapa ON leads(etapa);
 CREATE INDEX idx_leads_responsable ON leads(responsable_id);
 CREATE INDEX idx_lead_actividades_lead ON lead_actividades(lead_id);
 CREATE INDEX idx_archivos_adjuntos_entidad ON archivos_adjuntos(entidad_tipo, entidad_id);
+CREATE INDEX idx_api_tokens_usuario ON api_tokens(usuario_id);

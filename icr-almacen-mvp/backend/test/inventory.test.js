@@ -220,6 +220,54 @@ test("actualizar una ubicación inexistente se rechaza", async () => {
   );
 });
 
+// -------- Importación masiva de productos vía CSV --------
+test("importProductsCsv crea todos los productos de un CSV válido", async () => {
+  const csv = "sku,nombre,marca,tipo_control,stock_minimo,punto_reorden\n" +
+    "CSV-TEST-001,Producto CSV Uno,MarcaX,NORMAL,2,5\n" +
+    "CSV-TEST-002,Producto CSV Dos,MarcaY,NORMAL,3,8\n";
+  const r = await inventory.importProductsCsv(csv);
+  assert.equal(r.total, 2);
+  assert.equal(r.exitosos, 2);
+  assert.equal(r.fallidos, 0);
+
+  const { items } = await inventory.searchProducts({ query: "CSV-TEST" });
+  assert.equal(items.length, 2);
+});
+
+test("importProductsCsv reporta filas fallidas sin abortar las demás (SKU duplicado)", async () => {
+  const csv = "sku,nombre,tipo_control\n" +
+    "CSV-TEST-001,Ya existe,NORMAL\n" + // duplicado del test anterior
+    "CSV-TEST-003,Producto CSV Tres,NORMAL\n";
+  const r = await inventory.importProductsCsv(csv);
+  assert.equal(r.total, 2);
+  assert.equal(r.exitosos, 1);
+  assert.equal(r.fallidos, 1);
+  assert.match(r.detalle.find((d) => d.sku === "CSV-TEST-001").error, /ya existe/);
+  assert.equal(r.detalle.find((d) => d.sku === "CSV-TEST-003").ok, true);
+});
+
+test("importProductsCsv rechaza un CSV sin las columnas obligatorias", async () => {
+  await assert.rejects(
+    inventory.importProductsCsv("nombre,marca\nSolo nombre,MarcaX\n"),
+    (err) => err.code === "SCHEMA_INVALID" && /sku/.test(err.message)
+  );
+});
+
+test("importProductsCsv rechaza un archivo vacío", async () => {
+  await assert.rejects(
+    inventory.importProductsCsv(""),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("importProductsCsv soporta campos entre comillas con comas embebidas", async () => {
+  const csv = 'sku,nombre,tipo_control\nCSV-TEST-004,"Producto, con coma",NORMAL\n';
+  const r = await inventory.importProductsCsv(csv);
+  assert.equal(r.exitosos, 1);
+  const { items } = await inventory.searchProducts({ query: "CSV-TEST-004" });
+  assert.equal(items[0].nombre, "Producto, con coma");
+});
+
 after(async () => {
   await pool.end();
 });

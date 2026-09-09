@@ -133,6 +133,8 @@ document.getElementById("logout-btn").addEventListener("click", () => {
   document.getElementById("ai-chat-panel").classList.add("hidden");
   aiChatHistory = [];
   document.getElementById("ai-chat-messages").innerHTML = "";
+  document.getElementById("help-widget").classList.add("hidden");
+  document.getElementById("help-panel").classList.add("hidden");
 });
 
 function initials(name) {
@@ -149,6 +151,7 @@ function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("ai-chat-widget").classList.remove("hidden");
+  document.getElementById("help-widget").classList.remove("hidden");
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
@@ -178,6 +181,7 @@ fetch(`${API}/settings`).then((r) => r.json()).then((r) => applyLogo(r.data?.log
 // -------- Navegación --------
 const titles = {
   dashboard: ["Panel general", "Resumen del estado del almacén"],
+  calendar: ["Calendario", "Agenda unificada de fechas pendientes de todos los módulos"],
   stock: ["Stock disponible", "Existencias por producto, almacén y ubicación"],
   receive: ["Ingreso de mercadería", "Registrar entrada de stock a un almacén"],
   remove: ["Salida / despacho", "Registrar salida de stock de un almacén"],
@@ -215,6 +219,7 @@ const titles = {
   "module-access": ["Módulos", "Activar o desactivar módulos completos por rol (solo administradores)"],
   "role-permissions": ["Roles y permisos", "Mapa de permisos por rol, de solo lectura (solo administradores)"],
   integrations: ["Integraciones", "Estado de las integraciones opcionales: asistente de IA y bot de Telegram (solo administradores)"],
+  "api-tokens": ["Tokens de servicio", "Tokens de larga duración para integraciones como N8N (solo administradores)"],
   settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
@@ -236,7 +241,10 @@ function goToView(view) {
     g.classList.toggle("has-active", hasActive);
     if (hasActive) g.classList.add("expanded");
   });
+  currentHelpView = view;
+  if (!document.getElementById("help-panel").classList.contains("hidden")) renderHelpPanel(view);
   if (view === "dashboard") loadDashboard();
+  if (view === "calendar") loadCalendar();
   if (view === "stock") loadStock();
   if (view === "products") loadProducts();
   if (view === "movements") loadMovements();
@@ -271,6 +279,7 @@ function goToView(view) {
   if (view === "module-access") loadModuleAccess();
   if (view === "role-permissions") loadRolePermissions();
   if (view === "integrations") loadIntegrationsStatus();
+  if (view === "api-tokens") loadApiTokens();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -302,6 +311,7 @@ async function api(path, options = {}) {
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
     document.getElementById("ai-chat-widget").classList.add("hidden");
+    document.getElementById("help-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   const json = await res.json();
@@ -321,6 +331,7 @@ async function uploadFile(path, formData) {
     document.getElementById("app-shell").classList.add("hidden");
     document.getElementById("login-screen").classList.remove("hidden");
     document.getElementById("ai-chat-widget").classList.add("hidden");
+    document.getElementById("help-widget").classList.add("hidden");
     throw new Error("Sesión expirada");
   }
   return res.json();
@@ -443,6 +454,162 @@ async function loadDashboard() {
   loadCashflowChart();
   loadExpensesCategoryChart();
   loadWorstMarginChart();
+}
+
+// -------- Centro de ayuda (guía estática, no consume ninguna API externa) --------
+// A diferencia del Asistente ICR (Gemini), esto es contenido fijo escrito a
+// mano por pantalla — cero costo, cero latencia, funciona sin conexión a
+// internet ni credenciales configuradas. Vive solo en el frontend.
+const HELP_TOPICS = {
+  dashboard: { tips: [
+    "Los accesos rápidos (Ingreso, Salida, Transferencia, Reservar stock) abren el formulario correspondiente en un clic.",
+    "El resumen de otros módulos se adapta al rol: si algo aparece en '—' es porque tu rol no tiene acceso a ese módulo.",
+  ] },
+  calendar: { tips: [
+    "Agrega en una sola lista fechas de leads, mantenimientos, cobros de contrato, garantías y asistencia — nada se guarda acá, cada evento vive en su módulo de origen.",
+    "Haz clic en cualquier evento para saltar directo a su pantalla y registro (ej. abre el lead o el activo correspondiente).",
+    "Usa el filtro de tipo de evento para enfocarte en un solo módulo (ej. solo cobros de contrato).",
+  ] },
+  stock: { tips: [
+    "Filtra por almacén o SKU para ubicar existencias rápido.",
+    "Haz clic en un SKU para abrir su Kardex: stock actual + historial de movimientos.",
+  ] },
+  receive: { tips: ["Registra entrada de mercadería a un almacén y ubicación específicos.", "Si el producto usa número de serie o lote, el formulario lo pedirá."] },
+  remove: { tips: ["Registra salida/despacho de stock.", "No permite dejar el stock en negativo — si falla, revisa el saldo en Stock."] },
+  transfer: { tips: ["Mueve stock entre dos almacenes en una sola operación atómica: sale de uno y entra al otro, o no pasa nada."] },
+  products: { tips: [
+    "Los productos tipo 'kit' agrupan varios ítems — al despachar un kit se descuentan sus componentes.",
+    "Desactivar un producto lo oculta de nuevas operaciones sin borrar su historial.",
+  ] },
+  movements: { tips: ["Ledger completo e inmutable de todo lo que entró, salió o se transfirió. Exporta a CSV para análisis externo."] },
+  alerts: { tips: ["Lista productos por debajo de su punto de reorden — es la misma señal que dispara sugerencias en Reabastecimiento."] },
+  warehouses: { tips: [
+    "Crea almacenes y sus ubicaciones internas (pasillo/rack/nivel) para tener trazabilidad fina del stock.",
+    "Desactivar un almacén no borra su historial, solo evita que se sigan registrando movimientos nuevos ahí.",
+  ] },
+  purchases: { tips: [
+    "Flujo: crear orden → enviar al proveedor → recibir (total o parcial). Una recepción parcial deja el resto como pendiente (backorder).",
+  ] },
+  "purchases-replenishment": { tips: ["Sugerencias automáticas de cantidad a comprar según punto de reorden y stock actual — punto de partida para crear una orden de compra."] },
+  "purchases-suppliers": { tips: ["Catálogo de proveedores usado al crear órdenes de compra y registrar facturas en Cuentas por pagar."] },
+  payables: { tips: [
+    "Registra facturas de proveedor y sus pagos — pueden ser parciales, el sistema lleva el saldo pendiente.",
+    "Una factura totalmente pagada pasa a estado PAGADA automáticamente.",
+  ] },
+  projects: { tips: [
+    "El costeo compara materiales consumidos + mano de obra registrada contra el presupuesto de la obra.",
+    "Registra horas de mano de obra desde el detalle del proyecto para que se reflejen en el costeo.",
+  ] },
+  "projects-clients": { tips: ["Catálogo de clientes, usado en Proyectos, Ventas, CRM y Activos."] },
+  "projects-profitability": { tips: ["Ranking de proyectos por margen real (ingresos del contrato vs. costo real) — exportable a CSV."] },
+  "accounting-entries": { tips: [
+    "La mayoría de asientos se generan solos con las reglas de imputación cuando ocurre un evento de negocio (compra recibida, cobro registrado, etc.).",
+    "Un asiento en BORRADOR no afecta los reportes financieros hasta que se contabiliza.",
+  ] },
+  "accounting-accounts": { tips: ["Estructura de cuentas contables (plan de cuentas) usada por las reglas de imputación y los asientos."] },
+  "accounting-rules": { tips: ["Mapea un evento de negocio (ej. 'compra recibida') a qué cuentas debe/haber se afectan automáticamente."] },
+  "accounting-fiscal": { tips: ["Tasas fiscales (IGV, UIT, detracción) versionadas por fecha de vigencia — no se sobrescriben, se agrega una nueva versión."] },
+  "accounting-reports": { tips: [
+    "Estado de Resultados: ingresos menos gastos en un rango de fechas.",
+    "Balance General: foto de Activo = Pasivo + Patrimonio a una fecha de corte.",
+    "Ambos solo consideran asientos en estado CONTABILIZADO.",
+  ] },
+  "rrhh-employees": { tips: ["Ficha de cada empleado: cargo, tipo de contrato y costo/hora — este último se usa para costear mano de obra en Proyectos."] },
+  "rrhh-attendance": { tips: ["Marca entrada y salida por empleado; las horas trabajadas se calculan solas al marcar salida."] },
+  crm: { tips: [
+    "Un lead es un contacto/oportunidad antes de tener una cotización formal — cuando se gana, se convierte en cotización con un clic.",
+    "Registra cada llamada, email o reunión como actividad para no perder el hilo del seguimiento.",
+  ] },
+  quotes: { tips: ["Cotiza antes del contrato — una cotización ACEPTADA se convierte en contrato con un clic, sin volver a digitar los ítems."] },
+  "sales-contracts": { tips: ["Cada contrato tiene un cronograma de cobro (hitos); registrar el pago de un hito dispara el asiento contable automático."] },
+  "sales-receivables": { tips: ["Vista consolidada de hitos de cobro pendientes o vencidos, de todos los contratos, para priorizar la cobranza."] },
+  expenses: { tips: ["Registra gastos operativos; si vinculas un proyecto, el gasto entra al costeo real de esa obra."] },
+  assets: { tips: ["Equipos instalados en clientes con garantía y ciclo de mantenimiento — haz clic en uno para ver su historial de mantenimientos."] },
+  maintenance: { tips: ["Listado global de mantenimientos preventivos y correctivos de todos los activos, con su estado."] },
+  warranties: { tips: ["Activos cuya garantía ya venció o está por vencer dentro de la ventana elegida — útil para avisar al cliente a tiempo."] },
+  reservations: { tips: ["Aparta stock para un proyecto o cliente sin descontarlo todavía del inventario disponible; libéralo si ya no se usa."] },
+  adjustments: { tips: ["Un conteo físico que no cuadra con el sistema queda pendiente hasta que un supervisor lo apruebe."] },
+  audit: { tips: ["Registro de solo lectura de toda acción ejecutada sobre el inventario — quién, qué y cuándo."] },
+  users: { tips: ["Alta de usuarios y asignación de rol — el rol determina qué puede hacer cada quien (ver Roles y permisos)."] },
+  "module-access": { tips: ["Apaga módulos completos por rol sin tocar código — por ejemplo, ocultar Contabilidad al rol VENTAS."] },
+  "role-permissions": { tips: ["Mapa de solo lectura: qué acción puede ejecutar cada rol. Para cambiarlo hay que modificar el código (es la fuente de verdad de seguridad)."] },
+  integrations: { tips: [
+    "Muestra si las integraciones opcionales (IA, Telegram) están configuradas, sin exponer las claves.",
+    "'No configurado' significa que falta esa variable de entorno en el servidor.",
+  ] },
+  settings: { tips: ["Personalización visual del panel (por ahora, el logo)."] },
+};
+const HELP_DEFAULT_TIPS = ["Todavía no hay una guía específica para esta pantalla. Si tienes dudas, usa el Asistente ICR (el ícono de chat) para preguntar en lenguaje natural."];
+let currentHelpView = "dashboard";
+
+function renderHelpPanel(view) {
+  currentHelpView = view;
+  const [title] = titles[view] || ["Ayuda"];
+  document.getElementById("help-subtitle").textContent = title;
+  const tips = (HELP_TOPICS[view]?.tips) || HELP_DEFAULT_TIPS;
+  const tipsHtml = `<ul class="help-tips">${tips.map((t) => `<li>${t}</li>`).join("")}</ul>`;
+  const indexHtml = `<div class="help-index-title">Todos los temas</div><div class="help-index">${Object.keys(titles).map((v) =>
+    `<button type="button" class="help-index-item${v === view ? " active" : ""}" onclick="renderHelpPanel('${v}')">${titles[v][0]}</button>`
+  ).join("")}</div>`;
+  document.getElementById("help-body").innerHTML = `${tipsHtml}<hr class="help-divider" />${indexHtml}`;
+}
+
+function toggleHelp() {
+  const panel = document.getElementById("help-panel");
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  if (opening) renderHelpPanel(currentHelpView);
+}
+
+// -------- Calendario (agenda unificada de solo lectura) --------
+const CALENDAR_EVENT_LABELS = {
+  LEAD_SEGUIMIENTO: ["Seguimiento de lead", "bg-cyan-50 text-accent-600"],
+  MANTENIMIENTO: ["Mantenimiento", "bg-amber-50 text-amber-700"],
+  HITO_CONTRATO: ["Cobro de contrato", "bg-emerald-50 text-emerald-700"],
+  GARANTIA_VENCE: ["Garantía por vencer", "bg-rose-50 text-rose-700"],
+  ASISTENCIA: ["Asistencia", "bg-slate-100 text-slate-600"],
+};
+
+async function loadCalendar() {
+  const list = document.getElementById("calendar-list");
+  list.innerHTML = emptyState("Cargando…", "inbox");
+  const dias = document.getElementById("calendar-ventana").value;
+  const tipo = document.getElementById("calendar-tipo").value;
+  const desde = new Date().toISOString().slice(0, 10);
+  const hasta = new Date(Date.now() + Number(dias) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const params = new URLSearchParams({ desde, hasta });
+  if (tipo) params.set("tipos", tipo);
+  const r = await api(`/calendar/events?${params}`);
+  if (r.status !== "success") {
+    list.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver esto.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  if (items.length === 0) {
+    list.innerHTML = emptyState("Sin eventos programados en esta ventana.", "check");
+    return;
+  }
+  list.innerHTML = items.map((ev) => {
+    const [label, cls] = CALENDAR_EVENT_LABELS[ev.tipo] || [ev.tipo, "bg-slate-100 text-slate-600"];
+    const fecha = new Date(ev.fecha).toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" });
+    const tituloJs = String(ev.titulo).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return `<div class="table-card flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-50" onclick="goToCalendarEvent('${ev.tipo}', '${ev.entidad_id}', '${tituloJs}')">
+      <div class="text-xs font-bold text-slate-400 uppercase w-24 shrink-0">${fecha}</div>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${cls}">${label}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-navy-900 truncate">${ev.titulo}</div>
+        <div class="text-xs text-slate-500 truncate">${ev.subtitulo || ""}</div>
+      </div>
+      <div class="text-xs text-slate-400 shrink-0">${ev.estado || ""}</div>
+    </div>`;
+  }).join("");
+}
+
+async function goToCalendarEvent(tipo, entidadId, titulo) {
+  if (tipo === "LEAD_SEGUIMIENTO") { goToView("crm"); await loadLeads(1); openLeadModal(titulo); }
+  else if (tipo === "HITO_CONTRATO") { goToView("sales-contracts"); await loadContracts(1); openContractModal(titulo); }
+  else if (tipo === "MANTENIMIENTO" || tipo === "GARANTIA_VENCE") { goToView("assets"); await loadActivos(1); openAssetModal(entidadId); }
+  else if (tipo === "ASISTENCIA") { goToView("rrhh-attendance"); }
 }
 
 // Resumen de los demás módulos del ERP en el Panel. Tolerante a permisos:
@@ -848,6 +1015,43 @@ async function loadProducts(page = 1) {
     </tr>`).join("")
     : emptyRow(7, "Sin resultados.", "search");
   renderPager("products-pager", r.data || { total: 0 }, loadProducts);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+async function importProductsCsv(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const result = document.getElementById("products-import-result");
+  result.innerHTML = `<p class="text-sm text-slate-400 italic">Importando…</p>`;
+  try {
+    const csv = await readFileAsText(file);
+    const r = await api("/inventory/products/import-csv", { method: "POST", body: JSON.stringify({ csv }) });
+    if (r.status !== "success") {
+      result.innerHTML = `<div class="result-box err">${r.error.message}</div>`;
+      toast(r.error.message, false);
+      return;
+    }
+    const { total, exitosos, fallidos, detalle } = r.data;
+    const fallidasHtml = fallidos > 0
+      ? `<ul class="mt-2 text-xs text-rose-600 list-disc pl-4">${detalle.filter((d) => !d.ok).map((d) => `<li>Fila ${d.fila} (${d.sku || "sin SKU"}): ${d.error}</li>`).join("")}</ul>`
+      : "";
+    result.innerHTML = `<div class="result-box ${fallidos > 0 ? "err" : "ok"}">
+      <p>Importación completa: ${exitosos} de ${total} productos creados${fallidos > 0 ? `, ${fallidos} con error` : ""}.</p>
+      ${fallidasHtml}
+    </div>`;
+    toast(`${exitosos} producto(s) importado(s)`, fallidos === 0);
+    loadProducts();
+  } finally {
+    inputEl.value = "";
+  }
 }
 
 function triggerPhotoUpload(sku) {
@@ -1288,6 +1492,21 @@ document.getElementById("form-payable-create").addEventListener("submit", async 
     setFormLoading(e.target, false);
   }
 });
+
+async function exportPayablesCsv() {
+  const estado = document.getElementById("payable-filter-estado").value;
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/payables/invoices?${params.toString()}`);
+  const items = r.data?.items || [];
+  downloadCsv(
+    "cuentas-por-pagar.csv",
+    ["Código", "Proveedor", "N° proveedor", "Moneda", "Monto total", "Monto pagado", "Emisión", "Vencimiento", "Estado"],
+    items.map((f) => [f.codigo, f.proveedor_nombre || "", f.numero_proveedor || "", f.moneda || "PEN", f.monto_total, f.monto_pagado,
+      f.fecha_emision ? new Date(f.fecha_emision).toLocaleDateString("es-PE") : "",
+      f.fecha_vencimiento ? new Date(f.fecha_vencimiento).toLocaleDateString("es-PE") : "", f.estado])
+  );
+}
 
 async function loadFacturas(page) {
   const body = document.getElementById("payables-body");
@@ -2119,6 +2338,20 @@ async function loadLeads(page) {
       </tr>`).join("")
     : emptyRow(7, "Sin leads registrados.", "inbox");
   renderPager("leads-pager", r.data, (p) => loadLeads(p));
+}
+
+async function exportLeadsCsv() {
+  const etapa = document.getElementById("lead-filter-etapa").value;
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (etapa) params.set("etapa", etapa);
+  const r = await api(`/crm/leads?${params.toString()}`);
+  const items = r.data?.items || [];
+  downloadCsv(
+    "leads.csv",
+    ["Código", "Contacto", "Empresa", "Cliente", "Teléfono", "Email", "Monto est.", "Moneda", "Responsable", "Etapa", "Próximo seguimiento"],
+    items.map((l) => [l.codigo, l.nombre_contacto, l.empresa || "", l.cliente_nombre || "", l.telefono || "", l.email || "",
+      l.monto_estimado || "", l.moneda || "", l.responsable_nombre || "", l.etapa, l.fecha_proximo_seguimiento || ""])
+  );
 }
 
 function renderLeadQuoteDraftLines() {
@@ -3168,6 +3401,7 @@ async function loadIntegrationsStatus() {
     { label: "Asistente de IA (Gemini)", key: "gemini" },
     { label: "Bot de Telegram — token", key: "telegram_bot" },
     { label: "Bot de Telegram — webhook", key: "telegram_webhook" },
+    { label: "Google Drive (documentos)", key: "google_drive" },
   ];
   container.innerHTML = items.map(({ label, key }) => {
     const s = r.data[key];
@@ -3177,6 +3411,79 @@ async function loadIntegrationsStatus() {
       <div class="text-xs text-slate-500 font-mono">${s.variable}</div>
     </div>`;
   }).join("");
+}
+
+// -------- Tokens de servicio (N8N y similares) --------
+document.getElementById("form-api-token-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web", etiqueta: f.get("etiqueta"), usuario_id: f.get("usuario_id"),
+    expira_dias: f.get("expira_dias") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/admin/api-tokens", { method: "POST", body: JSON.stringify(payload) });
+    const box = document.getElementById("api-token-new-result");
+    if (r.status === "success") {
+      box.className = "result-box ok";
+      box.innerHTML = `<p class="font-semibold mb-2">Token creado — copialo ahora, no se volverá a mostrar:</p>
+        <div class="flex items-center gap-2">
+          <code class="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs break-all select-all">${r.data.token}</code>
+          <button type="button" class="btn-secondary px-3 py-1.5 text-xs shrink-0" onclick="navigator.clipboard.writeText('${r.data.token}'); toast('Token copiado')">Copiar</button>
+        </div>`;
+      e.target.reset();
+      loadApiTokens();
+    } else {
+      box.className = "result-box err";
+      box.innerHTML = `<p>${r.error.message}</p>`;
+      toast(r.error.message, false);
+    }
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadApiTokenUserOptions() {
+  const select = document.getElementById("api-token-usuario-select");
+  const r = await api("/users");
+  if (r.status !== "success") { select.innerHTML = `<option value="">—</option>`; return; }
+  select.innerHTML = (r.data || []).filter((u) => u.activo)
+    .map((u) => `<option value="${u.usuario_id}">${u.nombre_completo} (${u.rol_codigo})</option>`).join("");
+}
+
+async function loadApiTokens() {
+  await loadApiTokenUserOptions();
+  const body = document.getElementById("api-tokens-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/admin/api-tokens");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver esto.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((t) => {
+        const vencido = t.expira_en && new Date(t.expira_en) < new Date();
+        const estado = t.revocado ? badge("REVOCADO", "low") : vencido ? badge("EXPIRADO", "low") : badge("ACTIVO", "ok");
+        return `<tr class="${TR}">
+          <td class="${TD} font-semibold text-navy-900">${t.etiqueta}</td>
+          <td class="${TD}">${t.usuario_nombre} <span class="text-slate-400">(${t.usuario_rol})</span></td>
+          <td class="${TD} font-mono text-xs">${t.prefijo}…</td>
+          <td class="${TD}">${t.expira_en ? new Date(t.expira_en).toLocaleDateString("es-PE") : "No expira"}</td>
+          <td class="${TD}">${t.ultimo_uso ? new Date(t.ultimo_uso).toLocaleString("es-PE") : "Nunca"}</td>
+          <td class="${TD}">${estado}</td>
+          <td class="${TD}">${t.revocado ? "" : `<button class="btn-danger px-3 py-1.5 text-xs" onclick="revokeApiToken('${t.api_token_id}')">Revocar</button>`}</td>
+        </tr>`;
+      }).join("")
+    : emptyRow(7, "Sin tokens de servicio creados todavía.", "inbox");
+}
+
+async function revokeApiToken(apiTokenId) {
+  if (!confirm("¿Revocar este token? Cualquier integración que lo use dejará de funcionar de inmediato.")) return;
+  const r = await api(`/admin/api-tokens/${encodeURIComponent(apiTokenId)}/revoke`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  if (r.status === "success") { toast("Token revocado"); loadApiTokens(); }
+  else toast(r.error.message, false);
 }
 
 // -------- Configuración: logo --------
@@ -3405,6 +3712,8 @@ document.getElementById("form-document-upload").addEventListener("submit", async
   formData.set("entidad_tipo", currentDocEntidadTipo);
   formData.set("entidad_id", currentDocEntidadId);
   formData.set("channel", "web");
+  if (formData.get("guardar_en_drive")) formData.set("destino", "drive");
+  formData.delete("guardar_en_drive");
   setFormLoading(e.target, true);
   try {
     const r = await uploadFile("/documents", formData);

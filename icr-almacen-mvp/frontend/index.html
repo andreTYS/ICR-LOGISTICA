@@ -59,6 +59,11 @@
           <span>Panel</span>
         </button>
 
+        <button class="nav-item" data-view="calendar">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="13" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h14M6.5 2.5v3M13.5 2.5v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Calendario</span>
+        </button>
+
         <!-- ============ MÓDULO: ALMACÉN ============ -->
         <div class="nav-group expanded" data-group="almacen">
           <button class="nav-group-header" type="button" onclick="toggleNavGroup('almacen')">
@@ -301,6 +306,10 @@
             <button class="nav-item" data-view="integrations">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="6" cy="6" r="2.3" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="14" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M7.6 7.6 12.4 12.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Integraciones</span>
+            </button>
+            <button class="nav-item" data-view="api-tokens">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="7" cy="7" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M9.3 9.3 17 17M13.5 13.5l2-2M15.7 15.7l1.6-1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Tokens de servicio</span>
             </button>
             <button class="nav-item" data-view="settings">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 3v1.8M10 15.2V17M17 10h-1.8M4.8 10H3M14.9 5.1l-1.3 1.3M6.4 13.6l-1.3 1.3M14.9 14.9l-1.3-1.3M6.4 6.4 5.1 5.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -660,10 +669,17 @@
           </div>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar producto</span></button>
         </form>
-        <div class="flex flex-wrap gap-2.5 mt-7 mb-4">
+        <div class="flex flex-wrap items-center gap-2.5 mt-7 mb-2">
           <input id="product-q" placeholder="Buscar producto por nombre o SKU..." class="field flex-1 max-w-xs" />
           <button class="btn-secondary" onclick="loadProducts()">Buscar</button>
+          <label class="btn-secondary inline-flex items-center gap-1.5 cursor-pointer no-icon">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 17V7m0 0-4 4m4-4 4 4M4 3h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Importar CSV
+            <input type="file" accept=".csv,text/csv" class="hidden" onchange="importProductsCsv(this)" />
+          </label>
         </div>
+        <p class="text-xs text-slate-400 mb-4">Columnas: sku, nombre, tipo_control (obligatorias); marca, modelo, unidad_medida, stock_minimo, punto_reorden, stock_maximo, costo_unitario (opcionales).</p>
+        <div id="products-import-result" class="mb-4"></div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
             <thead><tr class="bg-navy-950 text-white text-[12.5px]">
@@ -881,6 +897,10 @@
             <option value="VENCIDA">Vencida</option>
             <option value="ANULADA">Anulada</option>
           </select>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportPayablesCsv()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar CSV
+          </button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -1002,6 +1022,32 @@
         </div>
       </section>
 
+      <!-- ============ CALENDARIO (agenda unificada) ============ -->
+      <section class="view" id="view-calendar">
+        <p class="text-sm text-slate-500 mb-4">Agenda de fechas pendientes de todos los módulos: seguimientos de leads, mantenimientos programados, cobros de contrato, vencimientos de garantía y asistencia del equipo.</p>
+        <div class="flex flex-wrap items-center gap-2.5 mb-4">
+          <label class="field-label w-auto">Ventana
+            <select id="calendar-ventana" class="field" onchange="loadCalendar()">
+              <option value="7">Próximos 7 días</option>
+              <option value="15">Próximos 15 días</option>
+              <option value="30" selected>Próximos 30 días</option>
+              <option value="90">Próximos 90 días</option>
+            </select>
+          </label>
+          <label class="field-label w-auto flex-1 min-w-[220px]">Tipo de evento
+            <select id="calendar-tipo" class="field" onchange="loadCalendar()">
+              <option value="">Todos los tipos</option>
+              <option value="LEAD_SEGUIMIENTO">Seguimiento de lead</option>
+              <option value="MANTENIMIENTO">Mantenimiento</option>
+              <option value="HITO_CONTRATO">Cobro de contrato</option>
+              <option value="GARANTIA_VENCE">Vencimiento de garantía</option>
+              <option value="ASISTENCIA">Asistencia</option>
+            </select>
+          </label>
+        </div>
+        <div id="calendar-list" class="flex flex-col gap-2.5"></div>
+      </section>
+
       <!-- ============ CRM / LEADS ============ -->
       <section class="view" id="view-crm">
         <form class="form-card mb-7" id="form-lead-create">
@@ -1054,6 +1100,10 @@
             <option value="GANADO">Ganado</option>
             <option value="PERDIDO">Perdido</option>
           </select>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportLeadsCsv()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar CSV
+          </button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -1864,7 +1914,44 @@
       <!-- ============ INTEGRACIONES ============ -->
       <section class="view" id="view-integrations">
         <p class="text-sm text-slate-500 mb-5 max-w-2xl">Estado de las integraciones opcionales. Nunca se muestran los valores reales de las claves — solo si están configuradas como variable de entorno del backend.</p>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="integrations-cards"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="integrations-cards"></div>
+        <div class="form-card max-w-lg">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Documentación para integradores</h3>
+          <p class="text-xs text-slate-500 mb-3">Spec OpenAPI 3.0 de todos los endpoints, generada en vivo desde las rutas reales del backend — útil para mapear payloads al armar workflows de N8N.</p>
+          <a href="/api/openapi.json" target="_blank" rel="noopener" class="btn-secondary inline-flex">Descargar openapi.json</a>
+        </div>
+      </section>
+
+      <!-- ============ TOKENS DE SERVICIO (N8N y similares) ============ -->
+      <section class="view" id="view-api-tokens">
+        <p class="text-sm text-slate-500 mb-5 max-w-2xl">Tokens de larga duración para integraciones (ej. N8N) que necesitan llamar a la API sin un login interactivo de 12h. Un token "actúa como" un usuario existente y hereda sus permisos tal cual. El valor completo solo se muestra una vez, al crearlo.</p>
+        <form class="form-card mb-6" id="form-api-token-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo token</h3>
+          <div class="grid sm:grid-cols-3 gap-4 mb-4">
+            <label class="field-label">Etiqueta
+              <input name="etiqueta" required placeholder="ej. N8N - flujo de reportes" class="field" />
+            </label>
+            <label class="field-label">Actúa como
+              <select name="usuario_id" required class="field" id="api-token-usuario-select"></select>
+            </label>
+            <label class="field-label">Expira en (días, opcional)
+              <input name="expira_dias" type="number" min="1" placeholder="ej. 365, vacío = no expira" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear token</span></button>
+        </form>
+        <div id="api-token-new-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Etiqueta</th><th class="text-left font-semibold px-3 py-2.5">Actúa como</th>
+              <th class="text-left font-semibold px-3 py-2.5">Prefijo</th><th class="text-left font-semibold px-3 py-2.5">Expira</th>
+              <th class="text-left font-semibold px-3 py-2.5">Último uso</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="api-tokens-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ============ CONFIGURACIÓN ============ -->
@@ -1885,6 +1972,25 @@
       <datalist id="sku-list"></datalist>
       <datalist id="supplier-list"></datalist>
     </main>
+  </div>
+
+  <!-- ============ CENTRO DE AYUDA (guía estática, no consume ninguna API) ============ -->
+  <div id="help-widget" class="hidden">
+    <button id="help-toggle" type="button" aria-label="Abrir centro de ayuda" onclick="toggleHelp()">
+      <svg class="w-6 h-6" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.6"/><path d="M7.8 7.8a2.2 2.2 0 1 1 3.1 2c-.7.4-1.1.9-1.1 1.7v.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="14.3" r="0.9" fill="currentColor"/></svg>
+    </button>
+    <div id="help-panel" class="hidden">
+      <div class="help-header">
+        <div>
+          <div class="help-title">Centro de ayuda</div>
+          <div id="help-subtitle" class="help-subtitle">—</div>
+        </div>
+        <button type="button" onclick="toggleHelp()" aria-label="Cerrar" class="help-close">
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="help-body" class="help-body"></div>
+    </div>
   </div>
 
   <!-- ============ ASISTENTE DE IA (chat flotante) ============ -->
@@ -2132,6 +2238,10 @@
           </label>
           <label class="field-label flex-1 min-w-[160px]">Archivo (PDF, JPEG, PNG o WebP)
             <input type="file" name="archivo" accept="application/pdf,image/jpeg,image/png,image/webp" required class="field" />
+          </label>
+          <label class="flex items-center gap-1.5 text-xs text-slate-500 mb-2.5" title="Requiere Google Drive configurado en el servidor (Administración → Integraciones)">
+            <input type="checkbox" name="guardar_en_drive" class="w-3.5 h-3.5" />
+            Guardar en Google Drive
           </label>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Subir</span></button>
         </form>
