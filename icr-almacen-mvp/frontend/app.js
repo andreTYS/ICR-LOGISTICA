@@ -185,6 +185,7 @@ const titles = {
   products: ["Productos", "Catálogo de productos gestionados"],
   movements: ["Movimientos (ledger)", "Historial completo de movimientos de inventario"],
   alerts: ["Alertas de stock bajo", "Productos por debajo del punto de reorden"],
+  warehouses: ["Almacenes y ubicaciones", "Crear y administrar almacenes y sus ubicaciones internas"],
   purchases: ["Órdenes de compra", "Crear, enviar y recibir órdenes de compra"],
   "purchases-replenishment": ["Reabastecimiento", "Productos por debajo del punto de reorden, con cantidad sugerida"],
   "purchases-suppliers": ["Proveedores", "Catálogo de proveedores"],
@@ -196,19 +197,24 @@ const titles = {
   "accounting-accounts": ["Plan de cuentas", "Estructura de cuentas contables"],
   "accounting-rules": ["Reglas de imputación", "Mapeo de eventos de negocio a cuentas debe/haber"],
   "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
+  "accounting-reports": ["Reportes financieros", "Estado de Resultados y Balance General a partir de los asientos contabilizados"],
   "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
+  crm: ["CRM / Leads", "Pipeline comercial: contactos y oportunidades antes de la primera cotización"],
   quotes: ["Cotizaciones", "Cotizar antes del contrato; una cotización aceptada se convierte en contrato con un clic"],
   "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
   "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
   expenses: ["Gastos", "Gastos operativos: combustible, viáticos, alquiler, servicios, reembolsos y más"],
   assets: ["Activos instalados", "Equipos instalados en clientes, con garantía y ciclo de mantenimiento"],
   maintenance: ["Mantenimientos", "Mantenimientos preventivos y correctivos, de todos los activos"],
+  warranties: ["Garantías por vencer", "Activos con garantía vencida o próxima a vencer"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
   users: ["Usuarios", "Altas y roles de acceso al panel (solo administradores)"],
   "module-access": ["Módulos", "Activar o desactivar módulos completos por rol (solo administradores)"],
+  "role-permissions": ["Roles y permisos", "Mapa de permisos por rol, de solo lectura (solo administradores)"],
+  integrations: ["Integraciones", "Estado de las integraciones opcionales: asistente de IA y bot de Telegram (solo administradores)"],
   settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
@@ -235,6 +241,7 @@ function goToView(view) {
   if (view === "products") loadProducts();
   if (view === "movements") loadMovements();
   if (view === "alerts") loadAlerts();
+  if (view === "warehouses") loadWarehousesManaged();
   if (view === "purchases") loadPurchaseOrders(1);
   if (view === "purchases-replenishment") loadReplenishmentSuggestions();
   if (view === "purchases-suppliers") loadSuppliers();
@@ -246,19 +253,24 @@ function goToView(view) {
   if (view === "accounting-accounts") loadAccounts();
   if (view === "accounting-rules") loadRules();
   if (view === "accounting-fiscal") loadFiscalParams();
+  if (view === "accounting-reports") { loadIncomeStatement(); loadBalanceSheet(); }
   if (view === "rrhh-employees") loadEmployees();
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
+  if (view === "crm") loadLeads(1);
   if (view === "quotes") loadCotizaciones(1);
   if (view === "sales-contracts") loadContracts(1);
   if (view === "sales-receivables") loadReceivables();
   if (view === "expenses") loadExpenses(1);
   if (view === "assets") loadActivos(1);
   if (view === "maintenance") loadMantenimientos(1);
+  if (view === "warranties") loadWarranties();
   if (view === "reservations") loadReservations();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
   if (view === "users") loadUsers();
   if (view === "module-access") loadModuleAccess();
+  if (view === "role-permissions") loadRolePermissions();
+  if (view === "integrations") loadIntegrationsStatus();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -400,6 +412,8 @@ async function loadDashboard() {
   document.getElementById("kpi-alerts").textContent = alertsAllowed ? alertCount : "—";
   document.getElementById("kpi-alerts-card").classList.toggle("kpi-card-alert", alertsAllowed && alertCount > 0);
   updateAlertsBadge(alertsAllowed ? alertCount : 0);
+
+  api("/assets-warranties-expiring").then((r) => updateWarrantiesBadge(r.status === "success" ? r.data.length : 0)).catch(() => {});
 
   const movBody = document.getElementById("dash-movements-body");
   const movRows = movR.data?.items || [];
@@ -914,6 +928,95 @@ function renderResult(elId, response) {
   el.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
 }
 
+// -------- Almacenes y ubicaciones --------
+document.getElementById("form-warehouse-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = { channel: "web", codigo: f.get("codigo"), nombre: f.get("nombre") };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/inventory/warehouses-managed", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("warehouse-create-result", r);
+    if (r.status === "success") { toast(`Almacén ${r.data.almacen.codigo} creado`); e.target.reset(); loadWarehousesManaged(); loadWarehouseOptions(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadWarehousesManaged() {
+  const container = document.getElementById("warehouses-list");
+  container.innerHTML = `<p class="text-sm text-slate-400 italic">Cargando…</p>`;
+  const r = await api("/inventory/warehouses-managed");
+  if (r.status !== "success") {
+    container.innerHTML = `<p class="text-sm text-slate-400 italic">${r.error?.message || "Tu rol no tiene permiso para ver almacenes."}</p>`;
+    return;
+  }
+  const items = r.data || [];
+  container.innerHTML = items.length
+    ? items.map((a) => `
+      <div class="form-card mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="font-bold text-navy-950">${a.codigo} — ${a.nombre}</div>
+            <div class="text-xs text-slate-500 mt-0.5">${a.responsable_nombre ? `Responsable: ${a.responsable_nombre}` : "Sin responsable asignado"}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            ${badge(a.activo ? "ACTIVO" : "INACTIVO", a.activo ? "ok" : "devolucion")}
+            <button type="button" class="${a.activo ? "btn-danger" : "btn-secondary"} px-3 py-1.5 text-xs" onclick="toggleWarehouseActive('${a.almacen_id}', ${!a.activo})">
+              ${a.activo ? "Desactivar" : "Activar"}
+            </button>
+          </div>
+        </div>
+        <table class="w-full border-collapse text-sm mb-3">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">Ubicación</th><th class="font-semibold py-1.5 pr-3">Descripción</th>
+            <th class="font-semibold py-1.5 pr-3">Estado</th><th class="font-semibold py-1.5"></th>
+          </tr></thead>
+          <tbody>${a.ubicaciones.length
+            ? a.ubicaciones.map((u) => `<tr class="${TR}">
+                <td class="${TD}">${u.codigo_ubicacion}</td><td class="${TD}">${u.descripcion || "—"}</td>
+                <td class="${TD}">${badge(u.activo ? "ACTIVA" : "INACTIVA", u.activo ? "ok" : "devolucion")}</td>
+                <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="toggleLocationActive('${u.ubicacion_id}', ${!u.activo})">${u.activo ? "Desactivar" : "Activar"}</button></td>
+              </tr>`).join("")
+            : `<tr><td colspan="4" class="${TD_EMPTY}">Sin ubicaciones registradas.</td></tr>`}</tbody>
+        </table>
+        <form class="flex flex-wrap items-end gap-2" onsubmit="return addLocation(event, '${a.codigo}')">
+          <label class="field-label flex-1 min-w-[140px]">Código de ubicación
+            <input name="codigo_ubicacion" required placeholder="ej. A-02-R01-N01" class="field" />
+          </label>
+          <label class="field-label flex-1 min-w-[160px]">Descripción (opcional)
+            <input name="descripcion" placeholder="ej. Zona A, Rack 1" class="field" />
+          </label>
+          <button class="btn-secondary" type="submit">+ Agregar ubicación</button>
+        </form>
+      </div>`).join("")
+    : `<p class="text-sm text-slate-400 italic">Sin almacenes registrados.</p>`;
+}
+
+async function toggleWarehouseActive(almacenId, nextActive) {
+  if (!confirm(`¿${nextActive ? "Activar" : "Desactivar"} este almacén?`)) return;
+  const r = await api(`/inventory/warehouses-managed/${almacenId}`, { method: "PATCH", body: JSON.stringify({ channel: "web", activo: nextActive }) });
+  if (r.status === "success") { toast(`Almacén ${nextActive ? "activado" : "desactivado"}`); loadWarehousesManaged(); loadWarehouseOptions(); }
+  else toast(r.error.message, false);
+}
+
+async function toggleLocationActive(ubicacionId, nextActive) {
+  const r = await api(`/inventory/locations/${ubicacionId}`, { method: "PATCH", body: JSON.stringify({ channel: "web", activo: nextActive }) });
+  if (r.status === "success") { toast(`Ubicación ${nextActive ? "activada" : "desactivada"}`); loadWarehousesManaged(); }
+  else toast(r.error.message, false);
+}
+
+async function addLocation(e, almacenCodigo) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = { channel: "web", almacen_codigo: almacenCodigo, codigo_ubicacion: f.get("codigo_ubicacion"), descripcion: f.get("descripcion") || null };
+  const r = await api("/inventory/locations", { method: "POST", body: JSON.stringify(payload) });
+  if (r.status === "success") { toast("Ubicación agregada"); loadWarehousesManaged(); }
+  else toast(r.error.message, false);
+  return false;
+}
+
 // -------- Compras --------
 let ocDraftItems = [];
 let currentOcNumero = null;
@@ -1279,6 +1382,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePayab
 
 // -------- Proyectos --------
 let currentProjectCodigo = null;
+let currentProjectId = null;
 
 document.getElementById("form-project-create").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1354,6 +1458,7 @@ async function openProjectModal(codigo) {
     return;
   }
   const p = r.data;
+  currentProjectId = p.proyecto_id;
   document.getElementById("proj-modal-subtitle").innerHTML = `${p.nombre} ${p.cliente_nombre ? `· ${p.cliente_nombre}` : ""} · ${projectStatusBadge(p.estado)}`;
 
   const isTerminal = p.estado === "FINALIZADO" || p.estado === "CANCELADO";
@@ -1465,8 +1570,11 @@ async function loadClients() {
   }
   const items = r.data || [];
   body.innerHTML = items.length
-    ? items.map((c) => `<tr class="${TR}"><td class="${TD}">${c.ruc}</td><td class="${TD}">${c.razon_social}</td><td class="${TD}">${c.contacto || "—"}</td></tr>`).join("")
-    : emptyRow(3, "Sin clientes registrados.", "inbox");
+    ? items.map((c) => `<tr class="${TR}">
+        <td class="${TD}">${c.ruc}</td><td class="${TD}">${c.razon_social}</td><td class="${TD}">${c.contacto || "—"}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="openDocumentsModal('cliente', '${c.cliente_id}', '${c.razon_social.replace(/'/g, "\\'")}')">Documentos</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin clientes registrados.", "inbox");
 }
 
 // -------- Proyectos: rentabilidad --------
@@ -1638,6 +1746,67 @@ async function loadFiscalParams() {
         <td class="${TD}">${p.descripcion || "—"}</td>
       </tr>`).join("")
     : emptyRow(5, "Sin parámetros fiscales registrados.", "inbox");
+}
+
+// -------- Contabilidad: reportes financieros --------
+const REPORT_ACCOUNT_TYPE_TONES = { ACTIVO: "ok", PASIVO: "low", PATRIMONIO: "pendiente", INGRESO: "ok", GASTO: "low" };
+function reportAccountRow(c) {
+  return `<tr class="${TR}">
+    <td class="${TD} font-mono">${c.codigo}</td><td class="${TD}">${c.nombre}</td>
+    <td class="${TD}">${badge(c.tipo, REPORT_ACCOUNT_TYPE_TONES[c.tipo] || "devolucion")}</td>
+    <td class="${TD} ${c.saldo < 0 ? "text-rose-600" : ""}">${money(c.saldo)}</td>
+  </tr>`;
+}
+
+async function loadIncomeStatement() {
+  const body = document.getElementById("income-statement-body");
+  body.innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const desde = document.getElementById("income-statement-desde").value;
+  const hasta = document.getElementById("income-statement-hasta").value;
+  const params = new URLSearchParams();
+  if (desde) params.set("fecha_desde", desde);
+  if (hasta) params.set("fecha_hasta", hasta);
+  const r = await api(`/accounting/reports/income-statement?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(4, r.error?.message || "Tu rol no tiene permiso para ver reportes financieros.", "lock");
+    document.getElementById("income-statement-cards").innerHTML = "";
+    return;
+  }
+  const d = r.data;
+  document.getElementById("income-statement-cards").innerHTML = [
+    costeoCard("Total ingresos", `PEN ${money(d.total_ingresos)}`, "text-emerald-600"),
+    costeoCard("Total gastos", `PEN ${money(d.total_gastos)}`, "text-rose-600"),
+    costeoCard("Utilidad neta", `PEN ${money(d.utilidad_neta)}`, d.utilidad_neta >= 0 ? "text-navy-950" : "text-rose-600"),
+  ].join("");
+  body.innerHTML = d.cuentas.length
+    ? d.cuentas.map(reportAccountRow).join("")
+    : emptyRow(4, "Sin movimientos contabilizados en el rango seleccionado.", "inbox");
+}
+
+async function loadBalanceSheet() {
+  const body = document.getElementById("balance-sheet-body");
+  body.innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const corte = document.getElementById("balance-sheet-corte").value;
+  const params = corte ? `?fecha_corte=${encodeURIComponent(corte)}` : "";
+  const r = await api(`/accounting/reports/balance-sheet${params}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(4, r.error?.message || "Tu rol no tiene permiso para ver reportes financieros.", "lock");
+    document.getElementById("balance-sheet-cards").innerHTML = "";
+    return;
+  }
+  const d = r.data;
+  document.getElementById("balance-sheet-cards").innerHTML = [
+    costeoCard("Total activo", `PEN ${money(d.total_activo)}`),
+    costeoCard("Total pasivo", `PEN ${money(d.total_pasivo)}`),
+    costeoCard("Total patrimonio", `PEN ${money(d.total_patrimonio)}`, "text-emerald-600"),
+  ].join("");
+  const filas = d.cuentas.length ? d.cuentas.map(reportAccountRow).join("") : "";
+  const filaResultado = `<tr class="${TR}">
+    <td class="${TD} font-mono">—</td><td class="${TD} italic">Resultado del ejercicio (acumulado)</td>
+    <td class="${TD}">${badge("PATRIMONIO", "pendiente")}</td>
+    <td class="${TD} ${d.resultado_ejercicio < 0 ? "text-rose-600" : ""}">${money(d.resultado_ejercicio)}</td>
+  </tr>`;
+  body.innerHTML = (filas + filaResultado) || emptyRow(4, "Sin movimientos contabilizados hasta la fecha de corte.", "inbox");
 }
 
 // -------- Contabilidad: asientos --------
@@ -1898,6 +2067,186 @@ async function loadAttendance(page) {
   renderPager("attendance-pager", r.data, (p) => loadAttendance(p));
 }
 
+// -------- CRM / Leads --------
+let currentLeadCodigo = null;
+let currentLeadId = null;
+let leadQuoteDraftLines = [];
+const LEAD_STAGE_TONES = { NUEVO: "pendiente", CONTACTADO: "pendiente", CALIFICADO: "pendiente", PROPUESTA: "pendiente", GANADO: "ok", PERDIDO: "low" };
+function leadStageBadge(etapa) {
+  return badge(etapa, LEAD_STAGE_TONES[etapa] || "devolucion");
+}
+
+document.getElementById("form-lead-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    channel: "web",
+    nombre_contacto: f.get("nombre_contacto"), empresa: f.get("empresa") || null, telefono: f.get("telefono") || null,
+    email: f.get("email") || null, cliente_ruc: f.get("cliente_ruc") || null, origen: f.get("origen") || null,
+    monto_estimado: f.get("monto_estimado") ? Number(f.get("monto_estimado")) : null,
+    fecha_proximo_seguimiento: f.get("fecha_proximo_seguimiento") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/crm/leads", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("lead-create-result", r);
+    if (r.status === "success") { toast(`Lead ${r.data.lead.codigo} creado`); e.target.reset(); loadLeads(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadLeads(page) {
+  const body = document.getElementById("leads-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const etapa = document.getElementById("lead-filter-etapa").value;
+  const params = new URLSearchParams({ page: page || 1, page_size: 20 });
+  if (etapa) params.set("etapa", etapa);
+  const r = await api(`/crm/leads?${params.toString()}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver el CRM.", "lock");
+    document.getElementById("leads-pager").innerHTML = "";
+    return;
+  }
+  const items = r.data.items || [];
+  body.innerHTML = items.length
+    ? items.map((l) => `<tr class="${TR} cursor-pointer" onclick="openLeadModal('${l.codigo}')">
+        <td class="${TD} font-semibold text-navy-900">${l.codigo}</td><td class="${TD}">${l.nombre_contacto}${l.empresa ? ` <span class="text-slate-400">(${l.empresa})</span>` : ""}</td>
+        <td class="${TD}">${l.cliente_nombre || "—"}</td><td class="${TD}">${l.monto_estimado ? `${l.moneda || "PEN"} ${money(l.monto_estimado)}` : "—"}</td>
+        <td class="${TD}">${l.responsable_nombre || "—"}</td><td class="${TD}">${leadStageBadge(l.etapa)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="event.stopPropagation(); openLeadModal('${l.codigo}')">Ver</button></td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin leads registrados.", "inbox");
+  renderPager("leads-pager", r.data, (p) => loadLeads(p));
+}
+
+function renderLeadQuoteDraftLines() {
+  const body = document.getElementById("lead-quote-draft-lines-body");
+  body.innerHTML = leadQuoteDraftLines.length
+    ? leadQuoteDraftLines.map((it, i) => `<tr class="${TR}">
+        <td class="${TD}">${it.descripcion}</td><td class="${TD}">${it.cantidad}</td>
+        <td class="${TD}">${money(it.precio_unitario)}</td><td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeLeadQuoteDraftLine(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(5, "Agrega al menos un ítem para poder convertir el lead.", "inbox");
+}
+
+function addLeadQuoteDraftLine() {
+  const descripcion = document.getElementById("lead-quote-line-descripcion").value.trim();
+  const cantidad = Number(document.getElementById("lead-quote-line-cantidad").value || 0);
+  const precio_unitario = Number(document.getElementById("lead-quote-line-precio").value || 0);
+  if (!descripcion || cantidad <= 0 || precio_unitario < 0) { toast("Ingresa descripción, cantidad (>0) y precio unitario (>=0) del ítem", false); return; }
+  leadQuoteDraftLines.push({ descripcion, cantidad, precio_unitario });
+  document.getElementById("lead-quote-line-descripcion").value = "";
+  document.getElementById("lead-quote-line-cantidad").value = "";
+  document.getElementById("lead-quote-line-precio").value = "";
+  renderLeadQuoteDraftLines();
+}
+function removeLeadQuoteDraftLine(i) {
+  leadQuoteDraftLines.splice(i, 1);
+  renderLeadQuoteDraftLines();
+}
+
+async function openLeadModal(codigo) {
+  currentLeadCodigo = codigo;
+  leadQuoteDraftLines = [];
+  renderLeadQuoteDraftLines();
+  const modal = document.getElementById("lead-modal");
+  document.getElementById("lead-modal-title").textContent = codigo;
+  document.getElementById("lead-modal-subtitle").textContent = "Cargando…";
+  document.getElementById("lead-info-line").textContent = "";
+  document.getElementById("lead-activities-body").innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("lead-activity-result").innerHTML = "";
+  document.getElementById("lead-convert-result").innerHTML = "";
+  document.getElementById("form-lead-activity").reset();
+  modal.classList.remove("hidden");
+
+  const r = await api(`/crm/leads/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    document.getElementById("lead-modal-subtitle").textContent = r.error?.message || "No se pudo cargar el lead";
+    return;
+  }
+  const l = r.data;
+  currentLeadId = l.lead_id;
+  document.getElementById("lead-modal-subtitle").innerHTML = `${l.nombre_contacto}${l.empresa ? ` — ${l.empresa}` : ""} · ${leadStageBadge(l.etapa)}`;
+  const info = [
+    l.cliente_nombre ? `Cliente: ${l.cliente_nombre}` : "Sin cliente vinculado",
+    l.telefono ? `Tel: ${l.telefono}` : null,
+    l.email ? `Email: ${l.email}` : null,
+    l.monto_estimado ? `Estimado: ${l.moneda || "PEN"} ${money(l.monto_estimado)}` : null,
+    l.motivo_perdida ? `Motivo de pérdida: ${l.motivo_perdida}` : null,
+    l.cotizacion_codigo ? `Convertido en cotización: ${l.cotizacion_codigo}` : null,
+  ].filter(Boolean).join(" · ");
+  document.getElementById("lead-info-line").textContent = info;
+
+  const isClosed = l.etapa === "GANADO" || l.etapa === "PERDIDO";
+  document.getElementById("lead-stage-actions").querySelectorAll("button[onclick^='setLeadStage'], button[onclick^='promptLeadLost']").forEach((btn) => {
+    btn.classList.toggle("hidden", isClosed);
+  });
+  document.getElementById("form-lead-activity").classList.toggle("hidden", isClosed);
+  document.getElementById("lead-convert-section").classList.toggle("hidden", isClosed || !l.cliente_id);
+
+  document.getElementById("lead-activities-body").innerHTML = (l.actividades || []).length
+    ? l.actividades.map((a) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(a.fecha).toLocaleDateString("es-PE")}</td><td class="${TD}">${a.tipo}</td><td class="${TD}">${a.descripcion}</td>
+      </tr>`).join("")
+    : emptyRow(3, "Sin seguimiento registrado todavía.", "inbox");
+}
+
+function closeLeadModal() {
+  document.getElementById("lead-modal").classList.add("hidden");
+  currentLeadCodigo = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLeadModal(); });
+
+async function setLeadStage(etapa) {
+  if (!currentLeadCodigo) return;
+  const r = await api(`/crm/leads/${encodeURIComponent(currentLeadCodigo)}/stage`, { method: "POST", body: JSON.stringify({ channel: "web", etapa }) });
+  if (r.status === "success") { toast(`Lead marcado ${etapa.toLowerCase()}`); openLeadModal(currentLeadCodigo); loadLeads(1); }
+  else toast(r.error.message, false);
+}
+
+function promptLeadLost() {
+  const motivo = prompt("¿Por qué se perdió este lead?");
+  if (!motivo) return;
+  setLeadStageLost(motivo);
+}
+async function setLeadStageLost(motivo) {
+  const r = await api(`/crm/leads/${encodeURIComponent(currentLeadCodigo)}/stage`, { method: "POST", body: JSON.stringify({ channel: "web", etapa: "PERDIDO", motivo_perdida: motivo }) });
+  if (r.status === "success") { toast("Lead marcado perdido"); openLeadModal(currentLeadCodigo); loadLeads(1); }
+  else toast(r.error.message, false);
+}
+
+document.getElementById("form-lead-activity").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentLeadCodigo) return;
+  const f = new FormData(e.target);
+  const payload = { channel: "web", tipo: f.get("tipo"), descripcion: f.get("descripcion") };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/crm/leads/${encodeURIComponent(currentLeadCodigo)}/activities`, { method: "POST", body: JSON.stringify(payload) });
+    renderResult("lead-activity-result", r);
+    if (r.status === "success") { toast("Seguimiento registrado"); e.target.reset(); openLeadModal(currentLeadCodigo); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function convertLeadToQuote() {
+  if (!currentLeadCodigo) return;
+  if (leadQuoteDraftLines.length === 0) { toast("Agrega al menos un ítem", false); return; }
+  if (!confirm(`¿Convertir el lead ${currentLeadCodigo} en una cotización?`)) return;
+  const r = await api(`/crm/leads/${encodeURIComponent(currentLeadCodigo)}/convert`, { method: "POST", body: JSON.stringify({ channel: "web", items: leadQuoteDraftLines }) });
+  renderResult("lead-convert-result", r);
+  if (r.status === "success") {
+    toast(`Cotización ${r.data.cotizacion.codigo} creada a partir del lead`);
+    loadLeads(1);
+    openLeadModal(currentLeadCodigo);
+  } else toast(r.error.message, false);
+}
+
 // -------- Ventas: cotizaciones --------
 let quoteDraftLines = [];
 let currentQuoteCodigo = null;
@@ -2047,6 +2396,7 @@ async function convertQuote() {
 // -------- Ventas: contratos --------
 let hitoDraftLines = [];
 let currentContractCodigo = null;
+let currentContractId = null;
 let currentPayHitoId = null;
 
 function renderHitoDraftLines() {
@@ -2156,6 +2506,7 @@ async function openContractModal(codigo) {
     return;
   }
   const c = r.data;
+  currentContractId = c.contrato_id;
   document.getElementById("contract-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${contractStatusBadge(c.estado)}`;
 
   const isTerminal = c.estado === "FINALIZADO" || c.estado === "CANCELADO";
@@ -2491,6 +2842,33 @@ async function completeMaintenance(mantenimientoId) {
   else toast(r.error.message, false);
 }
 
+function updateWarrantiesBadge(count) {
+  const badge = document.getElementById("warranties-badge");
+  if (count > 0) { badge.textContent = count > 99 ? "99+" : count; badge.classList.remove("hidden"); }
+  else badge.classList.add("hidden");
+}
+
+async function loadWarranties() {
+  const body = document.getElementById("warranties-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const dias = document.getElementById("warranties-dias").value;
+  const r = await api(`/assets-warranties-expiring?dias=${encodeURIComponent(dias)}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver esto.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((a) => `<tr class="${TR} cursor-pointer" onclick="openAssetModal('${a.activo_id}')">
+        <td class="${TD} font-semibold text-navy-900">${a.descripcion}</td><td class="${TD}">${a.sku || "—"}</td>
+        <td class="${TD}">${a.cliente_nombre || "—"}</td><td class="${TD}">${a.codigo_proyecto || "—"}</td>
+        <td class="${TD}">${new Date(a.garantia_fin).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}">${a.dias_restantes < 0 ? `<span class="text-rose-600 font-semibold">Vencida hace ${Math.abs(a.dias_restantes)} días</span>` : `${a.dias_restantes} días`}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin activos con garantía por vencer en esta ventana.", "inbox");
+  updateWarrantiesBadge(items.length);
+}
+
 // -------- Activos: mantenimientos (listado global) --------
 async function loadMantenimientos(page) {
   const body = document.getElementById("maintenance-body");
@@ -2759,6 +3137,48 @@ async function toggleModuleAccess(modulo, rol, habilitado) {
   else { toast(r.error.message, false); loadModuleAccess(); }
 }
 
+// -------- Roles y permisos --------
+async function loadRolePermissions() {
+  const container = document.getElementById("role-permissions-list");
+  container.innerHTML = `<p class="text-sm text-slate-400 italic">Cargando…</p>`;
+  const r = await api("/admin/role-permissions");
+  if (r.status !== "success") {
+    container.innerHTML = `<p class="text-sm text-slate-400 italic">${r.error?.message || "Tu rol no tiene permiso para ver esto."}</p>`;
+    return;
+  }
+  container.innerHTML = r.data.map((row) => `
+    <div class="form-card mb-4">
+      <div class="font-bold text-navy-950 mb-2">${row.rol}</div>
+      <div class="flex flex-wrap gap-1.5">
+        ${row.permisos.map((p) => `<span class="font-mono text-[11px] px-2 py-1 rounded-md bg-slate-100 text-slate-600">${p}</span>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+// -------- Integraciones --------
+async function loadIntegrationsStatus() {
+  const container = document.getElementById("integrations-cards");
+  container.innerHTML = `<p class="text-sm text-slate-400 italic">Cargando…</p>`;
+  const r = await api("/admin/integrations-status");
+  if (r.status !== "success") {
+    container.innerHTML = `<p class="text-sm text-slate-400 italic">${r.error?.message || "Tu rol no tiene permiso para ver esto."}</p>`;
+    return;
+  }
+  const items = [
+    { label: "Asistente de IA (Gemini)", key: "gemini" },
+    { label: "Bot de Telegram — token", key: "telegram_bot" },
+    { label: "Bot de Telegram — webhook", key: "telegram_webhook" },
+  ];
+  container.innerHTML = items.map(({ label, key }) => {
+    const s = r.data[key];
+    return `<div class="form-card">
+      <div class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">${label}</div>
+      <div class="mb-1">${badge(s.configurado ? "CONFIGURADO" : "NO CONFIGURADO", s.configurado ? "ok" : "low")}</div>
+      <div class="text-xs text-slate-500 font-mono">${s.variable}</div>
+    </div>`;
+  }).join("");
+}
+
 // -------- Configuración: logo --------
 document.getElementById("form-logo").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2942,3 +3362,70 @@ document.getElementById("form-ai-chat").addEventListener("submit", async (e) => 
     aiChatBusy = false;
   }
 });
+
+// -------- Gestión documental (modal genérico reusado en Proyectos, Activos, Contratos, Leads y Clientes) --------
+let currentDocEntidadTipo = null;
+let currentDocEntidadId = null;
+
+async function openDocumentsModal(entidadTipo, entidadId, titulo) {
+  currentDocEntidadTipo = entidadTipo;
+  currentDocEntidadId = entidadId;
+  const modal = document.getElementById("documents-modal");
+  document.getElementById("documents-modal-subtitle").textContent = titulo || "";
+  document.getElementById("documents-list-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("document-upload-result").innerHTML = "";
+  document.getElementById("form-document-upload").reset();
+  modal.classList.remove("hidden");
+  await loadDocumentsList();
+}
+
+async function loadDocumentsList() {
+  const body = document.getElementById("documents-list-body");
+  if (!currentDocEntidadId) { body.innerHTML = emptyRow(4, "No se pudo determinar el registro.", "lock"); return; }
+  const r = await api(`/documents?entidad_tipo=${encodeURIComponent(currentDocEntidadTipo)}&entidad_id=${encodeURIComponent(currentDocEntidadId)}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(4, r.error?.message || "Tu rol no tiene permiso para ver documentos.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((d) => `<tr class="${TR}">
+        <td class="${TD}"><a href="${d.url}" target="_blank" rel="noopener" class="text-accent-600 hover:underline">${d.nombre}</a></td>
+        <td class="${TD}">${d.subido_por_nombre || "—"}</td>
+        <td class="${TD}">${new Date(d.created_at).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}"><button type="button" class="btn-danger px-2 py-1 text-xs" onclick="deleteDocumentAction('${d.archivo_id}')">Eliminar</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin documentos adjuntos todavía.", "inbox");
+}
+
+document.getElementById("form-document-upload").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentDocEntidadId) return;
+  const formData = new FormData(e.target);
+  formData.set("entidad_tipo", currentDocEntidadTipo);
+  formData.set("entidad_id", currentDocEntidadId);
+  formData.set("channel", "web");
+  setFormLoading(e.target, true);
+  try {
+    const r = await uploadFile("/documents", formData);
+    renderResult("document-upload-result", r);
+    if (r.status === "success") { toast("Documento subido"); e.target.reset(); loadDocumentsList(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function deleteDocumentAction(archivoId) {
+  if (!confirm("¿Eliminar este documento? No se puede deshacer.")) return;
+  const r = await api(`/documents/${archivoId}`, { method: "DELETE" });
+  if (r.status === "success") { toast("Documento eliminado"); loadDocumentsList(); }
+  else toast(r.error.message, false);
+}
+
+function closeDocumentsModal() {
+  document.getElementById("documents-modal").classList.add("hidden");
+  currentDocEntidadTipo = null;
+  currentDocEntidadId = null;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDocumentsModal(); });

@@ -265,10 +265,89 @@ async function getAsiento(numero) {
   return { ...asR.rows[0], lineas: lineasR.rows };
 }
 
+// -------------------- Reportes financieros --------------------
+// Solo suman líneas de asientos CONTABILIZADO — un asiento en BORRADOR o
+// ANULADO nunca cuenta para estos reportes, mismo criterio que el resto de
+// Contabilidad. Es una aproximación de MVP (sin ajustes de cierre, sin
+// rollup jerárquico por cuenta_padre_id): cada cuenta del plan aparece con
+// su propio saldo, agrupado por tipo.
+
+async function getEstadoResultados({ fechaDesde, fechaHasta } = {}) {
+  const desde = fechaDesde || "1970-01-01";
+  const hasta = fechaHasta || new Date().toISOString().slice(0, 10);
+  const r = await pool.query(
+    `WITH lineas_validas AS (
+       SELECT al.cuenta_id, al.debe, al.haber
+       FROM asiento_lineas al
+       JOIN asientos a ON a.asiento_id = al.asiento_id
+       WHERE a.estado = 'CONTABILIZADO' AND a.fecha BETWEEN $1 AND $2
+     )
+     SELECT c.cuenta_id, c.codigo, c.nombre, c.tipo,
+            COALESCE(SUM(lv.debe),0) AS total_debe, COALESCE(SUM(lv.haber),0) AS total_haber
+     FROM plan_cuentas c
+     LEFT JOIN lineas_validas lv ON lv.cuenta_id = c.cuenta_id
+     WHERE c.tipo IN ('INGRESO','GASTO')
+     GROUP BY c.cuenta_id, c.codigo, c.nombre, c.tipo
+     ORDER BY c.tipo, c.codigo`,
+    [desde, hasta]
+  );
+  const cuentas = r.rows.map((row) => ({
+    ...row,
+    saldo: row.tipo === "INGRESO" ? Number(row.total_haber) - Number(row.total_debe) : Number(row.total_debe) - Number(row.total_haber),
+  }));
+  const totalIngresos = cuentas.filter((c) => c.tipo === "INGRESO").reduce((s, c) => s + c.saldo, 0);
+  const totalGastos = cuentas.filter((c) => c.tipo === "GASTO").reduce((s, c) => s + c.saldo, 0);
+  return {
+    fecha_desde: desde, fecha_hasta: hasta, cuentas,
+    total_ingresos: totalIngresos, total_gastos: totalGastos, utilidad_neta: totalIngresos - totalGastos,
+  };
+}
+
+async function getBalanceGeneral({ fechaCorte } = {}) {
+  const corte = fechaCorte || new Date().toISOString().slice(0, 10);
+  const r = await pool.query(
+    `WITH lineas_validas AS (
+       SELECT al.cuenta_id, al.debe, al.haber
+       FROM asiento_lineas al
+       JOIN asientos a ON a.asiento_id = al.asiento_id
+       WHERE a.estado = 'CONTABILIZADO' AND a.fecha <= $1
+     )
+     SELECT c.cuenta_id, c.codigo, c.nombre, c.tipo,
+            COALESCE(SUM(lv.debe),0) AS total_debe, COALESCE(SUM(lv.haber),0) AS total_haber
+     FROM plan_cuentas c
+     LEFT JOIN lineas_validas lv ON lv.cuenta_id = c.cuenta_id
+     WHERE c.tipo IN ('ACTIVO','PASIVO','PATRIMONIO')
+     GROUP BY c.cuenta_id, c.codigo, c.nombre, c.tipo
+     ORDER BY c.tipo, c.codigo`,
+    [corte]
+  );
+  const cuentas = r.rows.map((row) => ({
+    ...row,
+    saldo: row.tipo === "ACTIVO" ? Number(row.total_debe) - Number(row.total_haber) : Number(row.total_haber) - Number(row.total_debe),
+  }));
+  // El resultado del ejercicio (utilidad acumulada desde siempre hasta la
+  // fecha de corte) se agrega como una línea sintética de patrimonio, para
+  // que Activo = Pasivo + Patrimonio cierre — no es una cuenta real del
+  // plan de cuentas, así que no se puede contabilizar ni editar.
+  const { utilidad_neta } = await getEstadoResultados({ fechaHasta: corte });
+  const totalActivo = cuentas.filter((c) => c.tipo === "ACTIVO").reduce((s, c) => s + c.saldo, 0);
+  const totalPasivo = cuentas.filter((c) => c.tipo === "PASIVO").reduce((s, c) => s + c.saldo, 0);
+  const totalPatrimonioCuentas = cuentas.filter((c) => c.tipo === "PATRIMONIO").reduce((s, c) => s + c.saldo, 0);
+  return {
+    fecha_corte: corte,
+    cuentas,
+    resultado_ejercicio: utilidad_neta,
+    total_activo: totalActivo,
+    total_pasivo: totalPasivo,
+    total_patrimonio: totalPatrimonioCuentas + utilidad_neta,
+  };
+}
+
 module.exports = {
   crearCuenta, listCuentas,
   crearParametroFiscal, listParametrosFiscales, getParametroFiscalVigente,
   crearRegla, listReglas, setReglaActiva,
   crearAsientoManual, generarAsientoAutomatico, contabilizarAsiento, anularAsiento,
   listAsientos, getAsiento,
+  getEstadoResultados, getBalanceGeneral,
 };

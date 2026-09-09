@@ -476,6 +476,83 @@ async function listWarehouses() {
   return r.rows;
 }
 
+// -------------------- Almacenes y ubicaciones (gestión, incluye inactivos) --------------------
+
+async function listWarehousesManaged() {
+  const almacenesR = await pool.query(
+    `SELECT a.*, u.nombre_completo AS responsable_nombre FROM almacenes a
+     LEFT JOIN usuarios u ON u.usuario_id = a.responsable_id
+     ORDER BY a.codigo`
+  );
+  const ubicacionesR = await pool.query("SELECT * FROM ubicaciones ORDER BY codigo_ubicacion");
+  return almacenesR.rows.map((a) => ({
+    ...a,
+    ubicaciones: ubicacionesR.rows.filter((u) => u.almacen_id === a.almacen_id),
+  }));
+}
+
+async function crearAlmacen({ codigo, nombre, responsableId, usuarioId, canal }) {
+  if (!codigo || !nombre) {
+    throw new AppError("SCHEMA_INVALID", "codigo y nombre son obligatorios", 400);
+  }
+  return withAuditedTransaction("inventory.warehouse.create", usuarioId, canal, async (client) => {
+    const existing = await client.query("SELECT almacen_id FROM almacenes WHERE codigo=$1", [codigo]);
+    if (existing.rows.length > 0) {
+      throw new AppError("WAREHOUSE_EXISTS", `Ya existe un almacén con código '${codigo}'`, 409);
+    }
+    const r = await client.query(
+      "INSERT INTO almacenes (codigo, nombre, responsable_id) VALUES ($1,$2,$3) RETURNING *",
+      [codigo, nombre, responsableId || null]
+    );
+    return { entidad: "almacenes", entidadId: r.rows[0].almacen_id, valorNuevo: { codigo, nombre }, almacen: r.rows[0] };
+  });
+}
+
+async function actualizarAlmacen({ almacenId, nombre, responsableId, activo, usuarioId, canal }) {
+  return withAuditedTransaction("inventory.warehouse.update", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      `UPDATE almacenes SET nombre=COALESCE($1,nombre), responsable_id=COALESCE($2,responsable_id), activo=COALESCE($3,activo)
+       WHERE almacen_id=$4 RETURNING *`,
+      [nombre || null, responsableId || null, activo ?? null, almacenId]
+    );
+    if (r.rows.length === 0) throw new AppError("WAREHOUSE_NOT_FOUND", "El almacén indicado no existe", 404);
+    return { entidad: "almacenes", entidadId: almacenId, valorNuevo: { nombre, activo }, almacen: r.rows[0] };
+  });
+}
+
+async function crearUbicacion({ almacenCodigo, codigoUbicacion, descripcion, usuarioId, canal }) {
+  if (!almacenCodigo || !codigoUbicacion) {
+    throw new AppError("SCHEMA_INVALID", "almacenCodigo y codigoUbicacion son obligatorios", 400);
+  }
+  return withAuditedTransaction("inventory.location.create", usuarioId, canal, async (client) => {
+    const almacen = await client.query("SELECT almacen_id FROM almacenes WHERE codigo=$1", [almacenCodigo]);
+    if (almacen.rows.length === 0) throw new AppError("WAREHOUSE_NOT_FOUND", `Almacén '${almacenCodigo}' no existe`, 404);
+    const existing = await client.query(
+      "SELECT ubicacion_id FROM ubicaciones WHERE almacen_id=$1 AND codigo_ubicacion=$2",
+      [almacen.rows[0].almacen_id, codigoUbicacion]
+    );
+    if (existing.rows.length > 0) {
+      throw new AppError("LOCATION_EXISTS", `Ya existe la ubicación '${codigoUbicacion}' en ese almacén`, 409);
+    }
+    const r = await client.query(
+      "INSERT INTO ubicaciones (almacen_id, codigo_ubicacion, descripcion) VALUES ($1,$2,$3) RETURNING *",
+      [almacen.rows[0].almacen_id, codigoUbicacion, descripcion || null]
+    );
+    return { entidad: "ubicaciones", entidadId: r.rows[0].ubicacion_id, valorNuevo: { codigoUbicacion }, ubicacion: r.rows[0] };
+  });
+}
+
+async function actualizarUbicacion({ ubicacionId, descripcion, activo, usuarioId, canal }) {
+  return withAuditedTransaction("inventory.location.update", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      "UPDATE ubicaciones SET descripcion=COALESCE($1,descripcion), activo=COALESCE($2,activo) WHERE ubicacion_id=$3 RETURNING *",
+      [descripcion || null, activo ?? null, ubicacionId]
+    );
+    if (r.rows.length === 0) throw new AppError("LOCATION_NOT_FOUND", "La ubicación indicada no existe", 404);
+    return { entidad: "ubicaciones", entidadId: ubicacionId, valorNuevo: { descripcion, activo }, ubicacion: r.rows[0] };
+  });
+}
+
 // -------------------- Reservas --------------------
 
 async function reserve({ sku, quantity, warehouseCode, locationCode, proyectoCodigo, clienteRuc, fechaExpiracion, usuarioId, canal }) {
@@ -656,6 +733,7 @@ async function getAuditLog({ accion, resultado, limit = 100 }) {
 module.exports = {
   receive, remove, transfer,
   getStock, searchProducts, createProduct, getMovements, getAlerts, listWarehouses,
+  listWarehousesManaged, crearAlmacen, actualizarAlmacen, crearUbicacion, actualizarUbicacion,
   reserve, releaseReservation, getReservations,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,

@@ -153,6 +153,73 @@ test("no se admiten kits anidados", async () => {
   );
 });
 
+// -------------------- Almacenes y ubicaciones (gestión) --------------------
+
+test("crear un almacén funciona y listWarehousesManaged lo trae con sus ubicaciones", async () => {
+  const r = await inventory.crearAlmacen({ codigo: "ALM-TEST", nombre: "Almacén de prueba", usuarioId: SUPERVISOR, canal: "web" });
+  assert.equal(r.almacen.codigo, "ALM-TEST");
+
+  const lista = await inventory.listWarehousesManaged();
+  const encontrado = lista.find((a) => a.codigo === "ALM-TEST");
+  assert.ok(encontrado);
+  assert.deepEqual(encontrado.ubicaciones, []);
+});
+
+test("crear un almacén con código duplicado se rechaza", async () => {
+  await assert.rejects(
+    inventory.crearAlmacen({ codigo: "ALM-001", nombre: "Duplicado", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "WAREHOUSE_EXISTS"
+  );
+});
+
+test("actualizar un almacén inexistente se rechaza", async () => {
+  await assert.rejects(
+    inventory.actualizarAlmacen({ almacenId: "00000000-0000-0000-0000-000000009999", nombre: "X", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "WAREHOUSE_NOT_FOUND"
+  );
+});
+
+test("desactivar un almacén lo deja fuera de listWarehouses pero sigue en listWarehousesManaged", async () => {
+  const { almacen } = await inventory.crearAlmacen({ codigo: "ALM-TEST2", nombre: "Otro de prueba", usuarioId: SUPERVISOR, canal: "web" });
+  await inventory.actualizarAlmacen({ almacenId: almacen.almacen_id, activo: false, usuarioId: SUPERVISOR, canal: "web" });
+
+  const activos = await inventory.listWarehouses();
+  assert.ok(!activos.some((a) => a.codigo === "ALM-TEST2"));
+
+  const gestion = await inventory.listWarehousesManaged();
+  assert.ok(gestion.some((a) => a.codigo === "ALM-TEST2" && a.activo === false));
+});
+
+test("crear una ubicación funciona y aparece anidada en su almacén", async () => {
+  const r = await inventory.crearUbicacion({ almacenCodigo: "ALM-001", codigoUbicacion: "Z-TEST-01", descripcion: "Zona de prueba", usuarioId: SUPERVISOR, canal: "web" });
+  assert.equal(r.ubicacion.codigo_ubicacion, "Z-TEST-01");
+
+  const lista = await inventory.listWarehousesManaged();
+  const almacen = lista.find((a) => a.codigo === "ALM-001");
+  assert.ok(almacen.ubicaciones.some((u) => u.codigo_ubicacion === "Z-TEST-01"));
+});
+
+test("crear una ubicación en un almacén inexistente se rechaza", async () => {
+  await assert.rejects(
+    inventory.crearUbicacion({ almacenCodigo: "ALM-NO-EXISTE", codigoUbicacion: "Z-01", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "WAREHOUSE_NOT_FOUND"
+  );
+});
+
+test("crear una ubicación con código duplicado en el mismo almacén se rechaza", async () => {
+  await assert.rejects(
+    inventory.crearUbicacion({ almacenCodigo: "ALM-001", codigoUbicacion: "Z-TEST-01", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "LOCATION_EXISTS"
+  );
+});
+
+test("actualizar una ubicación inexistente se rechaza", async () => {
+  await assert.rejects(
+    inventory.actualizarUbicacion({ ubicacionId: "00000000-0000-0000-0000-000000009999", descripcion: "X", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "LOCATION_NOT_FOUND"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

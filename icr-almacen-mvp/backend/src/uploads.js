@@ -50,4 +50,43 @@ async function processAndSaveImage(file) {
   return `/uploads/${filename}`;
 }
 
-module.exports = { upload, uploadsDir, processAndSaveImage };
+// -------------------- Documentos adjuntos (planos, permisos, certificados) --------------------
+// A diferencia de processAndSaveImage (logo/fotos de producto), un documento
+// se guarda tal cual: un PDF de planos no es una foto de celular, no tiene
+// sentido reescalarlo/recomprimirlo, y necesita admitir tipos que sharp no
+// procesa.
+const DOCUMENT_MAX_SIZE = 10 * 1024 * 1024; // 10MB — un PDF con planos pesa más que una foto
+const ALLOWED_DOCUMENT_TYPES = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+const uploadDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: DOCUMENT_MAX_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_DOCUMENT_TYPES[file.mimetype]) {
+      return cb(new AppError("INVALID_FILE_TYPE", "Solo se aceptan PDF, JPEG, PNG o WebP", 400));
+    }
+    cb(null, true);
+  },
+});
+
+async function saveDocumentFile(file) {
+  const filename = `${crypto.randomUUID()}${ALLOWED_DOCUMENT_TYPES[file.mimetype]}`;
+  await fs.promises.writeFile(path.join(uploadsDir, filename), file.buffer);
+  return { url: `/uploads/${filename}`, tipoArchivo: file.mimetype, tamanoBytes: file.buffer.length };
+}
+
+async function deleteUploadedFile(url) {
+  if (!url || !url.startsWith("/uploads/")) return;
+  try {
+    await fs.promises.unlink(path.join(uploadsDir, path.basename(url)));
+  } catch (err) {
+    if (err.code !== "ENOENT") console.error(`No se pudo borrar el archivo '${url}'`, err);
+  }
+}
+
+module.exports = { upload, uploadsDir, processAndSaveImage, uploadDocument, saveDocumentFile, deleteUploadedFile };

@@ -495,6 +495,64 @@ CREATE TABLE mantenimientos (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- CRM / PIPELINE COMERCIAL ----------
+-- Etapa previa a Cotizaciones: un lead es un contacto/oportunidad, todavía
+-- sin ítems ni monto formal. No reemplaza a Cotizaciones — al ganar un
+-- lead se convierte en una cotización (con sus ítems recién ahí), igual
+-- que una cotización aceptada se convierte en contrato. Deliberadamente
+-- simple (sin scoring, sin campañas): solo el pipeline y su seguimiento.
+CREATE SEQUENCE lead_numero_seq START 1;
+
+CREATE TABLE leads (
+    lead_id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo                      TEXT NOT NULL UNIQUE,
+    nombre_contacto             TEXT NOT NULL,
+    empresa                     TEXT,
+    telefono                    TEXT,
+    email                       TEXT,
+    cliente_id                  UUID REFERENCES clientes(cliente_id),
+    origen                      TEXT CHECK (origen IN
+                                  ('REFERIDO','WEB','LLAMADA','REDES_SOCIALES','FERIA','OTRO')),
+    etapa                       TEXT NOT NULL DEFAULT 'NUEVO' CHECK (etapa IN
+                                  ('NUEVO','CONTACTADO','CALIFICADO','PROPUESTA','GANADO','PERDIDO')),
+    monto_estimado              NUMERIC(14,2) CHECK (monto_estimado IS NULL OR monto_estimado >= 0),
+    moneda                      TEXT DEFAULT 'PEN',
+    responsable_id              UUID REFERENCES usuarios(usuario_id),
+    fecha_proximo_seguimiento   DATE,
+    motivo_perdida              TEXT,
+    cotizacion_id               UUID REFERENCES cotizaciones(cotizacion_id),
+    notas                       TEXT,
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE lead_actividades (
+    actividad_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id           UUID NOT NULL REFERENCES leads(lead_id) ON DELETE CASCADE,
+    tipo              TEXT NOT NULL CHECK (tipo IN ('LLAMADA','EMAIL','REUNION','NOTA')),
+    descripcion       TEXT NOT NULL,
+    fecha             DATE NOT NULL DEFAULT CURRENT_DATE,
+    registrado_por    UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- GESTIÓN DOCUMENTAL ----------
+-- Archivos adjuntos (planos, permisos municipales, certificados de
+-- garantía, fotos de instalación) ligados a distintas entidades del ERP.
+-- Asociación polimórfica simple (entidad_tipo + entidad_id) en vez de una
+-- FK por entidad — evita una tabla intermedia por cada tipo, a costa de no
+-- poder declarar la FK a nivel de base de datos (se valida en el servicio).
+CREATE TABLE archivos_adjuntos (
+    archivo_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entidad_tipo    TEXT NOT NULL CHECK (entidad_tipo IN ('proyecto','cliente','activo','contrato','lead')),
+    entidad_id      UUID NOT NULL,
+    nombre          TEXT NOT NULL,
+    url             TEXT NOT NULL,
+    tipo_archivo    TEXT NOT NULL,
+    tamano_bytes    INT,
+    subido_por      UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- GASTOS ----------
 -- Gastos operativos: hoy el motor contable solo reaccionaba a compras
 -- recibidas y cobros de contrato, pero una empresa gasta en muchas cosas más
@@ -687,3 +745,7 @@ CREATE INDEX idx_activos_cliente ON activos_instalados(cliente_id);
 CREATE INDEX idx_activos_proyecto ON activos_instalados(proyecto_id);
 CREATE INDEX idx_mantenimientos_activo ON mantenimientos(activo_id);
 CREATE INDEX idx_mantenimientos_estado ON mantenimientos(estado);
+CREATE INDEX idx_leads_etapa ON leads(etapa);
+CREATE INDEX idx_leads_responsable ON leads(responsable_id);
+CREATE INDEX idx_lead_actividades_lead ON lead_actividades(lead_id);
+CREATE INDEX idx_archivos_adjuntos_entidad ON archivos_adjuntos(entidad_tipo, entidad_id);

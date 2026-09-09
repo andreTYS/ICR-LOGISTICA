@@ -113,6 +113,84 @@ test("sin una regla activa para el evento, no se genera ningún asiento (no romp
   assert.equal(despues, antes, "no debería crearse un asiento nuevo con la regla desactivada");
 });
 
+// -------------------- Reportes financieros --------------------
+
+test("getEstadoResultados suma ingresos y gastos solo de asientos CONTABILIZADO dentro del rango de fechas", async () => {
+  const ventaBorrador = await contabilidad.crearAsientoManual({
+    fecha: "2026-03-15", glosa: "Venta sin contabilizar",
+    lineas: [{ cuenta_codigo: "10", debe: 999, haber: 0 }, { cuenta_codigo: "70", debe: 0, haber: 999 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+
+  const venta = await contabilidad.crearAsientoManual({
+    fecha: "2026-03-10", glosa: "Venta contabilizada dentro del rango",
+    lineas: [{ cuenta_codigo: "10", debe: 500, haber: 0 }, { cuenta_codigo: "70", debe: 0, haber: 500 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: venta.numero, usuarioId: ADMIN, canal: "web" });
+
+  const gasto = await contabilidad.crearAsientoManual({
+    fecha: "2026-03-20", glosa: "Gasto contabilizado dentro del rango",
+    lineas: [{ cuenta_codigo: "63", debe: 200, haber: 0 }, { cuenta_codigo: "10", debe: 0, haber: 200 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: gasto.numero, usuarioId: ADMIN, canal: "web" });
+
+  const fueraDeRango = await contabilidad.crearAsientoManual({
+    fecha: "2026-01-01", glosa: "Venta contabilizada fuera del rango",
+    lineas: [{ cuenta_codigo: "10", debe: 300, haber: 0 }, { cuenta_codigo: "70", debe: 0, haber: 300 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: fueraDeRango.numero, usuarioId: ADMIN, canal: "web" });
+
+  const reporte = await contabilidad.getEstadoResultados({ fechaDesde: "2026-03-01", fechaHasta: "2026-03-31" });
+  assert.equal(reporte.total_ingresos, 500);
+  assert.equal(reporte.total_gastos, 200);
+  assert.equal(reporte.utilidad_neta, 300);
+  assert.ok(!reporte.cuentas.some((c) => c.codigo === "70" && Number(c.saldo) === 999), "un asiento en BORRADOR no debería contar");
+});
+
+test("getBalanceGeneral cuadra Activo = Pasivo + Patrimonio, incluyendo el resultado del ejercicio", async () => {
+  // Cuadra siempre por partida doble (cada asiento contabilizado está
+  // balanceado), sin importar qué haya contabilizado otro test antes —
+  // por eso se verifica la identidad en sí, y el efecto de estos asientos
+  // puntuales por delta contra una fecha de corte anterior a que existan.
+  const antes = await contabilidad.getBalanceGeneral({ fechaCorte: "2026-01-31" });
+
+  const apertura = await contabilidad.crearAsientoManual({
+    fecha: "2026-02-01", glosa: "Apertura de balance",
+    lineas: [{ cuenta_codigo: "20", debe: 1000, haber: 0 }, { cuenta_codigo: "42", debe: 0, haber: 1000 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: apertura.numero, usuarioId: ADMIN, canal: "web" });
+
+  const venta = await contabilidad.crearAsientoManual({
+    fecha: "2026-02-05", glosa: "Venta al contado",
+    lineas: [{ cuenta_codigo: "10", debe: 500, haber: 0 }, { cuenta_codigo: "70", debe: 0, haber: 500 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: venta.numero, usuarioId: ADMIN, canal: "web" });
+
+  const gasto = await contabilidad.crearAsientoManual({
+    fecha: "2026-02-10", glosa: "Gasto pagado en efectivo",
+    lineas: [{ cuenta_codigo: "63", debe: 200, haber: 0 }, { cuenta_codigo: "10", debe: 0, haber: 200 }],
+    usuarioId: ADMIN, canal: "web",
+  });
+  await contabilidad.contabilizarAsiento({ numero: gasto.numero, usuarioId: ADMIN, canal: "web" });
+
+  const balance = await contabilidad.getBalanceGeneral({ fechaCorte: "2026-02-28" });
+  assert.equal(balance.total_activo, balance.total_pasivo + balance.total_patrimonio, "Activo debe ser igual a Pasivo + Patrimonio");
+  assert.equal(balance.total_activo - antes.total_activo, 1300);
+  assert.equal(balance.total_pasivo - antes.total_pasivo, 1000);
+  assert.equal(balance.resultado_ejercicio - antes.resultado_ejercicio, 300);
+});
+
+test("getBalanceGeneral con una fecha de corte anterior no incluye movimientos posteriores", async () => {
+  const antes = await contabilidad.getBalanceGeneral({ fechaCorte: "2026-01-31" });
+  const despues = await contabilidad.getBalanceGeneral({ fechaCorte: "2026-02-28" });
+  assert.ok(despues.total_activo > antes.total_activo, "el corte posterior debería reflejar los asientos de febrero");
+});
+
 after(async () => {
   await pool.end();
 });

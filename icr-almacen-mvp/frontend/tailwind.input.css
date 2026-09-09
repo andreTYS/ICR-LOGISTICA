@@ -85,6 +85,11 @@ body { font-feature-settings: "cv11"; }
 .nav-submenu > div { overflow: hidden; }
 .nav-group.expanded .nav-submenu { grid-template-rows: 1fr; }
 .nav-submenu .nav-item { padding-left: 22px; font-size: 13.5px; }
+.nav-subgroup-label {
+  padding: 8px 8px 3px 22px; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: rgba(255,255,255,0.35);
+}
+.nav-subgroup-label:first-child { padding-top: 2px; }
 
 .nav-group-placeholder { opacity: .4; cursor: default; }
 .nav-group-placeholder:hover { background: transparent; color: rgba(255,255,255,0.55); }
@@ -232,6 +237,11 @@ body { font-feature-settings: "cv11"; }
   .nav-submenu > div { display: flex; overflow: visible; }
   .nav-group-placeholder { display: none; }
 }
+
+/* Documentos se abre encima de otro modal (Proyecto/Activo/Contrato/Lead ya
+   abiertos) — necesita un z-index mayor al de .modal-overlay para no quedar
+   detrás del que lo invocó. */
+#documents-modal { z-index: 46; }
 
 /* -------- Asistente de IA (chat flotante) -------- */
 #ai-chat-widget { position: fixed; right: 20px; bottom: 20px; z-index: 45; }

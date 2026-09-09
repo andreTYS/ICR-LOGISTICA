@@ -101,6 +101,36 @@ test("el listado de activos y mantenimientos pagina y filtra", async () => {
   assert.ok(m.items.every((x) => x.estado === "COMPLETADO"));
 });
 
+test("getWarrantiesExpiringSoon trae activos con garantía vencida o por vencer, excluyendo RETIRADO", async () => {
+  const hoy = new Date();
+  const enDias = (n) => {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const { activo: porVencer } = await assets.crearActivo({
+    descripcion: "Panel con garantía por vencer pronto", garantiaInicio: "2020-01-01", garantiaFin: enDias(10), usuarioId: ALMACENERO, canal: "web",
+  });
+  const { activo: yaVencida } = await assets.crearActivo({
+    descripcion: "Panel con garantía ya vencida", garantiaInicio: "2020-01-01", garantiaFin: enDias(-5), usuarioId: ALMACENERO, canal: "web",
+  });
+  const { activo: lejos } = await assets.crearActivo({
+    descripcion: "Panel con garantía lejana", garantiaInicio: "2020-01-01", garantiaFin: enDias(400), usuarioId: ALMACENERO, canal: "web",
+  });
+  const { activo: retirado } = await assets.crearActivo({
+    descripcion: "Panel retirado con garantía por vencer", garantiaInicio: "2020-01-01", garantiaFin: enDias(10), usuarioId: ALMACENERO, canal: "web",
+  });
+  await assets.actualizarEstadoActivo({ activoId: retirado.activo_id, estado: "RETIRADO", usuarioId: ALMACENERO, canal: "web" });
+
+  const r = await assets.getWarrantiesExpiringSoon({ dias: 60 });
+  const ids = r.map((a) => a.activo_id);
+  assert.ok(ids.includes(porVencer.activo_id));
+  assert.ok(ids.includes(yaVencida.activo_id));
+  assert.ok(!ids.includes(lejos.activo_id), "una garantía a 400 días no debería salir con ventana de 60");
+  assert.ok(!ids.includes(retirado.activo_id), "un activo RETIRADO no debería salir aunque su garantía esté por vencer");
+});
+
 after(async () => {
   await pool.end();
 });

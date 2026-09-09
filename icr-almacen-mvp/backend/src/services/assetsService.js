@@ -94,6 +94,27 @@ async function listActivos({ clienteRuc, proyectoCodigo, estado, page, pageSize 
   return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
 }
 
+// Activos con garantía por vencer dentro de N días (o ya vencida), en el
+// mismo espíritu que inventory.getAlerts() para stock bajo: una lista
+// accionable, no solo un dato más en el detalle del activo. Excluye
+// RETIRADO — un activo dado de baja ya no importa si su garantía venció.
+async function getWarrantiesExpiringSoon({ dias } = {}) {
+  const ventana = dias ? Number(dias) : 60;
+  const r = await pool.query(
+    `SELECT a.*, c.razon_social AS cliente_nombre, pr.codigo_proyecto, p.sku, p.nombre AS producto_nombre,
+            (a.garantia_fin - CURRENT_DATE) AS dias_restantes
+     FROM activos_instalados a
+     LEFT JOIN clientes c ON c.cliente_id = a.cliente_id
+     LEFT JOIN proyectos pr ON pr.proyecto_id = a.proyecto_id
+     LEFT JOIN productos p ON p.producto_id = a.producto_id
+     WHERE a.estado <> 'RETIRADO' AND a.garantia_fin IS NOT NULL
+       AND a.garantia_fin <= CURRENT_DATE + ($1 || ' days')::interval
+     ORDER BY a.garantia_fin ASC`,
+    [ventana]
+  );
+  return r.rows;
+}
+
 async function getActivo(activoId) {
   const aR = await pool.query(
     `SELECT a.*, c.razon_social AS cliente_nombre, pr.codigo_proyecto, p.sku, p.nombre AS producto_nombre, s.numero_serie
@@ -181,6 +202,6 @@ async function listMantenimientos({ estado, activoId, page, pageSize } = {}) {
 }
 
 module.exports = {
-  crearActivo, actualizarEstadoActivo, listActivos, getActivo,
+  crearActivo, actualizarEstadoActivo, listActivos, getActivo, getWarrantiesExpiringSoon,
   programarMantenimiento, completarMantenimiento, listMantenimientos,
 };

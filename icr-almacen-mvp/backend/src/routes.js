@@ -18,7 +18,10 @@ const cotizaciones = require("./services/cotizacionesService");
 const assets = require("./services/assetsService");
 const aiChat = require("./services/aiChatService");
 const telegram = require("./services/telegramService");
-const { upload, processAndSaveImage } = require("./uploads");
+const admin = require("./services/adminService");
+const crm = require("./services/crmService");
+const archivos = require("./services/archivosService");
+const { upload, processAndSaveImage, uploadDocument, saveDocumentFile } = require("./uploads");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -229,6 +232,62 @@ router.get(
   "/inventory/warehouses",
   requirePermission("inventory.stock.get"),
   handle(async () => inventory.listWarehouses())
+);
+
+// -------- Almacenes y ubicaciones (gestión) --------
+
+router.get(
+  "/inventory/warehouses-managed",
+  requirePermission("inventory.query"),
+  handle(async () => inventory.listWarehousesManaged())
+);
+
+router.post(
+  "/inventory/warehouses-managed",
+  requirePermission("inventory.warehouse.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return inventory.crearAlmacen({
+      codigo: b.codigo, nombre: b.nombre, responsableId: b.responsable_id || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.patch(
+  "/inventory/warehouses-managed/:id",
+  requirePermission("inventory.warehouse.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return inventory.actualizarAlmacen({
+      almacenId: req.params.id, nombre: b.nombre || null, responsableId: b.responsable_id || null, activo: b.activo ?? null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/inventory/locations",
+  requirePermission("inventory.warehouse.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return inventory.crearUbicacion({
+      almacenCodigo: b.almacen_codigo, codigoUbicacion: b.codigo_ubicacion, descripcion: b.descripcion || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.patch(
+  "/inventory/locations/:id",
+  requirePermission("inventory.warehouse.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return inventory.actualizarUbicacion({
+      ubicacionId: req.params.id, descripcion: b.descripcion || null, activo: b.activo ?? null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
 );
 
 // -------- Reservas --------
@@ -582,6 +641,18 @@ router.get(
   handle(async (req) => contabilidad.getAsiento(req.params.numero))
 );
 
+router.get(
+  "/accounting/reports/income-statement",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.getEstadoResultados({ fechaDesde: req.query.fecha_desde || null, fechaHasta: req.query.fecha_hasta || null }))
+);
+
+router.get(
+  "/accounting/reports/balance-sheet",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.getBalanceGeneral({ fechaCorte: req.query.fecha_corte || null }))
+);
+
 // -------- RRHH --------
 
 router.post(
@@ -857,6 +928,12 @@ router.get(
   handle(async (req) => assets.getActivo(req.params.id))
 );
 
+router.get(
+  "/assets-warranties-expiring",
+  requirePermission("assets.query"),
+  handle(async (req) => assets.getWarrantiesExpiringSoon({ dias: req.query.dias ? Number(req.query.dias) : null }))
+);
+
 router.post(
   "/maintenance",
   requirePermission("assets.manage"),
@@ -882,6 +959,96 @@ router.get(
   "/maintenance",
   requirePermission("assets.query"),
   handle(async (req) => assets.listMantenimientos({ estado: req.query.estado || null, activoId: req.query.activo_id || null, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+// -------- CRM / Pipeline comercial --------
+
+router.post(
+  "/crm/leads",
+  requirePermission("crm.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return crm.crearLead({
+      nombreContacto: b.nombre_contacto, empresa: b.empresa || null, telefono: b.telefono || null, email: b.email || null,
+      clienteRuc: b.cliente_ruc || null, origen: b.origen || null, montoEstimado: b.monto_estimado != null ? Number(b.monto_estimado) : null,
+      moneda: b.moneda || null, fechaProximoSeguimiento: b.fecha_proximo_seguimiento || null, notas: b.notas || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/crm/leads/:codigo/stage",
+  requirePermission("crm.manage"),
+  handle(async (req) => crm.actualizarEtapa({
+    codigo: req.params.codigo, etapa: req.body.etapa, motivoPerdida: req.body?.motivo_perdida || null,
+    usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
+router.post(
+  "/crm/leads/:codigo/activities",
+  requirePermission("crm.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return crm.registrarActividad({
+      codigo: req.params.codigo, tipo: b.tipo, descripcion: b.descripcion, fecha: b.fecha || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
+  "/crm/leads/:codigo/convert",
+  requirePermission("crm.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return crm.convertirACotizacion({
+      codigo: req.params.codigo, items: b.items || [], proyectoCodigo: b.proyecto_codigo || null,
+      moneda: b.moneda || null, validezDias: b.validez_dias || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/crm/leads",
+  requirePermission("crm.query"),
+  handle(async (req) => crm.listLeads({ etapa: req.query.etapa || null, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/crm/leads/:codigo",
+  requirePermission("crm.query"),
+  handle(async (req) => crm.getLead(req.params.codigo))
+);
+
+// -------- Gestión documental --------
+
+router.post(
+  "/documents",
+  requirePermission("documents.manage"),
+  uploadDocument.single("archivo"),
+  handle(async (req) => {
+    if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
+    const { url, tipoArchivo, tamanoBytes } = await saveDocumentFile(req.file);
+    return archivos.subirArchivo({
+      entidadTipo: req.body.entidad_tipo, entidadId: req.body.entidad_id, nombre: req.body.nombre || req.file.originalname,
+      url, tipoArchivo, tamanoBytes, usuarioId: req.user.usuario_id, canal: req.body.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/documents",
+  requirePermission("documents.query"),
+  handle(async (req) => archivos.listArchivos({ entidadTipo: req.query.entidad_tipo, entidadId: req.query.entidad_id }))
+);
+
+router.delete(
+  "/documents/:id",
+  requirePermission("documents.manage"),
+  handle(async (req) => archivos.eliminarArchivo({ archivoId: req.params.id, usuarioId: req.user.usuario_id, canal: req.query.channel || "web" }))
 );
 
 // -------- Panel: tableros agregados --------
@@ -936,6 +1103,20 @@ router.post(
       usuarioId: req.user.usuario_id, canal: b.channel || "web",
     });
   })
+);
+
+// -------- Roles y permisos / Integraciones (solo ADMIN vía wildcard '*') --------
+
+router.get(
+  "/admin/role-permissions",
+  requirePermission("users.manage"),
+  handle(async () => admin.getRolePermissions())
+);
+
+router.get(
+  "/admin/integrations-status",
+  requirePermission("users.manage"),
+  handle(async () => admin.getIntegrationsStatus())
 );
 
 // -------- Asistente de IA (consulta del ERP, Gemini) --------
