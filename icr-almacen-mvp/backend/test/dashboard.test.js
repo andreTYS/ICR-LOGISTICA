@@ -14,8 +14,12 @@ const { pool } = require("../src/db");
 const dashboard = require("../src/services/dashboardService");
 const gastos = require("../src/services/gastosService");
 const ventas = require("../src/services/ventasService");
+const inventory = require("../src/services/inventoryService");
+const compras = require("../src/services/comprasService");
+const proyectos = require("../src/services/proyectosService");
 
 const SUPERVISOR = "00000000-0000-0000-0000-000000000003";
+const ALMACENERO = "00000000-0000-0000-0000-000000000002";
 
 test("getCashflowSummary trae exactamente N meses, incluyendo el mes actual con los montos correctos", async () => {
   const antes = await dashboard.getCashflowSummary({ months: 3 });
@@ -78,6 +82,68 @@ test("getCashflowSummary refleja un cobro de hito como ingreso del mes actual", 
   const despues = await dashboard.getCashflowSummary({ months: 1 });
   assert.equal(despues[0].ingresos, ingresosAntes + 1000);
   assert.ok(contrato.contrato.contrato_id);
+});
+
+test("getStockByWarehouse suma el stock físico por almacén y ordena de mayor a menor", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 15, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await inventory.receive({ sku: "INV-GROWATT-5K", quantity: 3, warehouseCode: "ALM-003", usuarioId: ALMACENERO, canal: "web" });
+
+  const r = await dashboard.getStockByWarehouse();
+  const alm001 = r.find((w) => w.nombre === "Almacén Principal Arequipa");
+  const alm003 = r.find((w) => w.nombre === "Almacén Tacna");
+  assert.ok(alm001 && alm001.total >= 15);
+  assert.ok(alm003 && alm003.total >= 3);
+  for (let i = 1; i < r.length; i++) {
+    assert.ok(r[i - 1].total >= r[i].total, "debe venir ordenado de mayor a menor stock");
+  }
+});
+
+test("getProjectsByStatus cuenta los proyectos agrupados por estado y refleja un cambio de estado", async () => {
+  const antes = await dashboard.getProjectsByStatus();
+  const activosAntes = antes.find((e) => e.estado === "ACTIVO")?.cantidad || 0;
+  assert.ok(activosAntes >= 3, "el seed trae 3 proyectos ACTIVO");
+
+  await proyectos.actualizarEstado({ codigoProyecto: "PROY-003", estado: "PAUSADO", usuarioId: SUPERVISOR, canal: "web" });
+
+  const despues = await dashboard.getProjectsByStatus();
+  const activosDespues = despues.find((e) => e.estado === "ACTIVO")?.cantidad || 0;
+  const pausadosDespues = despues.find((e) => e.estado === "PAUSADO")?.cantidad || 0;
+  assert.equal(activosDespues, activosAntes - 1);
+  assert.ok(pausadosDespues >= 1);
+});
+
+test("getTopClientsBySales suma por cliente, ordena descendente y excluye contratos CANCELADO", async () => {
+  const r = await dashboard.getTopClientsBySales({ limit: 5 });
+  // El seed trae CONT-00001 (Constructora Vilca, 185000) y CONT-00002 (Minera Altiplano, 420000), ambos VIGENTE.
+  const mineraAltiplano = r.find((c) => c.cliente === "Minera Altiplano S.A.");
+  assert.ok(mineraAltiplano && mineraAltiplano.total >= 420000);
+  assert.equal(r[0].cliente, "Minera Altiplano S.A.", "debe venir primero el de mayor monto");
+
+  const contrato = await ventas.crearContrato({
+    codigoContrato: "CONT-DASH02", clienteRuc: "20523456789", montoTotal: 999999, usuarioId: SUPERVISOR, canal: "web",
+    hitos: [{ descripcion: "Adelanto", monto: 999999 }],
+  });
+  await ventas.actualizarEstadoContrato({ codigoContrato: "CONT-DASH02", estado: "CANCELADO", usuarioId: SUPERVISOR, canal: "web" });
+
+  const despues = await dashboard.getTopClientsBySales({ limit: 5 });
+  const agroMajes = despues.find((c) => c.cliente === "Agroindustrias Majes S.A.C.");
+  assert.ok(!agroMajes, "un contrato CANCELADO no debe sumar al total del cliente");
+  assert.ok(contrato.contrato.contrato_id);
+});
+
+test("getTopSuppliersByPurchases suma cantidad×costo por proveedor y respeta el límite pedido", async () => {
+  await compras.crearOrdenCompra({
+    proveedorRuc: "20100047218", warehouseCode: "ALM-001",
+    items: [{ sku: "PANEL-JA-550", quantity: 10, unitCost: 650 }],
+    usuarioId: SUPERVISOR, canal: "web",
+  });
+
+  const r = await dashboard.getTopSuppliersByPurchases({ limit: 5 });
+  const jaSolar = r.find((p) => p.proveedor === "JA Solar Perú Distribuidora S.A.C.");
+  assert.ok(jaSolar && jaSolar.total >= 6500);
+
+  const limitado = await dashboard.getTopSuppliersByPurchases({ limit: 1 });
+  assert.equal(limitado.length, 1);
 });
 
 after(async () => {

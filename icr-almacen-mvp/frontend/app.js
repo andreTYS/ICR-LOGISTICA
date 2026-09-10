@@ -619,6 +619,10 @@ async function loadDashboard() {
   loadCashflowChart();
   loadExpensesCategoryChart();
   loadWorstMarginChart();
+  loadStockByWarehouseChart();
+  loadProjectsByStatusChart();
+  loadTopClientsChart();
+  loadTopSuppliersChart();
 }
 
 // -------- Centro de ayuda (guía estática, no consume ninguna API externa) --------
@@ -980,6 +984,102 @@ async function loadWorstMarginChart() {
       </div>
     </div>`;
   }).join("");
+}
+
+// -------- Ranking horizontal genérico (barras de progreso), reusado por
+// Stock por almacén, Ventas por cliente y Compras por proveedor -- mismo
+// patrón visual que ya usaban Gasto por categoría y Proyectos con peor
+// margen, extraído acá para no repetir el markup tres veces más.
+function renderRankingBars(el, items, { color = "#1d3557", formatValue = (v) => v } = {}) {
+  const max = Math.max(...items.map((i) => i.value));
+  el.innerHTML = items.map((i) => `
+    <div class="mb-2.5">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-semibold text-navy-950">${i.label}</span>
+        <span class="text-slate-500">${formatValue(i.value)}</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div class="h-full rounded-full" style="width:${Math.max(3, (i.value / max) * 100)}%; background:${color}"></div>
+      </div>
+    </div>`).join("");
+}
+
+// -------- Tablero: Stock por almacén --------
+// Reusa GET /dashboard/stock-by-warehouse (suma de stock_fisico por almacén
+// activo). Un solo tono, igual criterio que Gasto por categoría: acá importa
+// la magnitud relativa entre almacenes, no una identidad categórica.
+async function loadStockByWarehouseChart() {
+  const r = await api("/dashboard/stock-by-warehouse");
+  const el = document.getElementById("stock-warehouse-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = (r.data || []).map((w) => ({ label: w.nombre, value: w.total }));
+  if (!items.length) { el.innerHTML = emptyState("Sin stock registrado todavía.", "chart"); return; }
+  renderRankingBars(el, items, { color: "#009aa4" });
+}
+
+// -------- Tablero: Ventas por cliente (top 5) --------
+async function loadTopClientsChart() {
+  const r = await api("/dashboard/top-clients?limit=5");
+  const el = document.getElementById("top-clients-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = (r.data || []).map((c) => ({ label: c.cliente, value: c.total }));
+  if (!items.length) { el.innerHTML = emptyState("Sin contratos registrados todavía.", "chart"); return; }
+  renderRankingBars(el, items, { color: "#e11d48", formatValue: (v) => `PEN ${money(v)}` });
+}
+
+// -------- Tablero: Compras por proveedor (top 5) --------
+async function loadTopSuppliersChart() {
+  const r = await api("/dashboard/top-suppliers?limit=5");
+  const el = document.getElementById("top-suppliers-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = (r.data || []).map((p) => ({ label: p.proveedor, value: p.total }));
+  if (!items.length) { el.innerHTML = emptyState("Sin órdenes de compra registradas todavía.", "chart"); return; }
+  renderRankingBars(el, items, { color: "#d97706", formatValue: (v) => `PEN ${money(v)}` });
+}
+
+// -------- Tablero: Proyectos por estado (donut) --------
+// Primer gráfico circular del Panel (los demás son de barras) — mismo
+// criterio de color divergente/categórico que ya usan los badges de estado
+// de proyecto (marginClass/PROJECT_STATUS_TONES): verde = activo, ámbar =
+// pausado, gris = finalizado, rojo = cancelado.
+const PROJECT_STATUS_DONUT_COLORS = { ACTIVO: "#059669", PAUSADO: "#d97706", FINALIZADO: "#64748b", CANCELADO: "#e11d48" };
+
+function renderDonutChart(el, items, colorFor, tipId) {
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (!total) { el.innerHTML = emptyState("Sin datos para mostrar.", "chart"); return; }
+  const r = 35, cx = 50, cy = 50;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  const segments = items.map((it) => {
+    const dash = (it.value / total) * circumference;
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorFor(it.label)}" stroke-width="16"
+      stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
+      onmouseenter="showChartTip(event,'${it.label}: ${it.value}','${tipId}')" onmousemove="moveChartTip(event,'${tipId}')" onmouseleave="hideChartTip('${tipId}')"></circle>`;
+    offset += dash;
+    return seg;
+  }).join("");
+  const legend = items.map((it) => `
+    <div class="flex items-center justify-between text-xs mb-1.5">
+      <span class="inline-flex items-center gap-1.5 font-semibold text-navy-950"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colorFor(it.label)}"></span>${it.label}</span>
+      <span class="text-slate-500">${it.value}</span>
+    </div>`).join("");
+  el.innerHTML = `
+    <div class="flex items-center gap-6 flex-wrap">
+      <div class="relative shrink-0" style="width:130px;height:130px">
+        <svg viewBox="0 0 100 100" style="width:130px;height:130px" role="img" aria-label="Proyectos por estado">${segments}</svg>
+        <div id="${tipId}" class="chart-tip"></div>
+      </div>
+      <div class="flex-1 min-w-[140px]">${legend}</div>
+    </div>`;
+}
+
+async function loadProjectsByStatusChart() {
+  const r = await api("/dashboard/projects-by-status");
+  const el = document.getElementById("projects-status-chart");
+  if (r.status !== "success") { el.innerHTML = emptyState(r.error?.message || "Tu rol no tiene permiso para ver este tablero.", "lock"); return; }
+  const items = (r.data || []).map((p) => ({ label: p.estado, value: p.cantidad }));
+  if (!items.length) { el.innerHTML = emptyState("Sin proyectos registrados todavía.", "chart"); return; }
+  renderDonutChart(el, items, (label) => PROJECT_STATUS_DONUT_COLORS[label] || "#94a3b8", "tip-projects-status");
 }
 
 function updateAlertsBadge(count) {
