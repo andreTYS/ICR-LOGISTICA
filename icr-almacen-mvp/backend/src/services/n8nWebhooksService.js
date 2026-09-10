@@ -53,7 +53,13 @@ async function eliminarWebhook({ webhookId, usuarioId, canal }) {
 // sin hacer ninguna petición de red real.
 async function dispatchEvent(evento, data, deps = {}) {
   const fetchImpl = deps.fetchImpl || fetch;
-  const r = await pool.query("SELECT * FROM n8n_webhooks WHERE activo = true AND (evento = $1 OR evento = '*')", [evento]);
+  let r;
+  try {
+    r = await pool.query("SELECT * FROM n8n_webhooks WHERE activo = true AND (evento = $1 OR evento = '*')", [evento]);
+  } catch (err) {
+    console.error(`No se pudo consultar los webhooks N8N para el evento '${evento}':`, err.message);
+    return;
+  }
   if (r.rows.length === 0) return;
 
   const body = JSON.stringify({ evento, data, timestamp: new Date().toISOString() });

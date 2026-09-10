@@ -126,6 +126,16 @@ test("dispatchEvent no lanza si el fetch falla o el webhook responde error", asy
   await assert.doesNotReject(n8nWebhooks.dispatchEvent("prueba.fallo", {}, { fetchImpl }));
 });
 
+test("dispatchEvent no lanza si falla la consulta a la base (mantiene el contrato best-effort)", async () => {
+  const originalQuery = pool.query;
+  pool.query = async () => { throw new Error("conexión a la base perdida"); };
+  try {
+    await assert.doesNotReject(n8nWebhooks.dispatchEvent("cualquier.evento", {}));
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
 test("dispatchEvent no hace ninguna llamada si no hay webhooks suscriptos al evento", async () => {
   let llamado = false;
   const fetchImpl = async () => { llamado = true; return { ok: true }; };
