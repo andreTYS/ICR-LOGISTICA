@@ -72,6 +72,23 @@ CREATE TABLE api_tokens (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Webhooks salientes hacia N8N (o cualquier receptor HTTP): en vez de que
+-- una automatización tenga que sondear la API o la base cada tanto, el ERP
+-- le avisa apenas ocurre un evento. `evento` usa el mismo vocabulario que
+-- `auditoria.accion` y `reglas_imputacion.evento` (ej. "rrhh.attendance.
+-- check_in") — '*' se suscribe a todos los eventos disparados. El envío es
+-- siempre best-effort (ver n8nWebhooksService.dispatchEvent): un N8N caído
+-- o una URL mal configurada nunca debe romper la operación que lo disparó.
+CREATE TABLE n8n_webhooks (
+    webhook_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    evento          TEXT NOT NULL,
+    url             TEXT NOT NULL,
+    secret          TEXT,
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    creado_por      UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Personalización opcional del menú lateral: reemplazar el ícono SVG de
 -- cualquier ítem o grupo de navegación por una imagen propia. `item_key` es
 -- el `data-view` de un ítem tal cual, o "group:<data-group>" para el
@@ -793,6 +810,17 @@ LEFT JOIN (
 ) pg ON pg.factura_proveedor_id = f.factura_proveedor_id
 WHERE f.estado IN ('PENDIENTE','PARCIAL','VENCIDA');
 
+-- Fichajes de asistencia (RR.HH.) para vincular con una app externa de
+-- asistencia o cualquier automatización de N8N que necesite leer entradas/
+-- salidas sin pasar por la API REST. Mismo criterio que las vistas de
+-- arriba: espejo de solo lectura de `asistencias`, sin filtro de fecha.
+CREATE VIEW vw_n8n_asistencias AS
+SELECT a.asistencia_id, e.empleado_id, e.nombre_completo AS empleado, e.dni,
+       a.fecha, a.hora_entrada, a.hora_salida, a.horas_trabajadas, a.observaciones
+FROM asistencias a
+JOIN empleados e ON e.empleado_id = a.empleado_id
+ORDER BY a.fecha DESC, a.hora_entrada DESC;
+
 -- ---------- ROL DE SOLO LECTURA PARA INTEGRACIONES (N8N y similares) ----------
 -- Segundo camino de consulta además de la API REST: un nodo Postgres de N8N
 -- puede conectarse directo con este rol para reportes, sin pasar por HTTP.
@@ -817,7 +845,8 @@ END $$;
 GRANT USAGE ON SCHEMA public TO n8n_readonly;
 GRANT SELECT ON
   vw_inventario_disponible, vw_stock_bajo,
-  vw_n8n_calendario_eventos, vw_n8n_cuentas_por_cobrar, vw_n8n_cuentas_por_pagar
+  vw_n8n_calendario_eventos, vw_n8n_cuentas_por_cobrar, vw_n8n_cuentas_por_pagar,
+  vw_n8n_asistencias
 TO n8n_readonly;
 
 -- ============================================================

@@ -233,6 +233,7 @@ const titles = {
   "role-permissions": ["Roles y permisos", "Mapa de permisos por rol, de solo lectura (solo administradores)"],
   integrations: ["Integraciones", "Estado de las integraciones opcionales: asistente de IA y bot de Telegram (solo administradores)"],
   "api-tokens": ["Tokens de servicio", "Tokens de larga duración para integraciones como N8N (solo administradores)"],
+  "n8n-webhooks": ["Automatizaciones N8N", "Webhooks salientes: el ERP avisa a N8N apenas ocurre un evento (solo administradores)"],
   settings: ["Configuración", "Personalización del panel (solo administradores)"],
 };
 
@@ -322,6 +323,7 @@ function goToView(view) {
   if (view === "role-permissions") loadRolePermissions();
   if (view === "integrations") loadIntegrationsStatus();
   if (view === "api-tokens") loadApiTokens();
+  if (view === "n8n-webhooks") loadN8nWebhooks();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -3748,6 +3750,58 @@ async function revokeApiToken(apiTokenId) {
   if (!confirm("¿Revocar este token? Cualquier integración que lo use dejará de funcionar de inmediato.")) return;
   const r = await api(`/admin/api-tokens/${encodeURIComponent(apiTokenId)}/revoke`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
   if (r.status === "success") { toast("Token revocado"); loadApiTokens(); }
+  else toast(r.error.message, false);
+}
+
+// -------- Automatizaciones N8N (webhooks salientes) --------
+document.getElementById("form-n8n-webhook-create").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = { channel: "web", evento: f.get("evento"), url: f.get("url"), secret: f.get("secret") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/admin/n8n-webhooks", { method: "POST", body: JSON.stringify(payload) });
+    if (r.status === "success") { toast("Webhook creado"); e.target.reset(); loadN8nWebhooks(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadN8nWebhooks() {
+  const body = document.getElementById("n8n-webhooks-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api("/admin/n8n-webhooks");
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver esto.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((w) => `<tr class="${TR}">
+        <td class="${TD} font-mono text-xs">${w.evento}</td>
+        <td class="${TD} text-xs break-all">${w.url}</td>
+        <td class="${TD}">${w.tiene_secret ? badge("SÍ", "ok") : badge("NO", "devolucion")}</td>
+        <td class="${TD}">${w.activo ? badge("ACTIVO", "ok") : badge("INACTIVO", "low")}</td>
+        <td class="${TD}">${new Date(w.created_at).toLocaleDateString("es-PE")}</td>
+        <td class="${TD} whitespace-nowrap">
+          <button class="btn-secondary px-3 py-1.5 text-xs mr-1.5" onclick="toggleN8nWebhook('${w.webhook_id}', ${!w.activo})">${w.activo ? "Desactivar" : "Activar"}</button>
+          <button class="btn-danger px-3 py-1.5 text-xs" onclick="deleteN8nWebhook('${w.webhook_id}')">Eliminar</button>
+        </td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin webhooks configurados todavía.", "inbox");
+}
+
+async function toggleN8nWebhook(webhookId, activo) {
+  const r = await api(`/admin/n8n-webhooks/${encodeURIComponent(webhookId)}/toggle`, { method: "POST", body: JSON.stringify({ channel: "web", activo }) });
+  if (r.status === "success") { toast(activo ? "Webhook activado" : "Webhook desactivado"); loadN8nWebhooks(); }
+  else toast(r.error.message, false);
+}
+
+async function deleteN8nWebhook(webhookId) {
+  if (!confirm("¿Eliminar este webhook? Dejará de recibir eventos.")) return;
+  const r = await api(`/admin/n8n-webhooks/${encodeURIComponent(webhookId)}?channel=web`, { method: "DELETE" });
+  if (r.status === "success") { toast("Webhook eliminado"); loadN8nWebhooks(); }
   else toast(r.error.message, false);
 }
 

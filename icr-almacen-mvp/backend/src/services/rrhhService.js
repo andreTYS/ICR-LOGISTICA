@@ -1,6 +1,7 @@
 const { pool } = require("../db");
 const { AppError } = require("../errors");
 const { withAuditedTransaction } = require("./inventoryService");
+const n8nWebhooks = require("./n8nWebhooksService");
 
 const TIPOS_CONTRATO_VALIDOS = ["PLANILLA", "LOCACION", "PRACTICANTE"];
 
@@ -64,7 +65,7 @@ async function actualizarEmpleado({ empleadoId, cargo, tipoContrato, costoHora, 
 // primera.
 async function marcarEntrada({ empleadoId, usuarioId, canal }) {
   if (!empleadoId) throw new AppError("SCHEMA_INVALID", "empleadoId es obligatorio", 400);
-  return withAuditedTransaction("rrhh.attendance.check_in", usuarioId, canal, async (client) => {
+  const result = await withAuditedTransaction("rrhh.attendance.check_in", usuarioId, canal, async (client) => {
     const emp = await client.query("SELECT empleado_id FROM empleados WHERE empleado_id=$1 AND activo=true", [empleadoId]);
     if (emp.rows.length === 0) throw new AppError("EMPLOYEE_NOT_FOUND", "El empleado indicado no existe o está inactivo", 404);
 
@@ -82,11 +83,24 @@ async function marcarEntrada({ empleadoId, usuarioId, canal }) {
     );
     return { entidad: "asistencias", entidadId: r.rows[0].asistencia_id, valorNuevo: { empleadoId }, asistencia: r.rows[0] };
   });
+
+  // Best-effort: avisar a cualquier automatización de N8N suscripta a este
+  // evento (ej. sincronizar con una app externa de asistencia). Nunca debe
+  // romper el fichaje, ya confirmado, si esto falla.
+  try {
+    await n8nWebhooks.dispatchEvent("rrhh.attendance.check_in", {
+      empleadoId, asistenciaId: result.asistencia.asistencia_id, horaEntrada: result.asistencia.hora_entrada,
+    });
+  } catch (err) {
+    console.error("No se pudo notificar el webhook N8N de marcado de entrada", err);
+  }
+
+  return result;
 }
 
 async function marcarSalida({ empleadoId, observaciones, usuarioId, canal }) {
   if (!empleadoId) throw new AppError("SCHEMA_INVALID", "empleadoId es obligatorio", 400);
-  return withAuditedTransaction("rrhh.attendance.check_out", usuarioId, canal, async (client) => {
+  const result = await withAuditedTransaction("rrhh.attendance.check_out", usuarioId, canal, async (client) => {
     const abierta = await client.query(
       `SELECT * FROM asistencias WHERE empleado_id=$1 AND fecha=CURRENT_DATE AND hora_entrada IS NOT NULL AND hora_salida IS NULL`,
       [empleadoId]
@@ -104,6 +118,17 @@ async function marcarSalida({ empleadoId, observaciones, usuarioId, canal }) {
     );
     return { entidad: "asistencias", entidadId: r.rows[0].asistencia_id, valorNuevo: { empleadoId, horas_trabajadas: r.rows[0].horas_trabajadas }, asistencia: r.rows[0] };
   });
+
+  try {
+    await n8nWebhooks.dispatchEvent("rrhh.attendance.check_out", {
+      empleadoId, asistenciaId: result.asistencia.asistencia_id,
+      horaSalida: result.asistencia.hora_salida, horasTrabajadas: result.asistencia.horas_trabajadas,
+    });
+  } catch (err) {
+    console.error("No se pudo notificar el webhook N8N de marcado de salida", err);
+  }
+
+  return result;
 }
 
 // -------------------- Consultas --------------------

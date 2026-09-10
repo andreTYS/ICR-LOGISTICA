@@ -316,6 +316,10 @@
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="7" cy="7" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M9.3 9.3 17 17M13.5 13.5l2-2M15.7 15.7l1.6-1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Tokens de servicio</span>
             </button>
+            <button class="nav-item" data-view="n8n-webhooks">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="5" cy="5" r="2.3" stroke="currentColor" stroke-width="1.6"/><circle cx="15" cy="5" r="2.3" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="16" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M6.8 6.5 9 13.7M13.2 6.5 11 13.7M7.3 5h5.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Automatizaciones N8N</span>
+            </button>
             <button class="nav-item" data-view="settings">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 3v1.8M10 15.2V17M17 10h-1.8M4.8 10H3M14.9 5.1l-1.3 1.3M6.4 13.6l-1.3 1.3M14.9 14.9l-1.3-1.3M6.4 6.4 5.1 5.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Configuración</span>
@@ -2092,6 +2096,47 @@
               <th class="text-left font-semibold px-3 py-2.5"></th>
             </tr></thead>
             <tbody id="api-tokens-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ AUTOMATIZACIONES N8N (webhooks salientes) ============ -->
+      <section class="view" id="view-n8n-webhooks">
+        <p class="text-sm text-slate-500 mb-5 max-w-2xl">Avisá a N8N (o a cualquier receptor HTTP) apenas ocurre un evento del ERP, en vez de que la automatización tenga que consultar la API o la base cada tanto. El envío es best-effort: si la URL falla o no responde, no afecta la operación que disparó el evento.</p>
+        <form class="form-card mb-6" id="form-n8n-webhook-create">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo webhook</h3>
+          <div class="grid sm:grid-cols-3 gap-4 mb-4">
+            <label class="field-label">Evento
+              <input name="evento" required list="n8n-webhook-events" placeholder="ej. rrhh.attendance.check_in" class="field" />
+            </label>
+            <label class="field-label">URL de destino
+              <input name="url" type="url" required placeholder="https://tu-n8n.example/webhook/..." class="field" />
+            </label>
+            <label class="field-label">Secreto (opcional)
+              <input name="secret" placeholder="para firmar el envío (HMAC-SHA256)" class="field" />
+            </label>
+          </div>
+          <datalist id="n8n-webhook-events">
+            <option value="*">Todos los eventos</option>
+            <option value="rrhh.attendance.check_in">Asistencia: marcar entrada</option>
+            <option value="rrhh.attendance.check_out">Asistencia: marcar salida</option>
+            <option value="inventory.receive">Almacén: ingreso de stock</option>
+            <option value="inventory.remove">Almacén: salida de stock</option>
+            <option value="purchases.receive">Compras: recepción de orden</option>
+            <option value="sales.milestone_paid">Ventas: cobro de hito</option>
+            <option value="expenses.register">Gastos: registro</option>
+          </datalist>
+          <p class="text-xs text-slate-400 mb-4">El evento usa el mismo vocabulario que la Auditoría (ej. "rrhh.attendance.check_in"). Escribí <code>*</code> para suscribirte a todos.</p>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Crear webhook</span></button>
+        </form>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Evento</th><th class="text-left font-semibold px-3 py-2.5">URL</th>
+              <th class="text-left font-semibold px-3 py-2.5">Firmado</th><th class="text-left font-semibold px-3 py-2.5">Estado</th>
+              <th class="text-left font-semibold px-3 py-2.5">Creado</th><th class="text-left font-semibold px-3 py-2.5"></th>
+            </tr></thead>
+            <tbody id="n8n-webhooks-body"></tbody>
           </table>
         </div>
       </section>
