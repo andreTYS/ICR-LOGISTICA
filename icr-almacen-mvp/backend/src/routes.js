@@ -24,7 +24,8 @@ const archivos = require("./services/archivosService");
 const calendario = require("./services/calendarioService");
 const openapi = require("./openapi");
 const driveService = require("./services/driveService");
-const { upload, processAndSaveImage, uploadDocument, saveDocumentFile } = require("./uploads");
+const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile } = require("./uploads");
+const navIcons = require("./services/navIconsService");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -83,6 +84,13 @@ router.get(
 router.get(
   "/settings",
   handle(async () => settings.getSettings())
+);
+
+// Pública: la sidebar necesita pintar los íconos personalizados apenas
+// carga, y no son datos sensibles (solo URLs de imágenes ya públicas en /uploads).
+router.get(
+  "/nav-icons",
+  handle(async () => navIcons.listNavIcons())
 );
 
 // Pública (sin JWT): Telegram llama este endpoint directo. Se autentica con
@@ -1210,6 +1218,28 @@ router.post(
     const url = await processAndSaveImage(req.file);
     return settings.setLogoUrl(url);
   })
+);
+
+router.post(
+  "/nav-icons",
+  requirePermission("settings.manage"),
+  upload.single("icon"),
+  handle(async (req) => {
+    if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
+    if (!req.body.item_key) throw new AppError("SCHEMA_INVALID", "item_key es obligatorio", 400);
+    const url = await processAndSaveIcon(req.file);
+    return navIcons.setNavIcon({
+      itemKey: req.body.item_key, imagenUrl: url, usuarioId: req.user.usuario_id, canal: req.body.channel || "web",
+    });
+  })
+);
+
+router.delete(
+  "/nav-icons/:itemKey",
+  requirePermission("settings.manage"),
+  handle(async (req) => navIcons.removeNavIcon({
+    itemKey: req.params.itemKey, usuarioId: req.user.usuario_id, canal: req.query.channel || "web",
+  }))
 );
 
 // Maneja errores de multer (tamaño/tipo de archivo) con el mismo formato de respuesta que `handle()`

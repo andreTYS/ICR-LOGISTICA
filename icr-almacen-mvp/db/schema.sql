@@ -72,6 +72,18 @@ CREATE TABLE api_tokens (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Personalización opcional del menú lateral: reemplazar el ícono SVG de
+-- cualquier ítem o grupo de navegación por una imagen propia. `item_key` es
+-- el `data-view` de un ítem tal cual, o "group:<data-group>" para el
+-- ícono de un grupo completo (ej. "group:almacen"). Sin fila = ícono por
+-- defecto (el SVG hardcodeado del frontend).
+CREATE TABLE nav_icon_overrides (
+    item_key        TEXT PRIMARY KEY,
+    imagen_url      TEXT NOT NULL,
+    updated_por     UUID NOT NULL REFERENCES usuarios(usuario_id),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE almacenes (
     almacen_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     codigo          TEXT NOT NULL UNIQUE,

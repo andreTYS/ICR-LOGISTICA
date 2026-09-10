@@ -57,8 +57,26 @@ body { font-feature-settings: "cv11"; }
 }
 .nav-item.active .nav-badge { background: #00004C; color: #fff; }
 
+/* -------- Personalizar íconos del menú con imágenes -------- */
+.sidebar.icon-edit-mode .nav-icon {
+  cursor: pointer;
+  outline: 1.5px dashed rgba(255,255,255,0.4);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.sidebar.icon-edit-mode .nav-icon:hover { outline-color: #00FFC2; }
+.nav-icon-remove-badge {
+  display: none;
+  position: absolute; top: 2px; right: 2px;
+  width: 14px; height: 14px; border-radius: 999px;
+  background: #e11d48; color: #fff; font-size: 11px; line-height: 1;
+  align-items: center; justify-content: center; cursor: pointer;
+}
+.sidebar.icon-edit-mode .nav-icon-remove-badge { display: flex; }
+
 /* -------- Sidebar module groups (Almacén, Compras, Administración, …) -------- */
 .nav-group-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -103,6 +121,58 @@ body { font-feature-settings: "cv11"; }
   padding: 2px 6px;
   border-radius: 20px;
 }
+
+.nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 6px 10px; flex-shrink: 0; }
+.sidebar.collapsed .nav-divider { margin-left: 10px; margin-right: 10px; }
+
+/* -------- Sidebar: scroll propio + botón de modo compacto -------- */
+/* El <nav> escrolea de forma independiente (logo y usuario quedan fijos)
+   con una barra delgada acorde al tema oscuro — necesario ahora que casi
+   todos los módulos empiezan expandidos y la lista completa no entra en
+   una pantalla típica. */
+.sidebar-nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.25) transparent; }
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 20px; }
+.sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }
+
+.sidebar-collapse-btn {
+  background: none; border: none; color: rgba(255,255,255,0.5); cursor: pointer;
+  padding: 6px; border-radius: 6px; flex-shrink: 0; transition: background .15s ease, color .15s ease;
+}
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.sidebar-collapse-btn svg { transition: transform .2s ease; }
+
+/* -------- Sidebar: modo compacto (solo íconos, tipo app) -------- */
+.sidebar.collapsed { width: 68px; }
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-item span:not(.nav-badge),
+.sidebar.collapsed .nav-group-header span:not(.nav-group-chevron),
+.sidebar.collapsed .nav-group-chevron,
+.sidebar.collapsed .nav-subgroup-label,
+.sidebar.collapsed .sidebar-user-text,
+.sidebar.collapsed #logout-btn span,
+.sidebar.collapsed .nav-soon-pill {
+  display: none;
+}
+.sidebar.collapsed .nav-item,
+.sidebar.collapsed .nav-group-header {
+  justify-content: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.sidebar.collapsed .nav-submenu .nav-item { padding-left: 8px; }
+.sidebar.collapsed .nav-item .nav-badge {
+  position: absolute; top: 3px; right: 3px; margin-left: 0; min-width: 14px; font-size: 9px; padding: 0 4px;
+}
+.sidebar.collapsed .sidebar-collapse-btn svg { transform: rotate(180deg); }
+.sidebar.collapsed .sidebar-user-row { justify-content: center; }
+.sidebar.collapsed #logout-btn { padding-left: 0; padding-right: 0; }
+.sidebar.collapsed .nav-submenu { grid-template-rows: 1fr !important; }
+.sidebar.collapsed .nav-group.expanded .nav-submenu,
+.sidebar.collapsed .nav-submenu { display: grid; }
+.sidebar.collapsed .nav-group { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 6px; margin-top: 4px; }
+.sidebar.collapsed .nav-group:first-of-type { border-top: none; }
 
 /* -------- Form fields -------- */
 .field {

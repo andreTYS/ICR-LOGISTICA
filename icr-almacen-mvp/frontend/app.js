@@ -1,5 +1,15 @@
 const API = "/api";
 
+// Estado de la personalización de íconos del menú — declarado acá arriba
+// (no junto a sus funciones más abajo) porque enterApp() puede dispararse
+// de forma síncrona al cargar la página (sesión ya guardada) antes de que
+// el resto del archivo termine de ejecutarse, y una referencia a un
+// const/let todavía no inicializado revienta con un TDZ error.
+let iconEditMode = false;
+let pendingIconKey = null;
+let navIconOverridesMap = {};
+const navIconDefaults = {};
+
 // -------- Estilos compartidos para filas/badges generados dinámicamente --------
 const TD = "px-3 py-2.5 text-sm text-slate-700";
 const TD_EMPTY = "px-3 py-6 text-center text-slate-400 italic text-sm";
@@ -152,6 +162,9 @@ function enterApp() {
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("ai-chat-widget").classList.remove("hidden");
   document.getElementById("help-widget").classList.remove("hidden");
+  initNavTooltips();
+  restoreSidebarCollapsed();
+  loadNavIconOverrides();
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
@@ -230,6 +243,35 @@ function toggleNavGroup(name) {
   document.querySelector(`.nav-group[data-group="${name}"]`)?.classList.toggle("expanded");
 }
 
+// -------- Modo compacto del menú (solo íconos, tipo app) --------
+// El título nativo del navegador hace de tooltip en modo compacto (y no
+// estorba en modo expandido, donde igual se ve la etiqueta de texto).
+function initNavTooltips() {
+  document.querySelectorAll(".nav-item, .nav-group-header").forEach((el) => {
+    if (el.title) return;
+    const label = el.querySelector("span:not(.nav-badge):not(.nav-group-chevron)");
+    if (label) el.title = label.textContent.trim();
+  });
+}
+
+function applySidebarCollapsed(collapsed) {
+  document.querySelector(".sidebar")?.classList.toggle("collapsed", collapsed);
+  const btn = document.getElementById("sidebar-collapse-toggle");
+  if (btn) btn.title = collapsed ? "Expandir menú" : "Modo compacto";
+}
+
+function toggleSidebarCollapsed() {
+  const collapsed = !document.querySelector(".sidebar")?.classList.contains("collapsed");
+  applySidebarCollapsed(collapsed);
+  try { localStorage.setItem("icr_sidebar_collapsed", collapsed ? "1" : "0"); } catch {}
+}
+
+function restoreSidebarCollapsed() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem("icr_sidebar_collapsed") === "1"; } catch {}
+  applySidebarCollapsed(collapsed);
+}
+
 function goToView(view) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
@@ -287,6 +329,129 @@ document.querySelectorAll(".nav-item").forEach((btn) => {
 });
 document.querySelectorAll("[data-goto]").forEach((btn) => {
   btn.addEventListener("click", () => goToView(btn.dataset.goto));
+});
+
+// -------- Personalizar íconos del menú con imágenes (solo ADMIN) --------
+// Reemplaza el SVG de un ítem/grupo de navegación por una imagen propia.
+// Se guarda solo la URL ya procesada (backend); acá solo se pinta y se
+// intercepta el click sobre el ícono cuando el modo edición está activo,
+// para no interferir con la navegación normal. El estado (iconEditMode,
+// navIconDefaults, etc.) se declara al principio del archivo — ver ahí el porqué.
+
+function navIconItemKey(el) {
+  if (el.classList.contains("nav-group-header")) {
+    const group = el.closest(".nav-group");
+    return group ? `group:${group.dataset.group}` : null;
+  }
+  return el.dataset.view || null;
+}
+
+function collectNavIconTargets() {
+  const targets = [];
+  document.querySelectorAll(".nav-item[data-view], .nav-group-header").forEach((el) => {
+    const key = navIconItemKey(el);
+    if (!key) return;
+    targets.push({ el, key });
+    if (!(key in navIconDefaults)) {
+      const iconEl = el.querySelector(".nav-icon");
+      if (iconEl) navIconDefaults[key] = iconEl.outerHTML;
+    }
+  });
+  return targets;
+}
+
+function applyNavIcon(el, key) {
+  const iconEl = el.querySelector(".nav-icon");
+  if (!iconEl) return;
+  const url = navIconOverridesMap[key];
+  if (url) {
+    const img = document.createElement("img");
+    img.className = "nav-icon";
+    img.src = url;
+    img.alt = "";
+    iconEl.replaceWith(img);
+    el.classList.add("has-custom-icon");
+  } else {
+    if (iconEl.tagName === "IMG" && navIconDefaults[key]) {
+      iconEl.outerHTML = navIconDefaults[key];
+    }
+    el.classList.remove("has-custom-icon");
+  }
+}
+
+function renderNavIconRemoveBadges(targets) {
+  targets.forEach(({ el, key }) => {
+    let badge = el.querySelector(".nav-icon-remove-badge");
+    if (navIconOverridesMap[key]) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "nav-icon-remove-badge";
+        badge.textContent = "×";
+        badge.title = "Restaurar ícono por defecto";
+        badge.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          restoreNavIcon(key);
+        });
+        el.appendChild(badge);
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+}
+
+async function loadNavIconOverrides() {
+  const targets = collectNavIconTargets();
+  const r = await api("/nav-icons");
+  navIconOverridesMap = {};
+  if (r.status === "success") (r.data || []).forEach((row) => { navIconOverridesMap[row.item_key] = row.imagen_url; });
+  targets.forEach(({ el, key }) => applyNavIcon(el, key));
+  renderNavIconRemoveBadges(targets);
+}
+
+function toggleIconEditMode() {
+  iconEditMode = !iconEditMode;
+  document.querySelector(".sidebar")?.classList.toggle("icon-edit-mode", iconEditMode);
+  const btn = document.getElementById("icon-edit-mode-toggle");
+  if (btn) btn.textContent = iconEditMode ? "Terminar de editar íconos" : "Editar íconos del menú";
+}
+
+function triggerIconUpload(itemKey) {
+  pendingIconKey = itemKey;
+  document.getElementById("nav-icon-upload-input").click();
+}
+
+async function restoreNavIcon(itemKey) {
+  const r = await api(`/nav-icons/${encodeURIComponent(itemKey)}`, { method: "DELETE" });
+  if (r.status === "success") { toast("Ícono restaurado"); loadNavIconOverrides(); }
+  else toast(r.error.message, false);
+}
+
+document.addEventListener("click", (e) => {
+  if (!iconEditMode) return;
+  const iconEl = e.target.closest(".nav-icon");
+  if (!iconEl) return;
+  const container = iconEl.closest(".nav-item[data-view], .nav-group-header");
+  if (!container) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const key = navIconItemKey(container);
+  if (key) triggerIconUpload(key);
+}, true);
+
+document.getElementById("nav-icon-upload-input")?.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !pendingIconKey) return;
+  const fd = new FormData();
+  fd.append("icon", file);
+  fd.append("item_key", pendingIconKey);
+  fd.append("channel", "web");
+  const r = await uploadFile("/nav-icons", fd);
+  if (r.status === "success") { toast("Ícono actualizado"); loadNavIconOverrides(); }
+  else toast(r.error.message, false);
+  pendingIconKey = null;
 });
 
 function toast(message, ok = true) {
