@@ -50,6 +50,22 @@ async function processAndSaveImage(file) {
   return `/uploads/${filename}`;
 }
 
+// Un ícono del menú siempre se muestra a 17-24px — no tiene sentido
+// guardarlo al mismo tamaño que una foto de producto (800px). 96px alcanza
+// de sobra incluso para pantallas de alta densidad.
+const ICON_MAX_SIDE = 96;
+async function processAndSaveIcon(file) {
+  const filename = `${crypto.randomUUID()}${EXT[file.mimetype]}`;
+  try {
+    let image = sharp(file.buffer).resize(ICON_MAX_SIDE, ICON_MAX_SIDE, { fit: "inside", withoutEnlargement: true });
+    image = SHARP_OUTPUT[file.mimetype](image);
+    await image.toFile(path.join(uploadsDir, filename));
+  } catch (err) {
+    throw new AppError("INVALID_FILE_TYPE", "No se pudo procesar la imagen (¿archivo corrupto?)", 400);
+  }
+  return `/uploads/${filename}`;
+}
+
 // -------------------- Documentos adjuntos (planos, permisos, certificados) --------------------
 // A diferencia de processAndSaveImage (logo/fotos de producto), un documento
 // se guarda tal cual: un PDF de planos no es una foto de celular, no tiene
@@ -89,4 +105,4 @@ async function deleteUploadedFile(url) {
   }
 }
 
-module.exports = { upload, uploadsDir, processAndSaveImage, uploadDocument, saveDocumentFile, deleteUploadedFile };
+module.exports = { upload, uploadsDir, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, deleteUploadedFile };
