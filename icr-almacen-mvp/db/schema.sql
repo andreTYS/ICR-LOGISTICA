@@ -582,6 +582,37 @@ CREATE TABLE lead_actividades (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- CHATBOT (cliente externo, web/tienda) ----------
+-- El chatbot en sí (widget de la web, o el que use la futura tienda) vive
+-- fuera de este repositorio; acá solo se administra: N8N hace de puente —
+-- recibe los mensajes del visitante y los reenvía al webhook de abajo, y
+-- cuando un agente responde desde este panel, se dispara un evento saliente
+-- (n8n_webhooks, evento "chatbot.message.sent") para que N8N lo lleve de
+-- vuelta al chat real. Una conversación puede convertirse en lead de CRM
+-- con un clic (reusa crmService.crearLead, mismo patrón que Cotizaciones →
+-- Contrato o Lead → Cotización).
+CREATE SEQUENCE chatbot_conversacion_numero_seq START 1;
+
+CREATE TABLE chatbot_conversaciones (
+    conversacion_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo            TEXT NOT NULL UNIQUE,
+    canal             TEXT NOT NULL DEFAULT 'web' CHECK (canal IN ('web','whatsapp','instagram','otro')),
+    nombre_contacto   TEXT,
+    contacto          TEXT,
+    lead_id           UUID REFERENCES leads(lead_id),
+    estado            TEXT NOT NULL DEFAULT 'ABIERTA' CHECK (estado IN ('ABIERTA','ATENDIDA','CERRADA')),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE chatbot_mensajes (
+    mensaje_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversacion_id   UUID NOT NULL REFERENCES chatbot_conversaciones(conversacion_id) ON DELETE CASCADE,
+    remitente         TEXT NOT NULL CHECK (remitente IN ('VISITANTE','BOT','AGENTE')),
+    texto             TEXT NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- GESTIÓN DOCUMENTAL ----------
 -- Archivos adjuntos (planos, permisos municipales, certificados de
 -- garantía, fotos de instalación) ligados a distintas entidades del ERP.
@@ -889,3 +920,5 @@ CREATE INDEX idx_leads_responsable ON leads(responsable_id);
 CREATE INDEX idx_lead_actividades_lead ON lead_actividades(lead_id);
 CREATE INDEX idx_archivos_adjuntos_entidad ON archivos_adjuntos(entidad_tipo, entidad_id);
 CREATE INDEX idx_api_tokens_usuario ON api_tokens(usuario_id);
+CREATE INDEX idx_chatbot_mensajes_conversacion ON chatbot_mensajes(conversacion_id);
+CREATE INDEX idx_chatbot_conversaciones_estado ON chatbot_conversaciones(estado);

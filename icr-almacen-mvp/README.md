@@ -45,12 +45,18 @@ PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres PGDATABASE=icr_almacen npm 
    DOMAIN=almacen.icr.tudominio.com
    ```
 3. Confirmar que el nombre de la red externa de Traefik en `docker-compose.yml` (`traefik_public`) coincide con la red real que ya usa Traefik en el VPS — si se llama distinto, cambiarlo ahí.
-4. El logo y las fotos de producto se guardan en `/app/uploads` dentro del contenedor, montado como el volumen `icr_almacen_uploads` — sobrevive a un `docker compose up -d --build`. Si el VPS tiene backups de volúmenes, agregar este a la lista.
-5. Levantar:
+4. Crear, una sola vez, la red que van a compartir los distintos stacks de Docker del VPS (este ERP, y a futuro N8N u otros):
+   ```bash
+   docker network create icr_internal
+   ```
+5. El logo y las fotos de producto se guardan en `/app/uploads` dentro del contenedor, montado como el volumen `icr_almacen_uploads` — sobrevive a un `docker compose up -d --build`. Si el VPS tiene backups de volúmenes, agregar este a la lista.
+6. Levantar:
    ```bash
    docker compose up -d --build
    ```
-6. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
+7. El schema y el seed se cargan automáticamente la primera vez que arranca el contenedor de PostgreSQL (vía `docker-entrypoint-initdb.d`).
+
+Para conectar una instancia de N8N que corra en otro contenedor del mismo VPS (leer/escribir la base, o recibir/enviar los webhooks del ERP), ver "Conectar N8N desde otro contenedor Docker en el mismo VPS" más abajo.
 
 ## Usuarios de prueba (seed)
 
@@ -124,7 +130,9 @@ Cuarta tanda, junto con el rediseño del menú: personalización de íconos (`ba
 
 Sexta tanda, junto con los tableros nuevos del Panel: ampliación de `backend/test/dashboard.test.js` con `getStockByWarehouse` (suma correctamente por almacén y ordena de mayor a menor), `getProjectsByStatus` (cuenta por estado y refleja un cambio de estado en tiempo real), `getTopClientsBySales` (ordena descendente por monto y excluye contratos `CANCELADO`) y `getTopSuppliersByPurchases` (calcula cantidad × costo por proveedor y respeta el límite pedido).
 
-Séptima tanda, junto con los webhooks salientes de N8N: `backend/test/n8nWebhooks.test.js` — crear un webhook exige `evento`/`url` válidos, `listWebhooks()` nunca expone el secret en claro (solo si tiene uno configurado), activar/desactivar y eliminar funcionan y rechazan un `webhook_id` inexistente, `dispatchEvent` solo llama a los webhooks activos suscriptos al evento exacto o al comodín `*` (con un `fetchImpl` inyectado, sin red real — mismo patrón que `aiChatService.chat`), firma el cuerpo con HMAC-SHA256 cuando el webhook tiene secreto, nunca lanza si el fetch falla o el destino responde con error, y no hace ninguna llamada si no hay webhooks suscriptos al evento.
+Séptima tanda, junto con los webhooks salientes de N8N: `backend/test/n8nWebhooks.test.js` — crear un webhook exige `evento`/`url` válidos, `listWebhooks()` nunca expone el secret en claro (solo si tiene uno configurado), activar/desactivar y eliminar funcionan y rechazan un `webhook_id` inexistente, `dispatchEvent` solo llama a los webhooks activos suscriptos al evento exacto o al comodín `*` (con un `fetchImpl` inyectado, sin red real — mismo patrón que `aiChatService.chat`), firma el cuerpo con HMAC-SHA256 cuando el webhook tiene secreto, nunca lanza si el fetch falla o el destino responde con error, no lanza si falla la propia consulta a la base (contrato best-effort), y no hace ninguna llamada si no hay webhooks suscriptos al evento.
+
+Octava tanda, junto con el módulo Chatbot: `backend/test/chatbot.test.js` — `verifyWebhookSecret` exige `CHATBOT_WEBHOOK_SECRET` configurado y coincidente, la configuración trae valores por defecto y se actualiza sin pisar un campo con `null`, `recibirMensaje` crea una conversación nueva o le agrega el mensaje a una existente (rechazo de texto vacío, canal inválido o `conversacion_codigo` inexistente), `responderMensaje` guarda el mensaje del agente, marca `ATENDIDA` y dispara el webhook saliente (mockeado, sin red real), `cerrarConversacion` marca `CERRADA` y un mensaje nuevo la reabre a `ABIERTA`, `convertirALead` crea el lead y lo vincula (rechazo de convertir la misma conversación dos veces), y `listConversaciones` filtra por estado correctamente.
 
 Escribir estos tests encontró un bug real preexistente: cuando fallaba el registro de auditoría de un error (por ejemplo con un `canal` inválido), el cliente de conexión nunca se liberaba de vuelta al pool — bajo una racha sostenida de errores, esto terminaba agotando el pool de conexiones y colgando el backend entero. Ya está corregido en `inventoryService.js`.
 
@@ -193,6 +201,10 @@ Escribir estos tests encontró un bug real preexistente: cuando fallaba el regis
   - **Elevación y sombra en tarjetas** (`.form-card`, `.table-card`, `.viz-root`, `.kpi-card`) — un único cambio en `tailwind.input.css` que da una sombra suave y, en las tarjetas clickeables, una pequeña elevación al pasar el mouse, sin tocar el HTML de las ~40 pantallas que ya usan esas clases compartidas.
 - **Cuatro tableros nuevos en el Panel** (a pedido, sexta tanda) — *Stock por almacén* (ranking de almacenes por stock físico total), *Proyectos por estado* (primer gráfico de tipo dona del Panel — los anteriores eran todos de barras —, con la misma codificación de color que ya usan los badges de estado de proyecto), *Ventas por cliente* (top 5 por monto total contratado, excluye contratos `CANCELADO`) y *Compras por proveedor* (top 5 por monto de órdenes, cantidad × costo unitario, excluye órdenes `CANCELADA`). Cuatro rutas nuevas de solo lectura (`GET /dashboard/stock-by-warehouse`, `/dashboard/projects-by-status`, `/dashboard/top-clients`, `/dashboard/top-suppliers`), cada una protegida con el permiso de su propio dominio (`inventory.query`/`projects.query`/`sales.query`/`purchases.query`) en vez de reusar `accounting.query` como los tableros de Gastos — así un rol como `ALMACENERO` ve el tablero de stock aunque no tenga permiso de Contabilidad. El ranking de barras se extrajo a una función genérica (`renderRankingBars`) reusada por los tres tableros de barras nuevos.
 - **Webhooks salientes hacia N8N** (*Administración → Automatizaciones N8N*, solo `ADMIN`, séptima tanda) — hasta acá la única forma de que N8N se enterara de algo era consultando la API o las vistas de solo lectura cada tanto (polling); ahora el ERP puede avisarle apenas ocurre un evento. Un webhook se suscribe a un `evento` (mismo vocabulario que `auditoria.accion` y `reglas_imputacion.evento`, ej. `rrhh.attendance.check_in`) o al comodín `*` para todos, y cuando ese evento ocurre recibe un `POST` con `{evento, data, timestamp}`, firmado con `X-ICR-Signature` (HMAC-SHA256) si se configuró un secreto — el secreto nunca se vuelve a mostrar tras crearlo, mismo criterio que los tokens de servicio. El envío es **best-effort** (`n8nWebhooksService.dispatchEvent`, con timeout de 5s por request): un N8N caído o una URL mal configurada nunca rompe la operación que disparó el evento — verificado a mano registrando un webhook a un host inexistente y confirmando que marcar asistencia sigue respondiendo normal. Primer evento conectado de punta a punta: `rrhh.attendance.check_in`/`check_out` (la "app de asistencia" del ERP, para que una automatización externa se entere de cada fichaje sin sondear). Se suma además `vw_n8n_asistencias` a las vistas de solo lectura para Postgres directo (mismo criterio que las demás: espejo sin filtro de fecha de la tabla `asistencias`, con nombre y DNI del empleado ya resueltos).
+- **Octava tanda, a pedido** — tres frentes en paralelo:
+  - **Pulido visual**: submenús más espaciosos con una barra de acento a la izquierda al pasar el mouse (más fácil de leer en módulos largos como Almacén o Contabilidad), y los ~7 gráficos del Panel (barras, dona, rankings) ganaron transiciones más suaves — la barra crece levemente al pasar el mouse en vez de solo cambiar de opacidad, el tooltip tiene sombra y una entrada animada, y las barras de ranking crecen desde 0 al cargar en vez de aparecer ya completas.
+  - **Módulo Chatbot** (*CRM → Chatbot*, nuevo) — administración de un chatbot externo (el widget de la web, o el de la futura tienda) que se conectará a futuro vía N8N: bandeja de conversaciones con hilo de mensajes, responder desde el panel (dispara el webhook saliente `chatbot.message.sent` para que N8N lleve la respuesta al chat real), cerrar una conversación, y convertirla en lead de CRM con un clic (reusa `crmService.crearLead`). Webhook entrante público `POST /chatbot/webhook` autenticado con `CHATBOT_WEBHOOK_SECRET` (mismo patrón que Telegram) y `GET /chatbot/config` público para que el propio widget consulte si está habilitado. Ver la sección "Chatbot" más abajo para los pasos de activación — sin infraestructura real de chatbot en este entorno de desarrollo, igual que Telegram/Drive.
+  - **Conectar N8N desde otro contenedor del mismo VPS** — `icr_internal` pasó a ser una red externa de Docker (se crea una sola vez con `docker network create icr_internal`) para que el `docker-compose` de una instancia de N8N separada pueda unirse a ella y llegar a `db`/`backend` por nombre de contenedor, sin exponer Postgres a internet. Documentado paso a paso en "Conectar N8N desde otro contenedor Docker en el mismo VPS".
 
 ## Integración N8N / Telegram
 
@@ -209,9 +221,36 @@ La automatización conversacional de movimientos vía Telegram + N8N (Fase 4 del
 - **Autenticación**: en vez de loguearse cada 12h, un workflow de N8N puede usar un **token de servicio de larga duración** (*Administración → Tokens de servicio*, prefijo `icr_`) que "actúa como" un usuario dedicado y hereda su rol tal cual — se revoca en cualquier momento sin tocar el usuario. Sigue funcionando también loguearse con `POST /api/auth/login` y usar el JWT (vence a las 12h) si se prefiere.
 - **Documentación exportable**: `GET /api/openapi.json` (público, enlazado desde *Administración → Integraciones*) sirve un spec OpenAPI 3.0 generado en vivo desde `routes.js` — todo endpoint, método y permiso requerido, siempre al día, para armar los nodos HTTP de un workflow sin adivinar la URL o el permiso exacto.
 - **Consulta directa por SQL** (alternativa a la API REST para reportes): un rol de Postgres de solo lectura, `n8n_readonly`, expone un puñado de vistas (`vw_inventario_disponible`, `vw_stock_bajo`, `vw_n8n_calendario_eventos`, `vw_n8n_cuentas_por_cobrar`, `vw_n8n_cuentas_por_pagar`, `vw_n8n_asistencias`) para el nodo Postgres de N8N. Se crea sin contraseña (`NOLOGIN`) a propósito — activarlo es `ALTER ROLE n8n_readonly WITH LOGIN PASSWORD '...'` en el servidor real — y solo puede leer esas vistas, nunca tablas base con datos sensibles.
-- **Webhooks salientes** (*Administración → Automatizaciones N8N*, solo `ADMIN`) — el complemento de todo lo anterior: en vez de que un workflow tenga que sondear la API o las vistas SQL, el ERP le avisa apenas ocurre un evento. Se registra un `evento` (mismo vocabulario que `auditoria.accion`, ej. `rrhh.attendance.check_in`, `purchases.receive`, `sales.milestone_paid`, `expenses.register` — o `*` para todos) y una URL; cuando ese evento ocurre, el ERP hace `POST {evento, data, timestamp}` a esa URL, firmado con `X-ICR-Signature` (HMAC-SHA256) si se configuró un secreto. Es el camino recomendado para conectar el "trigger" de un workflow nuevo sin esperar a que N8N pregunte.
+- **Webhooks salientes** (*Administración → Automatizaciones N8N*, solo `ADMIN`) — el complemento de todo lo anterior: en vez de que un workflow tenga que sondear la API o las vistas SQL, el ERP le avisa apenas ocurre un evento. Se registra un `evento` (mismo vocabulario que `auditoria.accion`, ej. `rrhh.attendance.check_in`, `purchases.receive`, `sales.milestone_paid`, `expenses.register`, `chatbot.message.sent` — o `*` para todos) y una URL; cuando ese evento ocurre, el ERP hace `POST {evento, data, timestamp}` a esa URL, firmado con `X-ICR-Signature` (HMAC-SHA256) si se configuró un secreto. Es el camino recomendado para conectar el "trigger" de un workflow nuevo sin esperar a que N8N pregunte.
 
 Cuando el usuario tenga su instancia de N8N, conectar esto es apuntar los workflows a los endpoints, las vistas SQL, o registrar la URL del webhook de N8N de arriba — no requiere cambios en el backend.
+
+#### Conectar N8N desde otro contenedor Docker en el mismo VPS
+
+Pensado para cuando N8N corra en su **propio** `docker-compose` (stack separado, no dentro de este repositorio) en el mismo servidor que este ERP:
+
+1. **Red compartida**: `docker-compose.yml` de este proyecto declara `icr_internal` como red **externa** (no la crea el compose) para que otro stack pueda unirse a ella y llegar a los contenedores `db` y `backend` por su nombre, sin exponer nada a internet. Crearla una sola vez en el VPS:
+   ```bash
+   docker network create icr_internal
+   ```
+   Y en el `docker-compose.yml` del stack de N8N, agregar esa misma red como externa y unir el servicio de N8N a ella:
+   ```yaml
+   services:
+     n8n:
+       # ...
+       networks:
+         - icr_internal
+   networks:
+     icr_internal:
+       external: true
+   ```
+2. **Conexión directa a Postgres** (nodo Postgres de N8N, para las vistas de solo lectura de arriba): host `db`, puerto `5432`, base `icr_almacen`, rol `n8n_readonly`. Ese rol se crea `NOLOGIN` a propósito — activarlo una sola vez en el servidor real:
+   ```sql
+   ALTER ROLE n8n_readonly WITH LOGIN PASSWORD 'una-contraseña-fuerte-propia';
+   ```
+3. **Llamar a la API REST del ERP** (nodo HTTP Request de N8N): con la red compartida, la URL interna es `http://backend:4000/api/...` (no hace falta pasar por el dominio público ni por Traefik) — usar un token de servicio (*Administración → Tokens de servicio*) en el header `Authorization: Bearer <token>`.
+4. **Recibir los webhooks salientes del ERP**: crear el workflow en N8N con un nodo "Webhook" (trigger), copiar su URL (interna, `http://n8n:5678/webhook/...`, ya que ambos contenedores comparten `icr_internal`) y registrarla en *Administración → Automatizaciones N8N* con el `evento` que corresponda.
+5. **Enviar el webhook de Telegram/chatbot en sentido inverso** (el que sí es público, `POST /api/telegram/webhook` o `POST /api/chatbot/webhook`): esos si necesitan ser alcanzables desde fuera del VPS (Telegram, el widget de chat de la web), así que se llaman por el dominio público de este ERP (`https://${DOMAIN}/api/...`), no por la red interna.
 
 ### Telegram (webhook nativo, solo consulta — backend listo, sin infraestructura real)
 
@@ -229,3 +268,19 @@ A diferencia de N8N, el bot de Telegram **sí tiene su backend construido en est
 3. Registrar el webhook una sola vez: `curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://tu-dominio.com/api/telegram/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"`.
 4. Vincular cada usuario que vaya a usar el bot desde *Administración → Usuarios* (su `telegram_id` se obtiene, por ejemplo, hablándole a [@userinfobot](https://t.me/userinfobot)).
 5. Ambas variables son opcionales igual que `GEMINI_API_KEY`: sin ellas, el resto del ERP sigue funcionando y el webhook simplemente rechaza cualquier request que le llegue.
+
+### Chatbot (administración del chatbot externo, vía N8N — backend listo, sin infraestructura real)
+
+El chatbot en sí (el widget que ya existe en la web, o el que use la futura tienda) **vive fuera de este repositorio**. Lo que sí se construyó acá es la administración: una bandeja de conversaciones en el panel, y el contrato para que N8N haga de puente entre el chat real y el ERP — mismo patrón que Telegram (backend construido y con tests, `backend/test/chatbot.test.js`, pero sin infraestructura real de chatbot/N8N en este entorno de desarrollo para probarlo de punta a punta):
+
+- El flujo pensado es **chatbot ↔ N8N ↔ ERP**: cuando el visitante escribe, N8N recibe el mensaje del widget y lo reenvía a `POST /api/chatbot/webhook` (crea la conversación si es la primera vez, o le agrega el mensaje si manda `conversacion_codigo`). Cuando un agente responde desde *CRM → Chatbot* en el panel, el ERP dispara el evento saliente `chatbot.message.sent` (ver "Webhooks salientes" más arriba) para que el workflow de N8N lleve la respuesta de vuelta al chat real.
+- El webhook entrante se autentica con `CHATBOT_WEBHOOK_SECRET` en el header `X-Chatbot-Secret` — mismo criterio que `TELEGRAM_WEBHOOK_SECRET`: sin la variable configurada, rechaza todo.
+- `GET /api/chatbot/config` es pública (sin sesión) para que el propio widget o N8N puedan consultar si el chatbot está habilitado y su mensaje de bienvenida, configurables desde *CRM → Chatbot → Configuración del chatbot* (solo `ADMIN`).
+- Una conversación se puede **convertir en lead de CRM** con un clic (reusa `crmService.crearLead`, mismo patrón en cadena que Lead → Cotización → Contrato), quedando vinculada para no perder el hilo de la charla original.
+- Pestaña *CRM → Chatbot*, roles `VENTAS`/`SUPERVISOR`/`ADMIN` gestionan (mismos permisos `crm.manage`/`crm.query` que Leads), el resto consulta.
+
+**Pasos de activación cuando el chatbot y N8N estén listos** (ninguno aplica a este entorno de desarrollo):
+1. Definir `CHATBOT_WEBHOOK_SECRET` (una cadena aleatoria propia) como variable de entorno del backend.
+2. En el workflow de N8N que recibe los mensajes del widget, agregar un nodo HTTP Request hacia `POST https://tu-dominio.com/api/chatbot/webhook` con el header `X-Chatbot-Secret: <CHATBOT_WEBHOOK_SECRET>` y el body `{ conversacion_codigo, canal, nombre_contacto, contacto, texto }` (`conversacion_codigo` vacío en el primer mensaje del visitante).
+3. Registrar un webhook saliente en *Administración → Automatizaciones N8N* con evento `chatbot.message.sent` apuntando a la URL del nodo "Webhook" de un segundo workflow de N8N, que reciba la respuesta del agente y la reenvíe al widget real.
+4. Sin `CHATBOT_WEBHOOK_SECRET` configurada, el resto del ERP sigue funcionando igual — solo el webhook entrante rechaza cualquier request que le llegue.
