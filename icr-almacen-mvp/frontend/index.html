@@ -180,6 +180,13 @@
           <span>CRM / Leads</span>
         </button>
 
+        <!-- ============ MÓDULO: CHATBOT (administración del chatbot externo) ============ -->
+        <button class="nav-item" data-view="chatbot">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v6A2.5 2.5 0 0 1 14.5 14H8l-4 3v-3H5.5A2.5 2.5 0 0 1 3 11.5v-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7.3" cy="8.5" r="0.9" fill="currentColor"/><circle cx="10" cy="8.5" r="0.9" fill="currentColor"/><circle cx="12.7" cy="8.5" r="0.9" fill="currentColor"/></svg>
+          <span>Chatbot</span>
+          <span id="chatbot-badge" class="hidden nav-badge">0</span>
+        </button>
+
         <!-- ============ MÓDULO: VENTAS ============ -->
         <div class="nav-group expanded" data-group="ventas">
           <button class="nav-group-header" type="button" onclick="toggleNavGroup('ventas')">
@@ -1262,6 +1269,31 @@
             <tbody id="leads-body"></tbody>
           </table>
           <div id="leads-pager"></div>
+        </div>
+      </section>
+
+      <!-- ============ CHATBOT (administración del chatbot externo, vía N8N) ============ -->
+      <section class="view" id="view-chatbot">
+        <p class="text-sm text-slate-500 mb-4 max-w-2xl">Bandeja de conversaciones del chatbot de la web/tienda. El chatbot en sí vive fuera de este panel — llega acá a través de N8N, que reenvía cada mensaje del visitante y se encarga de llevar tus respuestas de vuelta al chat real.</p>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div class="flex flex-wrap gap-2.5">
+            <select id="chatbot-filter-estado" class="field max-w-[180px]" onchange="loadChatbotConversations()">
+              <option value="">Todos los estados</option>
+              <option value="ABIERTA">Abiertas</option>
+              <option value="ATENDIDA">Atendidas</option>
+              <option value="CERRADA">Cerradas</option>
+            </select>
+          </div>
+          <button class="btn-secondary" type="button" onclick="openChatbotConfigModal()">Configuración del chatbot</button>
+        </div>
+
+        <div class="grid lg:grid-cols-[320px_1fr] gap-5">
+          <div class="table-card overflow-y-auto" style="max-height: 640px;">
+            <div id="chatbot-conversations-list"></div>
+          </div>
+          <div class="form-card flex flex-col" style="max-height: 640px;" id="chatbot-thread-panel">
+            <div class="text-sm text-slate-400 italic text-center py-16">Seleccioná una conversación de la izquierda para ver el hilo.</div>
+          </div>
         </div>
       </section>
 
@@ -2514,6 +2546,29 @@
         </div>
         <div id="lead-convert-result" class="result-box mt-3"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="chatbot-config-modal" class="hidden modal-overlay" onclick="if(event.target===this) closeChatbotConfigModal()">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div class="text-lg font-bold text-navy-950">Configuración del chatbot</div>
+        <button onclick="closeChatbotConfigModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
+          <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <form id="form-chatbot-config" class="px-6 py-4">
+        <label class="flex items-center gap-2 text-sm font-semibold text-navy-950 mb-4">
+          <input type="checkbox" name="habilitado" class="w-4 h-4" />
+          Chatbot habilitado
+        </label>
+        <label class="field-label mb-4">Mensaje de bienvenida
+          <textarea name="mensaje_bienvenida" rows="3" class="field" placeholder="¡Hola! ¿En qué te podemos ayudar?"></textarea>
+        </label>
+        <p class="text-xs text-slate-400 mb-4">El widget del chat (a través de N8N) consulta esta configuración en <code>GET /api/chatbot/config</code>, sin necesitar sesión.</p>
+        <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Guardar</span></button>
+      </form>
+      <div id="chatbot-config-result" class="result-box mx-6 mb-4"></div>
     </div>
   </div>
 

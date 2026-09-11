@@ -51,7 +51,14 @@ volumes:
   icr_almacen_uploads:
 
 networks:
+  # Externa (no la crea este compose) para que otro stack de Docker en el
+  # mismo VPS —una instancia de N8N, por ejemplo— pueda unirse a la misma
+  # red y llegar a "db" y "backend" por su nombre de contenedor, sin exponer
+  # Postgres a internet. Crearla una sola vez antes del primer
+  # "docker compose up": `docker network create icr_internal`. Ver la
+  # sección "Integración N8N / Telegram" del README para el paso a paso.
   icr_internal:
+    external: true
   traefik_public:
     external: true
     # Debe coincidir con el nombre de la red externa que ya usa Traefik en el VPS

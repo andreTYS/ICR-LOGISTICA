@@ -18,6 +18,7 @@ const cotizaciones = require("./services/cotizacionesService");
 const assets = require("./services/assetsService");
 const aiChat = require("./services/aiChatService");
 const telegram = require("./services/telegramService");
+const chatbot = require("./services/chatbotService");
 const admin = require("./services/adminService");
 const n8nWebhooks = require("./services/n8nWebhooksService");
 const crm = require("./services/crmService");
@@ -107,6 +108,32 @@ router.post(
     }
     return telegram.handleUpdate(req.body);
   })
+);
+
+// Pública (sin JWT): N8N llama este endpoint cuando el chatbot externo
+// (widget de la web, o el de la futura tienda) recibe un mensaje. Se
+// autentica con CHATBOT_WEBHOOK_SECRET, nunca con el token de sesión del
+// panel — mismo criterio que el webhook de Telegram de arriba.
+router.post(
+  "/chatbot/webhook",
+  handle(async (req) => {
+    if (!chatbot.verifyWebhookSecret(req.headers["x-chatbot-secret"])) {
+      throw new AppError("AUTH_INVALID", "Token secreto del chatbot inválido o no configurado", 401);
+    }
+    const b = req.body;
+    return chatbot.recibirMensaje({
+      conversacionCodigo: b.conversacion_codigo || null, canal: b.canal, remitente: b.remitente,
+      nombreContacto: b.nombre_contacto, contacto: b.contacto, texto: b.texto,
+    });
+  })
+);
+
+// Pública: el widget de chat (o N8N en su nombre) puede consultar si el
+// chatbot está habilitado y su mensaje de bienvenida sin necesitar sesión —
+// mismo criterio que GET /settings (logo) y GET /nav-icons.
+router.get(
+  "/chatbot/config",
+  handle(async () => chatbot.getChatbotConfig())
 );
 
 // Pública: documentación exportable para integradores (N8N y similares) —
@@ -1048,6 +1075,58 @@ router.get(
   "/crm/leads/:codigo",
   requirePermission("crm.query"),
   handle(async (req) => crm.getLead(req.params.codigo))
+);
+
+// -------- Chatbot (administración del chatbot externo, vía N8N) --------
+
+router.put(
+  "/chatbot/config",
+  requirePermission("settings.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return chatbot.setChatbotConfig({
+      habilitado: b.habilitado != null ? !!b.habilitado : null, mensajeBienvenida: b.mensaje_bienvenida || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/chatbot/conversations",
+  requirePermission("crm.query"),
+  handle(async (req) => chatbot.listConversaciones({ estado: req.query.estado || null, page: req.query.page, pageSize: req.query.page_size }))
+);
+
+router.get(
+  "/chatbot/conversations/:codigo",
+  requirePermission("crm.query"),
+  handle(async (req) => chatbot.getConversacion(req.params.codigo))
+);
+
+router.post(
+  "/chatbot/conversations/:codigo/reply",
+  requirePermission("crm.manage"),
+  handle(async (req) => chatbot.responderMensaje({
+    conversacionCodigo: req.params.codigo, texto: req.body.texto,
+    usuarioId: req.user.usuario_id, canal: req.body.channel || "web",
+  }))
+);
+
+router.post(
+  "/chatbot/conversations/:codigo/close",
+  requirePermission("crm.manage"),
+  handle(async (req) => chatbot.cerrarConversacion({
+    conversacionCodigo: req.params.codigo, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
+router.post(
+  "/chatbot/conversations/:codigo/convert-to-lead",
+  requirePermission("crm.manage"),
+  handle(async (req) => chatbot.convertirALead({
+    conversacionCodigo: req.params.codigo, origen: req.body?.origen || null,
+    usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
 );
 
 // -------- Gestión documental --------

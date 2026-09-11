@@ -218,6 +218,7 @@ const titles = {
   "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
   crm: ["CRM / Leads", "Pipeline comercial: contactos y oportunidades antes de la primera cotización"],
+  chatbot: ["Chatbot", "Bandeja de conversaciones del chatbot externo (web/tienda), conectado vía N8N"],
   quotes: ["Cotizaciones", "Cotizar antes del contrato; una cotización aceptada se convierte en contrato con un clic"],
   "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
   "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
@@ -308,6 +309,7 @@ function goToView(view) {
   if (view === "rrhh-employees") loadEmployees();
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
   if (view === "crm") loadLeads(1);
+  if (view === "chatbot") { currentChatbotCodigo = null; loadChatbotConversations(); document.getElementById("chatbot-thread-panel").innerHTML = `<div class="text-sm text-slate-400 italic text-center py-16">Seleccioná una conversación de la izquierda para ver el hilo.</div>`; }
   if (view === "quotes") loadCotizaciones(1);
   if (view === "sales-contracts") loadContracts(1);
   if (view === "sales-receivables") loadReceivables();
@@ -592,6 +594,7 @@ async function loadDashboard() {
   updateAlertsBadge(alertsAllowed ? alertCount : 0);
 
   api("/assets-warranties-expiring").then((r) => updateWarrantiesBadge(r.status === "success" ? r.data.length : 0)).catch(() => {});
+  api("/chatbot/conversations?estado=ABIERTA&page_size=1").then((r) => updateChatbotBadge(r.status === "success" ? r.data.total : 0)).catch(() => {});
 
   const movBody = document.getElementById("dash-movements-body");
   const movRows = movR.data?.items || [];
@@ -955,7 +958,7 @@ async function loadExpensesCategoryChart() {
         <span class="text-slate-500">PEN ${money(i.monto)}</span>
       </div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-        <div class="h-full rounded-full" style="width:${Math.max(3, (i.monto / max) * 100)}%; background:#1d3557"></div>
+        <div class="h-full rounded-full ranking-bar" style="width:${Math.max(3, (i.monto / max) * 100)}%; background:#1d3557"></div>
       </div>
     </div>`).join("");
 }
@@ -982,7 +985,7 @@ async function loadWorstMarginChart() {
         <span class="${marginClass(margen)}">${p.moneda || "PEN"} ${money(margen)}</span>
       </div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-        <div class="h-full rounded-full" style="width:${Math.max(3, (Math.abs(margen) / max) * 100)}%; background:${negative ? "#e11d48" : "#059669"}"></div>
+        <div class="h-full rounded-full ranking-bar" style="width:${Math.max(3, (Math.abs(margen) / max) * 100)}%; background:${negative ? "#e11d48" : "#059669"}"></div>
       </div>
     </div>`;
   }).join("");
@@ -1001,7 +1004,7 @@ function renderRankingBars(el, items, { color = "#1d3557", formatValue = (v) => 
         <span class="text-slate-500">${formatValue(i.value)}</span>
       </div>
       <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-        <div class="h-full rounded-full" style="width:${Math.max(3, (i.value / max) * 100)}%; background:${color}"></div>
+        <div class="h-full rounded-full ranking-bar" style="width:${Math.max(3, (i.value / max) * 100)}%; background:${color}"></div>
       </div>
     </div>`).join("");
 }
@@ -1054,7 +1057,7 @@ function renderDonutChart(el, items, colorFor, tipId) {
   let offset = 0;
   const segments = items.map((it) => {
     const dash = (it.value / total) * circumference;
-    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorFor(it.label)}" stroke-width="16"
+    const seg = `<circle class="donut-segment" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorFor(it.label)}" stroke-width="16"
       stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
       onmouseenter="showChartTip(event,'${it.label}: ${it.value}','${tipId}')" onmousemove="moveChartTip(event,'${tipId}')" onmouseleave="hideChartTip('${tipId}')"></circle>`;
     offset += dash;
@@ -3986,6 +3989,143 @@ document.getElementById("form-ai-chat").addEventListener("submit", async (e) => 
     appendAiChatMessage("error", "No se pudo conectar con el asistente.");
   } finally {
     aiChatBusy = false;
+  }
+});
+
+// -------- Chatbot (administración del chatbot externo, conectado a futuro
+// vía N8N: el widget real de la web/tienda no vive en este repositorio) --------
+function updateChatbotBadge(count) {
+  const badge = document.getElementById("chatbot-badge");
+  if (count > 0) { badge.textContent = count > 99 ? "99+" : count; badge.classList.remove("hidden"); }
+  else badge.classList.add("hidden");
+}
+
+let currentChatbotCodigo = null;
+
+const CHATBOT_ESTADO_TONES = { ABIERTA: "ok", ATENDIDA: "transferencia", CERRADA: "low" };
+function chatbotEstadoBadge(estado) { return badge(estado, CHATBOT_ESTADO_TONES[estado] || "devolucion"); }
+
+async function loadChatbotConversations() {
+  const list = document.getElementById("chatbot-conversations-list");
+  list.innerHTML = `<div class="p-4 text-sm text-slate-400 italic text-center">Cargando…</div>`;
+  const estado = document.getElementById("chatbot-filter-estado").value;
+  const r = await api(`/chatbot/conversations${estado ? `?estado=${estado}` : ""}`);
+  if (r.status !== "success") {
+    list.innerHTML = `<div class="p-4 text-sm text-slate-400 italic text-center">${r.error?.message || "Tu rol no tiene permiso para ver esto."}</div>`;
+    return;
+  }
+  const items = r.data.items || [];
+  updateChatbotBadge(items.filter((c) => c.estado === "ABIERTA").length);
+  list.innerHTML = items.length
+    ? items.map((c) => `
+      <button type="button" class="row-clickable w-full text-left px-3.5 py-3 border-b border-slate-100 hover:bg-cyan-50/40 transition ${c.codigo === currentChatbotCodigo ? "bg-cyan-50" : ""}" onclick="openChatbotConversation('${c.codigo}')">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="font-semibold text-navy-950 text-[13.5px] truncate">${c.nombre_contacto || c.contacto || "Visitante"}</span>
+          ${chatbotEstadoBadge(c.estado)}
+        </div>
+        <div class="text-xs text-slate-500 truncate">${c.ultimo_mensaje || "—"}</div>
+        <div class="text-[10.5px] text-slate-400 mt-1">${c.codigo} · ${new Date(c.updated_at).toLocaleString("es-PE")}</div>
+      </button>`).join("")
+    : `<div class="p-4 text-sm text-slate-400 italic text-center">Sin conversaciones todavía.</div>`;
+}
+
+async function openChatbotConversation(codigo) {
+  currentChatbotCodigo = codigo;
+  loadChatbotConversations();
+  const panel = document.getElementById("chatbot-thread-panel");
+  panel.innerHTML = `<div class="text-sm text-slate-400 italic text-center py-16">Cargando…</div>`;
+
+  const r = await api(`/chatbot/conversations/${encodeURIComponent(codigo)}`);
+  if (r.status !== "success") {
+    panel.innerHTML = `<div class="text-sm text-slate-400 italic text-center py-16">${r.error?.message || "No se pudo cargar la conversación."}</div>`;
+    return;
+  }
+  const c = r.data;
+  const isClosed = c.estado === "CERRADA";
+  const bubbles = (c.mensajes || []).map((m) => {
+    const mine = m.remitente === "AGENTE";
+    return `<div class="flex ${mine ? "justify-end" : "justify-start"} mb-2.5">
+      <div class="max-w-[75%] rounded-xl px-3.5 py-2 text-sm ${mine ? "bg-navy-950 text-white" : "bg-slate-100 text-navy-950"}">
+        <div>${m.texto}</div>
+        <div class="text-[10px] mt-1 ${mine ? "text-white/50" : "text-slate-400"}">${m.remitente} · ${new Date(m.created_at).toLocaleString("es-PE")}</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+      <div>
+        <div class="font-bold text-navy-950">${c.nombre_contacto || c.contacto || "Visitante"} <span class="text-slate-400 font-normal text-xs">(${c.codigo})</span></div>
+        <div class="text-xs text-slate-500 mt-0.5">${c.canal} ${c.contacto ? `· ${c.contacto}` : ""} ${c.lead_codigo ? `· Lead ${c.lead_codigo}` : ""} · ${chatbotEstadoBadge(c.estado)}</div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        ${!c.lead_codigo ? `<button class="btn-secondary px-3 py-1.5 text-xs" onclick="convertChatbotToLead('${c.codigo}')">Convertir a lead</button>` : ""}
+        ${!isClosed ? `<button class="btn-danger px-3 py-1.5 text-xs" onclick="closeChatbotConversation('${c.codigo}')">Cerrar</button>` : ""}
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto mb-3" style="min-height:280px;">${bubbles || `<div class="text-sm text-slate-400 italic text-center py-10">Sin mensajes todavía.</div>`}</div>
+    <form id="form-chatbot-reply" class="flex items-end gap-2 pt-3 border-t border-slate-100">
+      <label class="field-label flex-1">Responder
+        <textarea name="texto" rows="2" required class="field" placeholder="Escribí la respuesta para el visitante…"></textarea>
+      </label>
+      <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Enviar</span></button>
+    </form>`;
+
+  document.getElementById("form-chatbot-reply").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const texto = new FormData(e.target).get("texto");
+    setFormLoading(e.target, true);
+    try {
+      const rr = await api(`/chatbot/conversations/${encodeURIComponent(codigo)}/reply`, { method: "POST", body: JSON.stringify({ channel: "web", texto }) });
+      if (rr.status === "success") openChatbotConversation(codigo);
+      else toast(rr.error.message, false);
+    } finally {
+      setFormLoading(e.target, false);
+    }
+  });
+}
+
+async function closeChatbotConversation(codigo) {
+  if (!confirm("¿Cerrar esta conversación?")) return;
+  const r = await api(`/chatbot/conversations/${encodeURIComponent(codigo)}/close`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  if (r.status === "success") { toast("Conversación cerrada"); openChatbotConversation(codigo); }
+  else toast(r.error.message, false);
+}
+
+async function convertChatbotToLead(codigo) {
+  const r = await api(`/chatbot/conversations/${encodeURIComponent(codigo)}/convert-to-lead`, { method: "POST", body: JSON.stringify({ channel: "web" }) });
+  if (r.status === "success") { toast(`Lead ${r.data.lead.codigo} creado`); openChatbotConversation(codigo); }
+  else toast(r.error.message, false);
+}
+
+async function openChatbotConfigModal() {
+  const modal = document.getElementById("chatbot-config-modal");
+  document.getElementById("chatbot-config-result").innerHTML = "";
+  modal.classList.remove("hidden");
+  const r = await api("/chatbot/config");
+  if (r.status === "success") {
+    const form = document.getElementById("form-chatbot-config");
+    form.elements.habilitado.checked = r.data.habilitado;
+    form.elements.mensaje_bienvenida.value = r.data.mensajeBienvenida;
+  }
+}
+function closeChatbotConfigModal() {
+  document.getElementById("chatbot-config-modal").classList.add("hidden");
+}
+document.getElementById("form-chatbot-config").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/chatbot/config", {
+      method: "PUT",
+      body: JSON.stringify({ channel: "web", habilitado: f.has("habilitado"), mensaje_bienvenida: f.get("mensaje_bienvenida") }),
+    });
+    const box = document.getElementById("chatbot-config-result");
+    if (r.status === "success") { box.className = "result-box ok"; box.innerHTML = "<p>Configuración guardada.</p>"; }
+    else { box.className = "result-box err"; box.innerHTML = `<p>${r.error.message}</p>`; }
+  } finally {
+    setFormLoading(e.target, false);
   }
 });
 
