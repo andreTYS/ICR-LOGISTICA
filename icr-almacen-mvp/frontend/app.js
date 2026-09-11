@@ -427,6 +427,7 @@ function triggerIconUpload(itemKey) {
 }
 
 async function restoreNavIcon(itemKey) {
+  if (!confirm("¿Restaurar el ícono por defecto de este menú?")) return;
   const r = await api(`/nav-icons/${encodeURIComponent(itemKey)}`, { method: "DELETE" });
   if (r.status === "success") { toast("Ícono restaurado"); loadNavIconOverrides(); }
   else toast(r.error.message, false);
@@ -571,6 +572,12 @@ async function loadEmployeeOptions() {
 
 // -------- Dashboard --------
 async function loadDashboard() {
+  ["kpi-products", "kpi-warehouses", "kpi-movements", "kpi-alerts"].forEach((id) => {
+    document.getElementById(id).textContent = "…";
+  });
+  document.getElementById("dash-movements-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("dash-alerts-body").innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+
   const [alertsR, movR, whR, productsR] = await Promise.all([
     api("/inventory/alerts"),
     api("/inventory/movements?page_size=6"),
@@ -3974,6 +3981,7 @@ document.getElementById("form-ai-chat").addEventListener("submit", async (e) => 
   appendAiChatMessage("user", mensaje);
   const pending = appendAiChatMessage("pending", "Pensando…");
   aiChatBusy = true;
+  setFormLoading(e.target, true);
   try {
     const r = await api("/ai/chat", { method: "POST", body: JSON.stringify({ channel: "web", mensaje, historial: aiChatHistory }) });
     pending.remove();
@@ -3989,6 +3997,7 @@ document.getElementById("form-ai-chat").addEventListener("submit", async (e) => 
     appendAiChatMessage("error", "No se pudo conectar con el asistente.");
   } finally {
     aiChatBusy = false;
+    setFormLoading(e.target, false);
   }
 });
 
@@ -4112,6 +4121,7 @@ async function openChatbotConfigModal() {
 function closeChatbotConfigModal() {
   document.getElementById("chatbot-config-modal").classList.add("hidden");
 }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChatbotConfigModal(); });
 document.getElementById("form-chatbot-config").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
