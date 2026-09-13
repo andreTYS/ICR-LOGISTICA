@@ -684,6 +684,10 @@
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Exportar CSV
           </button>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportStockXlsx()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar Excel
+          </button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -851,6 +855,10 @@
         <div class="flex flex-wrap gap-2.5 mb-4">
           <input id="mov-sku" placeholder="Filtrar por SKU..." class="field flex-1 max-w-xs" />
           <button class="btn-secondary" onclick="loadMovements()">Buscar</button>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportMovementsXlsx()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar Excel
+          </button>
           <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportMovementsCsv()">
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Exportar CSV
@@ -1054,6 +1062,10 @@
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Exportar CSV
           </button>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportPayablesXlsx()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar Excel
+          </button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -1160,6 +1172,8 @@
             <option value="CANCELADO">Cancelado</option>
           </select>
           <button class="btn-secondary" onclick="exportProfitabilityCsv()">Exportar CSV</button>
+          <button class="btn-secondary" onclick="exportProfitabilityXlsx()">Exportar Excel</button>
+          <button class="btn-secondary" onclick="exportProfitabilityPdf()">Exportar PDF</button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -1256,6 +1270,10 @@
           <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportLeadsCsv()">
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Exportar CSV
+          </button>
+          <button class="btn-secondary inline-flex items-center gap-1.5" onclick="exportLeadsXlsx()">
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="none"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar Excel
           </button>
         </div>
         <div class="table-card">
@@ -1438,6 +1456,7 @@
             <option value="VENCIDO">Solo vencidos</option>
           </select>
           <button class="btn-secondary" onclick="exportReceivablesCsv()">Exportar CSV</button>
+          <button class="btn-secondary" onclick="exportReceivablesXlsx()">Exportar Excel</button>
         </div>
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
@@ -1712,6 +1731,7 @@
                 <input id="income-statement-hasta" type="date" class="field" />
               </label>
               <button type="button" class="btn-secondary" onclick="loadIncomeStatement()">Aplicar</button>
+              <button type="button" class="btn-secondary" onclick="exportIncomeStatementPdf()">Exportar PDF</button>
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4" id="income-statement-cards"></div>
@@ -1732,6 +1752,7 @@
                 <input id="balance-sheet-corte" type="date" class="field" />
               </label>
               <button type="button" class="btn-secondary" onclick="loadBalanceSheet()">Aplicar</button>
+              <button type="button" class="btn-secondary" onclick="exportBalanceSheetPdf()">Exportar PDF</button>
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4" id="balance-sheet-cards"></div>
@@ -2328,6 +2349,7 @@
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setContractStatus('FINALIZADO')">Finalizar</button>
           <button class="btn-danger px-3 py-1.5 text-xs" onclick="setContractStatus('CANCELADO')">Cancelar</button>
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="openDocumentsModal('contrato', currentContractId, `Contrato ${currentContractCodigo}`)">Documentos</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="exportContractPdf()">Exportar PDF</button>
           <button onclick="closeContractModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -2584,6 +2606,7 @@
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setQuoteStatus('ACEPTADA')">Marcar aceptada</button>
           <button class="btn-danger px-3 py-1.5 text-xs" onclick="setQuoteStatus('RECHAZADA')">Rechazar</button>
           <button class="btn-primary px-3 py-1.5 text-xs" onclick="convertQuote()">Convertir en contrato</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="exportQuotePdf()">Exportar PDF</button>
           <button onclick="closeQuoteModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>

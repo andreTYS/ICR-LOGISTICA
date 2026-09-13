@@ -28,6 +28,8 @@ const openapi = require("./openapi");
 const driveService = require("./services/driveService");
 const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile } = require("./uploads");
 const navIcons = require("./services/navIconsService");
+const xlsxService = require("./services/xlsxService");
+const reportesPdf = require("./services/reportesPdfService");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -147,6 +149,45 @@ router.get("/openapi.json", (req, res) => {
 
 // A partir de aquí, todo comando requiere sesión válida (Authorization: Bearer <token>)
 router.use(requireAuth);
+
+// Como handle(), pero para respuestas binarias (XLSX/PDF) en vez del sobre
+// {status,data,error} en JSON — el error sigue yendo en ese mismo formato.
+function handleBinary(fn) {
+  return async (req, res) => {
+    try {
+      const { buffer, filename, contentType } = await fn(req);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (err) {
+      if (err instanceof AppError) {
+        res.status(err.status).json({ status: "error", data: null, error: { code: err.code, message: err.message, details: err.details } });
+      } else {
+        console.error(err);
+        res.status(500).json({ status: "error", data: null, error: { code: "INTERNAL_ERROR", message: "Error interno del servidor" } });
+      }
+    }
+  };
+}
+
+// -------- Exportación genérica --------
+// El frontend arma {headers, rows} con los mismos datos que ya usa para la
+// exportación CSV (que es 100% del lado del cliente) y este endpoint solo
+// los convierte a un .xlsx real con encabezado en negrita — no hay consulta
+// nueva a la base, así que no necesita un permiso de dominio específico más
+// allá de estar autenticado.
+router.post(
+  "/export/xlsx",
+  handleBinary(async (req) => {
+    const b = req.body || {};
+    const buffer = await xlsxService.buildWorkbookBuffer({ sheetName: b.sheetName, headers: b.headers, rows: b.rows });
+    return {
+      buffer,
+      filename: `${(b.filename || "reporte").replace(/[^a-zA-Z0-9_\-]/g, "_")}.xlsx`,
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+  })
+);
 
 // -------- Comandos de escritura --------
 
@@ -594,6 +635,16 @@ router.get(
   handle(async (req) => proyectos.getReporteRentabilidad({ estado: req.query.estado }))
 );
 
+router.get(
+  "/projects-profitability-report/pdf",
+  requirePermission("projects.query"),
+  handleBinary(async (req) => {
+    const reporte = await proyectos.getReporteRentabilidad({ estado: req.query.estado });
+    const buffer = await reportesPdf.buildRentabilidadPdf(reporte, { estado: req.query.estado });
+    return { buffer, filename: "rentabilidad-proyectos.pdf", contentType: "application/pdf" };
+  })
+);
+
 // -------- Contabilidad --------
 
 router.post(
@@ -705,6 +756,26 @@ router.get(
   "/accounting/reports/balance-sheet",
   requirePermission("accounting.query"),
   handle(async (req) => contabilidad.getBalanceGeneral({ fechaCorte: req.query.fecha_corte || null }))
+);
+
+router.get(
+  "/accounting/reports/income-statement/pdf",
+  requirePermission("accounting.query"),
+  handleBinary(async (req) => {
+    const data = await contabilidad.getEstadoResultados({ fechaDesde: req.query.fecha_desde || null, fechaHasta: req.query.fecha_hasta || null });
+    const buffer = await reportesPdf.buildEstadoResultadosPdf(data);
+    return { buffer, filename: "estado-de-resultados.pdf", contentType: "application/pdf" };
+  })
+);
+
+router.get(
+  "/accounting/reports/balance-sheet/pdf",
+  requirePermission("accounting.query"),
+  handleBinary(async (req) => {
+    const data = await contabilidad.getBalanceGeneral({ fechaCorte: req.query.fecha_corte || null });
+    const buffer = await reportesPdf.buildBalanceGeneralPdf(data);
+    return { buffer, filename: "balance-general.pdf", contentType: "application/pdf" };
+  })
 );
 
 // -------- RRHH --------
@@ -828,6 +899,16 @@ router.get(
 );
 
 router.get(
+  "/sales/contracts/:codigo/pdf",
+  requirePermission("sales.query"),
+  handleBinary(async (req) => {
+    const contrato = await ventas.getContrato(req.params.codigo);
+    const buffer = await reportesPdf.buildContratoPdf(contrato);
+    return { buffer, filename: `${contrato.codigo_contrato}.pdf`, contentType: "application/pdf" };
+  })
+);
+
+router.get(
   "/sales-receivables",
   requirePermission("sales.query"),
   handle(async (req) => ventas.listCuentasPorCobrar({ estado: req.query.estado || null }))
@@ -943,6 +1024,16 @@ router.get(
   "/quotes/:codigo",
   requirePermission("quotes.query"),
   handle(async (req) => cotizaciones.getCotizacion(req.params.codigo))
+);
+
+router.get(
+  "/quotes/:codigo/pdf",
+  requirePermission("quotes.query"),
+  handleBinary(async (req) => {
+    const cotizacion = await cotizaciones.getCotizacion(req.params.codigo);
+    const buffer = await reportesPdf.buildCotizacionPdf(cotizacion);
+    return { buffer, filename: `${cotizacion.codigo}.pdf`, contentType: "application/pdf" };
+  })
 );
 
 // -------- Activos y Mantenimiento --------
