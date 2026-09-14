@@ -81,7 +81,10 @@ function csvEscape(value) {
 }
 function downloadCsv(filename, headers, rows) {
   const lines = [headers.join(","), ...rows.map((row) => row.map(csvEscape).join(","))];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  downloadBlob(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" }), filename);
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -90,6 +93,30 @@ function downloadCsv(filename, headers, rows) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// -------- Exportar Excel (.xlsx) --------
+// Mismos datos que downloadCsv, pero el archivo real lo arma el backend
+// (POST /export/xlsx) porque un .xlsx es un contenedor binario (zip+XML),
+// no se puede construir a mano en el navegador como el CSV.
+async function downloadXlsx(filename, sheetName, headers, rows) {
+  const res = await fetch(`${API}/export/xlsx`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ filename, sheetName, headers, rows }),
+  });
+  if (!res.ok) { toast("No se pudo generar el Excel", false); return; }
+  downloadBlob(await res.blob(), `${filename}.xlsx`);
+}
+
+// -------- Exportar PDF --------
+// GET simple, pero necesita el header de Authorization (no es un link
+// público), así que no se puede usar un <a href> directo — se pide como
+// blob y se dispara la descarga igual que el Excel.
+async function downloadPdf(path, filename) {
+  const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) { toast("No se pudo generar el PDF", false); return; }
+  downloadBlob(await res.blob(), filename);
 }
 
 // -------- Sesión --------
@@ -1170,6 +1197,16 @@ async function exportStockCsv() {
     items.map((row) => [row.sku, row.producto_nombre, row.almacen_codigo, row.codigo_ubicacion || "", row.stock_fisico, row.stock_reservado, row.stock_disponible, row.punto_reorden])
   );
 }
+async function exportStockXlsx() {
+  const params = stockQuery(2000);
+  const r = await api(`/inventory/stock?${params.toString()}`);
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "stock", "Stock",
+    ["SKU", "Producto", "Almacén", "Ubicación", "Físico", "Reservado", "Disponible", "P. reorden"],
+    items.map((row) => [row.sku, row.producto_nombre, row.almacen_codigo, row.codigo_ubicacion || "", row.stock_fisico, row.stock_reservado, row.stock_disponible, row.punto_reorden])
+  );
+}
 
 function setFormLoading(form, loading) {
   const btn = form.querySelector("button[type=submit]");
@@ -1377,6 +1414,18 @@ async function exportMovementsCsv() {
   const items = r.data?.items || [];
   downloadCsv(
     "movimientos.csv",
+    ["Fecha", "Tipo", "SKU", "Cantidad", "Origen", "Destino"],
+    items.map((m) => [new Date(m.created_at).toLocaleString("es-PE"), m.tipo_movimiento, m.sku, m.cantidad, m.almacen_origen_codigo || "", m.almacen_destino_codigo || ""])
+  );
+}
+async function exportMovementsXlsx() {
+  const sku = document.getElementById("mov-sku").value.trim();
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (sku) params.set("sku", sku);
+  const r = await api(`/inventory/movements?${params.toString()}`);
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "movimientos", "Movimientos",
     ["Fecha", "Tipo", "SKU", "Cantidad", "Origen", "Destino"],
     items.map((m) => [new Date(m.created_at).toLocaleString("es-PE"), m.tipo_movimiento, m.sku, m.cantidad, m.almacen_origen_codigo || "", m.almacen_destino_codigo || ""])
   );
@@ -1784,6 +1833,20 @@ async function exportPayablesCsv() {
       f.fecha_vencimiento ? new Date(f.fecha_vencimiento).toLocaleDateString("es-PE") : "", f.estado])
   );
 }
+async function exportPayablesXlsx() {
+  const estado = document.getElementById("payable-filter-estado").value;
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (estado) params.set("estado", estado);
+  const r = await api(`/payables/invoices?${params.toString()}`);
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "cuentas-por-pagar", "Cuentas por pagar",
+    ["Código", "Proveedor", "N° proveedor", "Moneda", "Monto total", "Monto pagado", "Emisión", "Vencimiento", "Estado"],
+    items.map((f) => [f.codigo, f.proveedor_nombre || "", f.numero_proveedor || "", f.moneda || "PEN", f.monto_total, f.monto_pagado,
+      f.fecha_emision ? new Date(f.fecha_emision).toLocaleDateString("es-PE") : "",
+      f.fecha_vencimiento ? new Date(f.fecha_vencimiento).toLocaleDateString("es-PE") : "", f.estado])
+  );
+}
 
 async function loadFacturas(page) {
   const body = document.getElementById("payables-body");
@@ -2123,6 +2186,20 @@ async function exportProfitabilityCsv() {
     items.map((p) => [p.codigo_proyecto, p.nombre, p.cliente_nombre || "", p.presupuesto ?? "", p.costo_materiales, p.costo_mano_obra, p.costo_total, p.margen ?? "", p.margen_pct ?? ""])
   );
 }
+async function exportProfitabilityXlsx() {
+  const r = await fetchProfitabilityReport();
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "rentabilidad-proyectos", "Rentabilidad",
+    ["Código", "Nombre", "Cliente", "Presupuesto", "Materiales", "Mano de obra", "Costo total", "Margen", "Margen %"],
+    items.map((p) => [p.codigo_proyecto, p.nombre, p.cliente_nombre || "", p.presupuesto ?? "", p.costo_materiales, p.costo_mano_obra, p.costo_total, p.margen ?? "", p.margen_pct ?? ""])
+  );
+}
+async function exportProfitabilityPdf() {
+  const estado = document.getElementById("profitability-filter-estado").value;
+  const params = estado ? `?estado=${encodeURIComponent(estado)}` : "";
+  await downloadPdf(`/projects-profitability-report/pdf${params}`, "rentabilidad-proyectos.pdf");
+}
 
 // -------- Contabilidad: plan de cuentas --------
 document.getElementById("form-account-create").addEventListener("submit", async (e) => {
@@ -2279,6 +2356,15 @@ async function loadIncomeStatement() {
     : emptyRow(4, "Sin movimientos contabilizados en el rango seleccionado.", "inbox");
 }
 
+async function exportIncomeStatementPdf() {
+  const desde = document.getElementById("income-statement-desde").value;
+  const hasta = document.getElementById("income-statement-hasta").value;
+  const params = new URLSearchParams();
+  if (desde) params.set("fecha_desde", desde);
+  if (hasta) params.set("fecha_hasta", hasta);
+  await downloadPdf(`/accounting/reports/income-statement/pdf?${params.toString()}`, "estado-de-resultados.pdf");
+}
+
 async function loadBalanceSheet() {
   const body = document.getElementById("balance-sheet-body");
   body.innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
@@ -2303,6 +2389,12 @@ async function loadBalanceSheet() {
     <td class="${TD} ${d.resultado_ejercicio < 0 ? "text-rose-600" : ""}">${money(d.resultado_ejercicio)}</td>
   </tr>`;
   body.innerHTML = (filas + filaResultado) || emptyRow(4, "Sin movimientos contabilizados hasta la fecha de corte.", "inbox");
+}
+
+async function exportBalanceSheetPdf() {
+  const corte = document.getElementById("balance-sheet-corte").value;
+  const params = corte ? `?fecha_corte=${encodeURIComponent(corte)}` : "";
+  await downloadPdf(`/accounting/reports/balance-sheet/pdf${params}`, "balance-general.pdf");
 }
 
 // -------- Contabilidad: asientos --------
@@ -2630,6 +2722,19 @@ async function exportLeadsCsv() {
       l.monto_estimado || "", l.moneda || "", l.responsable_nombre || "", l.etapa, l.fecha_proximo_seguimiento || ""])
   );
 }
+async function exportLeadsXlsx() {
+  const etapa = document.getElementById("lead-filter-etapa").value;
+  const params = new URLSearchParams({ page_size: 2000 });
+  if (etapa) params.set("etapa", etapa);
+  const r = await api(`/crm/leads?${params.toString()}`);
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "leads", "Leads",
+    ["Código", "Contacto", "Empresa", "Cliente", "Teléfono", "Email", "Monto est.", "Moneda", "Responsable", "Etapa", "Próximo seguimiento"],
+    items.map((l) => [l.codigo, l.nombre_contacto, l.empresa || "", l.cliente_nombre || "", l.telefono || "", l.email || "",
+      l.monto_estimado || "", l.moneda || "", l.responsable_nombre || "", l.etapa, l.fecha_proximo_seguimiento || ""])
+  );
+}
 
 function renderLeadQuoteDraftLines() {
   const body = document.getElementById("lead-quote-draft-lines-body");
@@ -2884,6 +2989,11 @@ function closeQuoteModal() {
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeQuoteModal(); });
 
+async function exportQuotePdf() {
+  if (!currentQuoteCodigo) return;
+  await downloadPdf(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/pdf`, `${currentQuoteCodigo}.pdf`);
+}
+
 async function setQuoteStatus(estado) {
   if (!currentQuoteCodigo) return;
   const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
@@ -3055,6 +3165,11 @@ function closeContractModal() {
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeContractModal(); });
 
+async function exportContractPdf() {
+  if (!currentContractCodigo) return;
+  await downloadPdf(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/pdf`, `${currentContractCodigo}.pdf`);
+}
+
 async function setContractStatus(estado) {
   if (!currentContractCodigo) return;
   const labels = { VIGENTE: "reactivar", FINALIZADO: "finalizar", CANCELADO: "cancelar" };
@@ -3158,6 +3273,15 @@ async function exportReceivablesCsv() {
   const items = r.data?.items || [];
   downloadCsv(
     "cuentas-por-cobrar.csv",
+    ["Contrato", "Cliente", "Hito", "Monto", "Fecha esperada", "Estado"],
+    items.map((h) => [h.codigo_contrato, h.cliente_nombre || "", h.descripcion, h.monto, h.fecha_esperada || "", h.estado])
+  );
+}
+async function exportReceivablesXlsx() {
+  const r = await fetchReceivables();
+  const items = r.data?.items || [];
+  await downloadXlsx(
+    "cuentas-por-cobrar", "Cuentas por cobrar",
     ["Contrato", "Cliente", "Hito", "Monto", "Fecha esperada", "Estado"],
     items.map((h) => [h.codigo_contrato, h.cliente_nombre || "", h.descripcion, h.monto, h.fecha_esperada || "", h.estado])
   );
