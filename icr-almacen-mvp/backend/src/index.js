@@ -15,7 +15,12 @@ const allowedOrigins = (process.env.ALLOWED_ORIGIN || "").split(",").map((o) => 
 app.use(cors({
   origin: allowedOrigins.length ? allowedOrigins : true,
 }));
-app.use(express.json());
+// Límite por encima del default de Express (100kb): la exportación a Excel
+// (POST /export/xlsx) manda hasta varios miles de filas ya armadas en JSON
+// en un solo request — un listado con muchas columnas de texto puede pesar
+// más que eso fácilmente, y sin este límite más alto el request se rechaza
+// con 413 antes de que buildWorkbookBuffer llegue a validar nada.
+app.use(express.json({ limit: "10mb" }));
 
 app.use("/api", routes);
 
