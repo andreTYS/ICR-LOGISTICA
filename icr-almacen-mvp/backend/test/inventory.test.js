@@ -96,6 +96,84 @@ test("reservar más de lo disponible se rechaza", async () => {
   );
 });
 
+test("reservar deja una alerta STOCK_BAJO si el disponible cae al punto de reorden", async () => {
+  await inventory.createProduct({ sku: "TEST-RESERVA-ALERTA", nombre: "Producto de prueba", tipo_control: "NORMAL", punto_reorden: 2 });
+  await inventory.receive({ sku: "TEST-RESERVA-ALERTA", quantity: 10, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  const r = await inventory.reserve({ sku: "TEST-RESERVA-ALERTA", quantity: 9, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  assert.equal(r.alerta_generada, true);
+});
+
+// -------------------- Despachar reserva hacia obra --------------------
+// Separar materiales para un proyecto (reservar) es solo apartarlos del
+// disponible; despachar es lo que efectivamente sale del almacén camino a
+// la instalación — debe bajar el físico y cerrar (o reducir) la reserva.
+
+test("despachar una reserva completa la convierte en SALIDA a proyecto y la deja CONSUMIDA", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 20, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  const created = await inventory.reserve({
+    sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const antes = await stockOf("PANEL-JA-550", "ALM-001");
+
+  const r = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r.reserva_restante, 0);
+
+  const despues = await stockOf("PANEL-JA-550", "ALM-001");
+  assert.equal(Number(despues.stock_fisico), Number(antes.stock_fisico) - 5);
+  assert.equal(Number(despues.stock_reservado), Number(antes.stock_reservado) - 5);
+  assert.equal(despues.stock_disponible, antes.stock_disponible, "el disponible ya había bajado al reservar, no vuelve a moverse al despachar");
+
+  const movimiento = await pool.query("SELECT tipo_movimiento, proyecto_id FROM movimientos WHERE movimiento_id=$1", [r.movimiento_id]);
+  assert.equal(movimiento.rows[0].tipo_movimiento, "SALIDA");
+  assert.ok(movimiento.rows[0].proyecto_id, "el movimiento de despacho debe quedar ligado al proyecto de la reserva");
+
+  const reservations = await inventory.getReservations({});
+  const found = reservations.find((res) => res.reserva_id === created.reserva_id);
+  assert.equal(found.estado, "CONSUMIDA");
+  assert.equal(found.codigo_proyecto, "PROY-001");
+});
+
+test("despachar parcialmente deja la reserva ACTIVA con el saldo restante (varios viajes a obra)", async () => {
+  const created = await inventory.reserve({
+    sku: "PANEL-JA-550", quantity: 6, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const r1 = await inventory.dispatchReservation({ reservaId: created.reserva_id, cantidad: 4, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r1.reserva_restante, 2);
+
+  const reservations = await inventory.getReservations({ estado: "ACTIVA" });
+  const found = reservations.find((res) => res.reserva_id === created.reserva_id);
+  assert.equal(found.cantidad, "2.00");
+
+  const r2 = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r2.reserva_restante, 0);
+  const cerradas = await inventory.getReservations({ estado: "CONSUMIDA" });
+  assert.ok(cerradas.some((res) => res.reserva_id === created.reserva_id));
+});
+
+test("despachar más de lo reservado se rechaza", async () => {
+  const created = await inventory.reserve({ sku: "PANEL-JA-550", quantity: 3, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: created.reserva_id, cantidad: 99, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("despachar una reserva ya liberada se rechaza", async () => {
+  const created = await inventory.reserve({ sku: "PANEL-JA-550", quantity: 2, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  await inventory.releaseReservation({ reservaId: created.reserva_id, usuarioId: VENTAS, canal: "web" });
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "RESERVATION_NOT_ACTIVE"
+  );
+});
+
+test("despachar una reserva inexistente se rechaza", async () => {
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: "00000000-0000-0000-0000-000000009999", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "RESERVATION_NOT_FOUND"
+  );
+});
+
 // -------------------- Ajustes con aprobación --------------------
 
 test("un ajuste queda PENDIENTE y no toca el stock hasta que se aprueba", async () => {

@@ -425,6 +425,21 @@ router.post(
   }))
 );
 
+router.post(
+  "/inventory/dispatch_reservation",
+  requirePermission("inventory.dispatch_reservation"),
+  handle(async (req) => {
+    const b = req.body;
+    return inventory.dispatchReservation({
+      reservaId: b?.reserva_id,
+      cantidad: b?.cantidad !== undefined ? Number(b.cantidad) : undefined,
+      documento: b?.document,
+      usuarioId: req.user.usuario_id,
+      canal: b?.channel || "web",
+    });
+  })
+);
+
 router.get(
   "/inventory/reservations",
   requirePermission("inventory.query"),
