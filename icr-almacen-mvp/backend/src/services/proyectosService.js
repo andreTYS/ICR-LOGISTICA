@@ -19,8 +19,10 @@ async function crearProyecto({ codigoProyecto, nombre, clienteRuc, responsableId
   return withAuditedTransaction("projects.create", usuarioId, canal, async (client) => {
     let clienteId = null;
     if (clienteRuc) {
-      const r = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 AND activo=true", [clienteRuc]);
-      if (r.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC '${clienteRuc}' no existe o está inactivo`, 404);
+      // clienteRuc acepta RUC o DNI indistintamente — un cliente persona
+      // natural sin RUC se identifica solo por DNI.
+      const r = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+      if (r.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
       clienteId = r.rows[0].cliente_id;
     }
     const r = await client.query(
@@ -165,16 +167,16 @@ async function getProyecto(codigoProyecto) {
   };
 }
 
-async function crearCliente({ ruc, razonSocial, contacto, usuarioId, canal }) {
-  if (!ruc || !razonSocial) {
-    throw new AppError("SCHEMA_INVALID", "ruc y razonSocial son obligatorios", 400);
+async function crearCliente({ ruc, dni, telefono, razonSocial, contacto, usuarioId, canal }) {
+  if ((!ruc && !dni) || !razonSocial) {
+    throw new AppError("SCHEMA_INVALID", "razonSocial y al menos uno de ruc/dni son obligatorios", 400);
   }
   return withAuditedTransaction("projects.client.create", usuarioId, canal, async (client) => {
     const r = await client.query(
-      `INSERT INTO clientes (ruc, razon_social, contacto) VALUES ($1,$2,$3) RETURNING *`,
-      [ruc, razonSocial, contacto || null]
+      `INSERT INTO clientes (ruc, dni, telefono, razon_social, contacto) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [ruc || null, dni || null, telefono || null, razonSocial, contacto || null]
     );
-    return { entidad: "clientes", entidadId: r.rows[0].cliente_id, valorNuevo: { ruc, razonSocial }, cliente: r.rows[0] };
+    return { entidad: "clientes", entidadId: r.rows[0].cliente_id, valorNuevo: { ruc, dni, razonSocial }, cliente: r.rows[0] };
   });
 }
 

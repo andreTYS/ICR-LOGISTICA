@@ -545,10 +545,24 @@ async function loadWarehouseOptions() {
   if (stockFilter) stockFilter.innerHTML = `<option value="">Todos los almacenes</option>${opts}`;
 }
 
+let productCatalogBySku = {};
 async function loadSkuOptions() {
   const r = await api("/inventory/products?q=&page_size=500");
+  const items = r.data?.items || [];
   const list = document.getElementById("sku-list");
-  list.innerHTML = (r.data?.items || []).map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
+  list.innerHTML = items.map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
+  productCatalogBySku = Object.fromEntries(items.map((p) => [p.sku, p]));
+}
+
+// Autocompleta descripción + precio (sugerido desde el costo, editable) de un
+// ítem de cotización al elegir un producto del catálogo — reusa el mismo
+// datalist #sku-list que ya cargan las pantallas de Almacén.
+function fillQuoteLineFromSku(prefix) {
+  const sku = document.getElementById(`${prefix}-sku`).value.trim();
+  const producto = productCatalogBySku[sku];
+  if (!producto) return;
+  document.getElementById(`${prefix}-descripcion`).value = producto.nombre;
+  document.getElementById(`${prefix}-precio`).value = producto.costo_unitario ?? "";
 }
 
 async function loadSupplierOptions() {
@@ -1452,10 +1466,16 @@ async function loadAlerts() {
   updateAlertsBadge((r.data || []).filter((a) => a.estado !== "RESUELTA").length);
 }
 
+// En error, muestra solo el mensaje en español ya curado por el backend —
+// nunca el código técnico (ej. "SCHEMA_INVALID") ni el JSON crudo, que no le
+// dice nada útil a alguien que no sea desarrollador.
 function renderResult(elId, response) {
   const el = document.getElementById(elId);
-  el.className = `result-box ${response.status === "success" ? "ok" : "err"}`;
-  el.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+  const ok = response.status === "success";
+  el.className = `result-box ${ok ? "ok" : "err"}`;
+  el.innerHTML = ok
+    ? `<pre>${JSON.stringify(response, null, 2)}</pre>`
+    : `<p>${response.error?.message || "Ocurrió un error inesperado."}</p>`;
 }
 
 // -------- Almacenes y ubicaciones --------
@@ -2107,7 +2127,10 @@ document.getElementById("form-project-labor").addEventListener("submit", async (
 document.getElementById("form-client-create").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  const payload = { channel: "web", ruc: f.get("ruc"), razon_social: f.get("razon_social"), contacto: f.get("contacto") || null };
+  const ruc = f.get("ruc")?.trim() || null;
+  const dni = f.get("dni")?.trim() || null;
+  if (!ruc && !dni) { toast("Ingresa RUC o DNI (al menos uno)", false); return; }
+  const payload = { channel: "web", ruc, dni, razon_social: f.get("razon_social"), telefono: f.get("telefono") || null, contacto: f.get("contacto") || null };
   setFormLoading(e.target, true);
   try {
     const r = await api("/projects-clients", { method: "POST", body: JSON.stringify(payload) });
@@ -2119,21 +2142,37 @@ document.getElementById("form-client-create").addEventListener("submit", async (
   }
 });
 
+// Autocompleta razón social/nombre a partir de RUC o DNI, vía el groundwork
+// de rucService.js (no configurado por defecto — ver README). prefix indica
+// los ids de los inputs a usar: "client" -> #client-ruc-input/#client-dni-input/#client-nombre-input.
+async function lookupClientIdentifier(prefix) {
+  const rucInput = document.getElementById(`${prefix}-ruc-input`);
+  const dniInput = document.getElementById(`${prefix}-dni-input`);
+  const nombreInput = document.getElementById(`${prefix}-nombre-input`);
+  const numero = (rucInput?.value || dniInput?.value || "").trim();
+  if (!numero) { toast("Ingresa un RUC o DNI para consultar", false); return; }
+  const r = await api(`/clients/lookup/${encodeURIComponent(numero)}`);
+  if (r.status !== "success") { toast(r.error.message, false); return; }
+  if (nombreInput) nombreInput.value = r.data.nombre;
+  toast(`${r.data.tipo.toUpperCase()} encontrado: ${r.data.nombre}`);
+}
+
 async function loadClients() {
   const body = document.getElementById("clients-body");
-  body.innerHTML = `<tr><td colspan="3" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/projects-clients");
   if (r.status !== "success") {
-    body.innerHTML = emptyRow(3, r.error?.message || "Tu rol no tiene permiso para ver clientes.", "lock");
+    body.innerHTML = emptyRow(5, r.error?.message || "Tu rol no tiene permiso para ver clientes.", "lock");
     return;
   }
   const items = r.data || [];
   body.innerHTML = items.length
     ? items.map((c) => `<tr class="${TR}">
-        <td class="${TD}">${c.ruc}</td><td class="${TD}">${c.razon_social}</td><td class="${TD}">${c.contacto || "—"}</td>
+        <td class="${TD}">${c.ruc || c.dni || "—"}</td><td class="${TD}">${c.razon_social}</td>
+        <td class="${TD}">${c.telefono || "—"}</td><td class="${TD}">${c.contacto || "—"}</td>
         <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="openDocumentsModal('cliente', '${c.cliente_id}', '${c.razon_social.replace(/'/g, "\\'")}')">Documentos</button></td>
       </tr>`).join("")
-    : emptyRow(4, "Sin clientes registrados.", "inbox");
+    : emptyRow(5, "Sin clientes registrados.", "inbox");
 }
 
 // -------- Proyectos: rentabilidad --------
@@ -2669,7 +2708,7 @@ document.getElementById("form-lead-create").addEventListener("submit", async (e)
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    nombre_contacto: f.get("nombre_contacto"), empresa: f.get("empresa") || null, telefono: f.get("telefono") || null,
+    nombre_contacto: f.get("nombre_contacto"), dni: f.get("dni") || null, empresa: f.get("empresa") || null, telefono: f.get("telefono") || null,
     email: f.get("email") || null, cliente_ruc: f.get("cliente_ruc") || null, origen: f.get("origen") || null,
     monto_estimado: f.get("monto_estimado") ? Number(f.get("monto_estimado")) : null,
     fecha_proximo_seguimiento: f.get("fecha_proximo_seguimiento") || null,

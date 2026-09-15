@@ -84,13 +84,15 @@ VALUES
     ('40000000-0000-0000-0000-000000000004', '20601122334', 'Baterías y Almacenamiento Perú E.I.R.L.', 'contacto@bap.example', true),
     ('40000000-0000-0000-0000-000000000005', '20498765123', 'Ferretería Industrial Arequipa S.A.', 'compras@ferreind.example', true);
 
-INSERT INTO clientes (cliente_id, ruc, razon_social, contacto, activo)
+INSERT INTO clientes (cliente_id, ruc, dni, telefono, razon_social, contacto, activo)
 VALUES
-    ('50000000-0000-0000-0000-000000000001', '20512345678', 'Constructora Vilca Hnos S.A.C.', 'proyectos@vilcahnos.example', true),
-    ('50000000-0000-0000-0000-000000000002', '20487654321', 'Minera Altiplano S.A.', 'compras@mineraaltiplano.example', true),
-    ('50000000-0000-0000-0000-000000000003', '20523456789', 'Agroindustrias Majes S.A.C.', 'gerencia@agromajes.example', true),
-    ('50000000-0000-0000-0000-000000000004', '20534567891', 'Hotel Colca Valley S.A.C.', 'mantenimiento@colcavalley.example', true),
-    ('50000000-0000-0000-0000-000000000005', '20545678912', 'Municipalidad Distrital de Yanque', 'obras@muniyanque.example', true);
+    ('50000000-0000-0000-0000-000000000001', '20512345678', NULL, '054221100', 'Constructora Vilca Hnos S.A.C.', 'proyectos@vilcahnos.example', true),
+    ('50000000-0000-0000-0000-000000000002', '20487654321', NULL, '054332211', 'Minera Altiplano S.A.', 'compras@mineraaltiplano.example', true),
+    ('50000000-0000-0000-0000-000000000003', '20523456789', NULL, '054445566', 'Agroindustrias Majes S.A.C.', 'gerencia@agromajes.example', true),
+    ('50000000-0000-0000-0000-000000000004', '20534567891', NULL, '054667788', 'Hotel Colca Valley S.A.C.', 'mantenimiento@colcavalley.example', true),
+    ('50000000-0000-0000-0000-000000000005', '20545678912', NULL, '054998877', 'Municipalidad Distrital de Yanque', 'obras@muniyanque.example', true),
+    -- Cliente persona natural sin RUC, registrado solo con DNI (caso residencial)
+    ('50000000-0000-0000-0000-000000000006', NULL, '45678912', '987001122', 'Jorge Salas Quispe', 'jsalasquispe@example.com', true);
 
 INSERT INTO proyectos (proyecto_id, codigo_proyecto, nombre, cliente_id, responsable_id, presupuesto, moneda, fecha_inicio, activo)
 VALUES
