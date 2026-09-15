@@ -22,8 +22,9 @@ async function crearContrato({ codigoContrato, clienteRuc, proyectoCodigo, monto
     throw new AppError("SCHEMA_INVALID", "codigoContrato, clienteRuc y montoTotal (>=0) son obligatorios", 400);
   }
   return withAuditedTransaction("sales.contract.create", usuarioId, canal, async (client) => {
-    const cli = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 AND activo=true", [clienteRuc]);
-    if (cli.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC '${clienteRuc}' no existe o está inactivo`, 404);
+    // clienteRuc acepta RUC o DNI indistintamente
+    const cli = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+    if (cli.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
 
     let proyectoId = null;
     if (proyectoCodigo) {

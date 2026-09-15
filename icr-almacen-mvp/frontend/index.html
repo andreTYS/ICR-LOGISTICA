@@ -753,7 +753,7 @@
             <label class="field-label">Código de proyecto (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
             </label>
-            <label class="field-label">RUC de cliente (opcional)
+            <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
             </label>
           </div>
@@ -1092,7 +1092,7 @@
             <label class="field-label">Nombre
               <input name="nombre" required placeholder="ej. Instalación 15kW — Fundo Los Álamos" class="field" />
             </label>
-            <label class="field-label">RUC de cliente (opcional)
+            <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Presupuesto (opcional)
@@ -1135,12 +1135,22 @@
       <section class="view" id="view-projects-clients">
         <form class="form-card mb-7" id="form-client-create">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo cliente</h3>
+          <p class="text-xs text-slate-400 mb-3">Empresas: RUC. Personas naturales sin RUC (clientes residenciales): DNI. Se necesita al menos uno de los dos.</p>
           <div class="grid sm:grid-cols-2 gap-4 mb-5">
-            <label class="field-label">RUC
-              <input name="ruc" required placeholder="ej. 20512345678" class="field" />
+            <label class="field-label">RUC (empresa)
+              <div class="flex gap-1.5">
+                <input name="ruc" placeholder="ej. 20512345678" class="field" id="client-ruc-input" />
+                <button type="button" class="btn-secondary px-2.5 text-xs whitespace-nowrap" onclick="lookupClientIdentifier('client')">Consultar</button>
+              </div>
             </label>
-            <label class="field-label">Razón social
-              <input name="razon_social" required placeholder="ej. Constructora Vilca Hnos S.A.C." class="field" />
+            <label class="field-label">DNI (persona natural)
+              <input name="dni" placeholder="ej. 45678912" class="field" id="client-dni-input" />
+            </label>
+            <label class="field-label">Razón social / Nombre completo
+              <input name="razon_social" required placeholder="ej. Constructora Vilca Hnos S.A.C." class="field" id="client-nombre-input" />
+            </label>
+            <label class="field-label">Teléfono (opcional)
+              <input name="telefono" placeholder="ej. 987654321" class="field" />
             </label>
             <label class="field-label sm:col-span-2">Contacto (opcional)
               <input name="contacto" placeholder="ej. proyectos@cliente.example" class="field" />
@@ -1152,8 +1162,8 @@
         <div class="table-card">
           <table class="w-full border-collapse text-sm">
             <thead><tr class="bg-navy-950 text-white text-[12.5px]">
-              <th class="text-left font-semibold px-3 py-2.5">RUC</th><th class="text-left font-semibold px-3 py-2.5">Razón social</th>
-              <th class="text-left font-semibold px-3 py-2.5">Contacto</th><th class="text-left font-semibold px-3 py-2.5"></th>
+              <th class="text-left font-semibold px-3 py-2.5">RUC / DNI</th><th class="text-left font-semibold px-3 py-2.5">Razón social</th>
+              <th class="text-left font-semibold px-3 py-2.5">Teléfono</th><th class="text-left font-semibold px-3 py-2.5">Contacto</th><th class="text-left font-semibold px-3 py-2.5"></th>
             </tr></thead>
             <tbody id="clients-body"></tbody>
           </table>
@@ -1221,7 +1231,13 @@
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo lead</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
             <label class="field-label">Nombre de contacto
-              <input name="nombre_contacto" required placeholder="ej. Juan Pérez" class="field" />
+              <input name="nombre_contacto" required placeholder="ej. Juan Pérez" class="field" id="lead-nombre-input" />
+            </label>
+            <label class="field-label">DNI del contacto (opcional)
+              <div class="flex gap-1.5">
+                <input name="dni" placeholder="ej. 45678912" class="field" id="lead-dni-input" />
+                <button type="button" class="btn-secondary px-2.5 text-xs whitespace-nowrap" onclick="lookupClientIdentifier('lead')">Consultar</button>
+              </div>
             </label>
             <label class="field-label">Empresa (opcional)
               <input name="empresa" placeholder="ej. Constructora Vilca Hnos" class="field" />
@@ -1232,7 +1248,7 @@
             <label class="field-label">Email (opcional)
               <input name="email" type="email" placeholder="ej. contacto@empresa.com" class="field" />
             </label>
-            <label class="field-label">RUC de cliente vinculado (opcional)
+            <label class="field-label">RUC o DNI de cliente vinculado (opcional)
               <input name="cliente_ruc" placeholder="ej. 20512345678, si ya es cliente" class="field" />
             </label>
             <label class="field-label">Origen (opcional)
@@ -1320,7 +1336,7 @@
         <form class="form-card mb-7" id="form-quote-create">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva cotización</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
-            <label class="field-label">RUC de cliente
+            <label class="field-label">RUC o DNI de cliente
               <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
@@ -1334,6 +1350,9 @@
             </label>
           </div>
           <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label w-40">Producto del catálogo (opcional)
+              <input id="quote-line-sku" list="sku-list" placeholder="buscar por SKU…" class="field" onchange="fillQuoteLineFromSku('quote-line')" />
+            </label>
             <label class="field-label flex-1 min-w-[160px]">Ítem — descripción
               <input id="quote-line-descripcion" placeholder="ej. Panel solar 550W" class="field" />
             </label>
@@ -1345,6 +1364,7 @@
             </label>
             <button type="button" class="btn-secondary" onclick="addQuoteDraftLine()">+ Agregar ítem</button>
           </div>
+          <p class="text-xs text-slate-400 mb-2 -mt-1">Al elegir un producto, el precio se sugiere desde su costo — revísalo y ajusta el margen antes de agregar el ítem.</p>
           <table class="w-full border-collapse text-sm mb-4">
             <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
               <th class="font-semibold py-1.5 pr-3">Descripción</th><th class="font-semibold py-1.5 pr-3">Cantidad</th>
@@ -1387,7 +1407,7 @@
             <label class="field-label">Código de contrato
               <input name="codigo_contrato" required placeholder="ej. CONT-00003" class="field" />
             </label>
-            <label class="field-label">RUC de cliente
+            <label class="field-label">RUC o DNI de cliente
               <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
@@ -1861,7 +1881,7 @@
             <label class="field-label">Número de serie (opcional)
               <input name="serie_numero" placeholder="si el producto tiene control por serie" class="field" />
             </label>
-            <label class="field-label">RUC de cliente (opcional)
+            <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
@@ -1971,7 +1991,7 @@
             <label class="field-label">Código de proyecto (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
             </label>
-            <label class="field-label">RUC de cliente (opcional)
+            <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
             </label>
           </div>
@@ -2546,6 +2566,9 @@
         <div id="lead-convert-section">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Convertir en cotización</h3>
           <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label w-36">Producto (opcional)
+              <input id="lead-quote-line-sku" list="sku-list" placeholder="buscar por SKU…" class="field" onchange="fillQuoteLineFromSku('lead-quote-line')" />
+            </label>
             <label class="field-label flex-1 min-w-[160px]">Ítem — descripción
               <input id="lead-quote-line-descripcion" placeholder="ej. Panel solar 550W" class="field" />
             </label>

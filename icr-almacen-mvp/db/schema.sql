@@ -127,12 +127,19 @@ CREATE TABLE proveedores (
     activo          BOOLEAN NOT NULL DEFAULT true
 );
 
+-- ruc es nullable a propósito: un cliente persona natural sin RUC se puede
+-- registrar solo con dni. Todo lo que busca un cliente por "RUC" en el resto
+-- del sistema (Proyectos, Ventas, Cotizaciones, CRM, Activos, Almacén) en
+-- realidad acepta ruc O dni indistintamente — ver comentario en cada service.
 CREATE TABLE clientes (
     cliente_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ruc             TEXT NOT NULL UNIQUE,
+    ruc             TEXT UNIQUE,
+    dni             TEXT UNIQUE,
+    telefono        TEXT,
     razon_social    TEXT NOT NULL,
     contacto        TEXT,
-    activo          BOOLEAN NOT NULL DEFAULT true
+    activo          BOOLEAN NOT NULL DEFAULT true,
+    CONSTRAINT clientes_ruc_o_dni CHECK (ruc IS NOT NULL OR dni IS NOT NULL)
 );
 
 CREATE TABLE proyectos (
@@ -554,6 +561,7 @@ CREATE TABLE leads (
     lead_id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     codigo                      TEXT NOT NULL UNIQUE,
     nombre_contacto             TEXT NOT NULL,
+    dni                         TEXT,
     empresa                     TEXT,
     telefono                    TEXT,
     email                       TEXT,

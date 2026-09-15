@@ -30,6 +30,7 @@ const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDoc
 const navIcons = require("./services/navIconsService");
 const xlsxService = require("./services/xlsxService");
 const reportesPdf = require("./services/reportesPdfService");
+const rucService = require("./services/rucService");
 const { AppError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
@@ -187,6 +188,14 @@ router.post(
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     };
   })
+);
+
+// Consulta de RUC/DNI (groundwork, ver rucService.js) — solo requiere sesión,
+// no un permiso de dominio específico, porque se usa igual desde el
+// formulario de Cliente (Ventas/Proyectos) que desde el de Lead (CRM).
+router.get(
+  "/clients/lookup/:numero",
+  handle(async (req) => rucService.consultar(req.params.numero))
 );
 
 // -------- Comandos de escritura --------
@@ -625,7 +634,7 @@ router.post(
   requirePermission("projects.create"),
   handle(async (req) => {
     const b = req.body;
-    return proyectos.crearCliente({ ruc: b.ruc, razonSocial: b.razon_social, contacto: b.contacto || null, usuarioId: req.user.usuario_id, canal: b.channel || "web" });
+    return proyectos.crearCliente({ ruc: b.ruc || null, dni: b.dni || null, telefono: b.telefono || null, razonSocial: b.razon_social, contacto: b.contacto || null, usuarioId: req.user.usuario_id, canal: b.channel || "web" });
   })
 );
 
@@ -1114,7 +1123,7 @@ router.post(
   handle(async (req) => {
     const b = req.body;
     return crm.crearLead({
-      nombreContacto: b.nombre_contacto, empresa: b.empresa || null, telefono: b.telefono || null, email: b.email || null,
+      nombreContacto: b.nombre_contacto, dni: b.dni || null, empresa: b.empresa || null, telefono: b.telefono || null, email: b.email || null,
       clienteRuc: b.cliente_ruc || null, origen: b.origen || null, montoEstimado: b.monto_estimado != null ? Number(b.monto_estimado) : null,
       moneda: b.moneda || null, fechaProximoSeguimiento: b.fecha_proximo_seguimiento || null, notas: b.notas || null,
       usuarioId: req.user.usuario_id, canal: b.channel || "web",

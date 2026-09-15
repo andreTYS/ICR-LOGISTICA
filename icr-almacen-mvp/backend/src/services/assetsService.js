@@ -36,8 +36,9 @@ async function crearActivo({ serieNumero, sku, descripcion, clienteRuc, proyecto
 
     let clienteId = null;
     if (clienteRuc) {
-      const c = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 AND activo=true", [clienteRuc]);
-      if (c.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC '${clienteRuc}' no existe o está inactivo`, 404);
+      // clienteRuc acepta RUC o DNI indistintamente
+      const c = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+      if (c.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
       clienteId = c.rows[0].cliente_id;
     }
 
@@ -73,7 +74,7 @@ async function listActivos({ clienteRuc, proyectoCodigo, estado, page, pageSize 
   const conditions = [];
   const params = [];
   if (estado) { params.push(estado); conditions.push(`a.estado = $${params.length}`); }
-  if (clienteRuc) { params.push(clienteRuc); conditions.push(`c.ruc = $${params.length}`); }
+  if (clienteRuc) { params.push(clienteRuc); conditions.push(`(c.ruc = $${params.length} OR c.dni = $${params.length})`); }
   if (proyectoCodigo) { params.push(proyectoCodigo); conditions.push(`pr.codigo_proyecto = $${params.length}`); }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   params.push(size, offset);

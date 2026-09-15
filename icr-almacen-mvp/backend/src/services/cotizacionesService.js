@@ -23,8 +23,9 @@ async function crearCotizacion({ clienteRuc, proyectoCodigo, moneda, fechaEmisio
     throw new AppError("SCHEMA_INVALID", "clienteRuc y al menos un ítem son obligatorios", 400);
   }
   return withAuditedTransaction("quotes.create", usuarioId, canal, async (client) => {
-    const cli = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 AND activo=true", [clienteRuc]);
-    if (cli.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC '${clienteRuc}' no existe o está inactivo`, 404);
+    // clienteRuc acepta RUC o DNI indistintamente
+    const cli = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+    if (cli.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
 
     let proyectoId = null;
     if (proyectoCodigo) {
@@ -84,7 +85,8 @@ async function convertirAContrato({ codigo, fechaFirma, usuarioId, canal }) {
   const numR = await pool.query("SELECT 'CONT-' || to_char(nextval('contrato_numero_seq'), 'FM00000') AS codigo");
   const codigoContrato = numR.rows[0].codigo;
 
-  const clienteR = await pool.query("SELECT ruc FROM clientes WHERE cliente_id=$1", [detalle.cliente_id]);
+  // COALESCE: si el cliente no tiene RUC (persona natural), se reenvía su DNI
+  const clienteR = await pool.query("SELECT COALESCE(ruc, dni) AS ruc FROM clientes WHERE cliente_id=$1", [detalle.cliente_id]);
   const proyectoR = detalle.proyecto_id ? await pool.query("SELECT codigo_proyecto FROM proyectos WHERE proyecto_id=$1", [detalle.proyecto_id]) : null;
 
   const resultado = await ventas.crearContrato({

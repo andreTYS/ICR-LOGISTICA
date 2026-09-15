@@ -19,7 +19,7 @@ function paginationParams(page, pageSize, defaultSize, maxSize) {
 // (convertirACotizacion) nace el primer documento formal del negocio.
 // Deliberadamente simple (sin scoring ni campañas), PRD-style: el pipeline
 // y su seguimiento, nada más.
-async function crearLead({ nombreContacto, empresa, telefono, email, clienteRuc, origen, montoEstimado, moneda, fechaProximoSeguimiento, notas, usuarioId, canal }) {
+async function crearLead({ nombreContacto, dni, empresa, telefono, email, clienteRuc, origen, montoEstimado, moneda, fechaProximoSeguimiento, notas, usuarioId, canal }) {
   if (!nombreContacto) {
     throw new AppError("SCHEMA_INVALID", "nombreContacto es obligatorio", 400);
   }
@@ -29,8 +29,9 @@ async function crearLead({ nombreContacto, empresa, telefono, email, clienteRuc,
   return withAuditedTransaction("crm.lead.create", usuarioId, canal, async (client) => {
     let clienteId = null;
     if (clienteRuc) {
-      const c = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 AND activo=true", [clienteRuc]);
-      if (c.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC '${clienteRuc}' no existe o está inactivo`, 404);
+      // clienteRuc acepta RUC o DNI indistintamente
+      const c = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+      if (c.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
       clienteId = c.rows[0].cliente_id;
     }
 
@@ -38,9 +39,9 @@ async function crearLead({ nombreContacto, empresa, telefono, email, clienteRuc,
     const codigo = numR.rows[0].codigo;
 
     const r = await client.query(
-      `INSERT INTO leads (codigo, nombre_contacto, empresa, telefono, email, cliente_id, origen, monto_estimado, moneda, responsable_id, fecha_proximo_seguimiento, notas)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,'PEN'),$10,$11,$12) RETURNING *`,
-      [codigo, nombreContacto, empresa || null, telefono || null, email || null, clienteId, origen || null,
+      `INSERT INTO leads (codigo, nombre_contacto, dni, empresa, telefono, email, cliente_id, origen, monto_estimado, moneda, responsable_id, fecha_proximo_seguimiento, notas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,'PEN'),$11,$12,$13) RETURNING *`,
+      [codigo, nombreContacto, dni || null, empresa || null, telefono || null, email || null, clienteId, origen || null,
         montoEstimado || null, moneda || null, usuarioId, fechaProximoSeguimiento || null, notas || null]
     );
     return { entidad: "leads", entidadId: r.rows[0].lead_id, valorNuevo: { codigo }, lead: r.rows[0] };
@@ -96,7 +97,9 @@ async function convertirACotizacion({ codigo, items, proyectoCodigo, moneda, val
     throw new AppError("LEAD_WITHOUT_CLIENT", `El lead '${codigo}' no tiene un cliente vinculado; vincúlalo antes de convertirlo en cotización`, 400);
   }
 
-  const clienteR = await pool.query("SELECT ruc FROM clientes WHERE cliente_id=$1", [lead.cliente_id]);
+  // COALESCE: si el cliente vinculado no tiene RUC (persona natural), se
+  // reenvía su DNI — crearCotizacion acepta cualquiera de los dos.
+  const clienteR = await pool.query("SELECT COALESCE(ruc, dni) AS ruc FROM clientes WHERE cliente_id=$1", [lead.cliente_id]);
   const resultado = await cotizaciones.crearCotizacion({
     clienteRuc: clienteR.rows[0].ruc, proyectoCodigo: proyectoCodigo || null,
     moneda: moneda || lead.moneda, validezDias: validezDias || null, items,
