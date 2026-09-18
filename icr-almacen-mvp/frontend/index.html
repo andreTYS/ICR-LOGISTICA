@@ -1336,8 +1336,9 @@
         <form class="form-card mb-7" id="form-quote-create">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva cotización</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
-            <label class="field-label">RUC o DNI de cliente
-              <input name="cliente_ruc" list="client-list" required placeholder="ej. 20512345678" class="field" />
+            <label class="field-label">Cliente (DNI, RUC o Nombre)
+              <input name="cliente_ruc" id="quote-cliente-input" list="client-list" required placeholder="Escribe DNI, RUC o Nombre para buscar…" class="field" autocomplete="off" />
+              <div id="quote-cliente-badge" class="text-xs mt-1 text-emerald-600 font-semibold hidden"></div>
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />

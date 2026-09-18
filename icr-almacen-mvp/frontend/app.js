@@ -567,7 +567,19 @@ function fillQuoteLineFromSku(prefix) {
 }
 
 
+
 let clientsCatalog = [];
+function resolveClientIdentifier(val) {
+  if (!val) return "";
+  const v = val.trim().toLowerCase();
+  const c = clientsCatalog.find((x) =>
+    (x.ruc && x.ruc.toLowerCase() === v) ||
+    (x.dni && x.dni.toLowerCase() === v) ||
+    (x.razon_social && x.razon_social.toLowerCase() === v)
+  );
+  return c ? (c.ruc || c.dni || c.cliente_id) : val.trim();
+}
+
 async function loadClientOptions() {
   const r = await api("/projects-clients");
   const list = document.getElementById("client-list");
@@ -575,17 +587,42 @@ async function loadClientOptions() {
   clientsCatalog = r.data || [];
   const options = [];
   for (const c of clientsCatalog) {
-    if (c.ruc) {
-      options.push(`<option value="${c.ruc}">${c.razon_social} (RUC: ${c.ruc}${c.dni ? " · DNI: " + c.dni : ""})</option>`);
-    }
-    if (c.dni && c.dni !== c.ruc) {
-      options.push(`<option value="${c.dni}">${c.razon_social} (DNI: ${c.dni}${c.ruc ? " · RUC: " + c.ruc : ""})</option>`);
-    }
-    if (!c.ruc && !c.dni) {
-      options.push(`<option value="${c.cliente_id}">${c.razon_social}</option>`);
-    }
+    const docInfo = [c.ruc ? "RUC: " + c.ruc : "", c.dni ? "DNI: " + c.dni : ""].filter(Boolean).join(" · ");
+    // Opción por nombre/razón social principal
+    options.push(`<option value="${c.razon_social}">${docInfo ? "(" + docInfo + ")" : ""}</option>`);
+    // Opción por DNI si existe
+    if (c.dni) options.push(`<option value="${c.dni}">${c.razon_social} (DNI: ${c.dni})</option>`);
+    // Opción por RUC si existe
+    if (c.ruc && c.ruc !== c.dni) options.push(`<option value="${c.ruc}">${c.razon_social} (RUC: ${c.ruc})</option>`);
   }
   list.innerHTML = options.join("");
+  initQuoteClientAutocomplete();
+}
+
+function initQuoteClientAutocomplete() {
+  const input = document.getElementById("quote-cliente-input");
+  const badge = document.getElementById("quote-cliente-badge");
+  if (!input || !badge || input.dataset.autocompInit) return;
+  input.dataset.autocompInit = "1";
+  const updateBadge = () => {
+    const v = input.value.trim().toLowerCase();
+    if (!v) { badge.classList.add("hidden"); badge.textContent = ""; return; }
+    const c = clientsCatalog.find((x) =>
+      (x.ruc && x.ruc.toLowerCase() === v) ||
+      (x.dni && x.dni.toLowerCase() === v) ||
+      (x.razon_social && x.razon_social.toLowerCase() === v) ||
+      (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
+    );
+    if (c) {
+      const doc = c.ruc ? ("RUC: " + c.ruc) : (c.dni ? ("DNI: " + c.dni) : "");
+      badge.textContent = "✓ Cliente detectado: " + c.razon_social + (doc ? " · " + doc : "");
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  };
+  input.addEventListener("input", updateBadge);
+  input.addEventListener("change", updateBadge);
 }
 
 async function loadSupplierOptions() {
@@ -2963,7 +3000,7 @@ document.getElementById("form-quote-create").addEventListener("submit", async (e
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    cliente_ruc: f.get("cliente_ruc"), proyecto_codigo: f.get("proyecto_codigo") || null,
+    cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")), proyecto_codigo: f.get("proyecto_codigo") || null,
     fecha_emision: f.get("fecha_emision") || null, validez_dias: f.get("validez_dias") ? Number(f.get("validez_dias")) : null,
     items: quoteDraftLines,
   };
@@ -2989,6 +3026,7 @@ function quoteStatusBadge(estado) {
 }
 
 async function loadCotizaciones(page) {
+  loadClientOptions();
   const body = document.getElementById("quotes-body");
   body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const estado = document.getElementById("quote-filter-estado").value;
