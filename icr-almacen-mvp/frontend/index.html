@@ -751,7 +751,7 @@
               <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
             <label class="field-label">Código de proyecto (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" list="client-list" placeholder="ej. 20605309489" class="field" />
@@ -931,7 +931,7 @@
 
           <div class="flex flex-wrap items-end gap-2 mb-2">
             <label class="field-label flex-1 min-w-[160px]">SKU
-              <input id="oc-item-sku" list="sku-list" placeholder="ej. PANEL-JA-550" class="field" />
+              <input id="oc-item-sku" list="sku-list" placeholder="ej. PANEL-JA-550 o nombre…" class="field" onchange="handleOcSkuChange()" oninput="handleOcSkuChange()" autocomplete="off" />
             </label>
             <label class="field-label w-28">Cantidad
               <input id="oc-item-qty" type="number" min="0.01" step="0.01" class="field" />
@@ -1025,8 +1025,8 @@
         <form class="form-card mb-7" id="form-payable-create">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva factura de proveedor</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
-            <label class="field-label">RUC de proveedor
-              <input name="proveedor_ruc" required placeholder="ej. 20100047218" class="field" />
+            <label class="field-label">Proveedor (Nombre o RUC)
+              <input name="proveedor_ruc" list="supplier-list" required placeholder="ej. 20100047218 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">Número de factura del proveedor (opcional)
               <input name="numero_proveedor" placeholder="ej. F001-00456" class="field" />
@@ -1341,7 +1341,7 @@
               <div id="quote-cliente-badge" class="text-xs mt-1 text-emerald-600 font-semibold hidden"></div>
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">Fecha de emisión (opcional)
               <input name="fecha_emision" type="date" class="field" />
@@ -1352,7 +1352,7 @@
           </div>
           <div class="flex flex-wrap items-end gap-2 mb-2">
             <label class="field-label w-40">Producto del catálogo (opcional)
-              <input id="quote-line-sku" list="sku-list" placeholder="buscar por SKU…" class="field" onchange="fillQuoteLineFromSku('quote-line')" />
+              <input id="quote-line-sku" list="sku-list" placeholder="buscar por SKU o nombre…" class="field" onchange="fillQuoteLineFromSku('quote-line')" oninput="fillQuoteLineFromSku('quote-line')" autocomplete="off" />
             </label>
             <label class="field-label flex-1 min-w-[160px]">Ítem — descripción
               <input id="quote-line-descripcion" placeholder="ej. Panel solar 550W" class="field" />
@@ -1409,11 +1409,11 @@
               <input name="codigo_contrato" required placeholder="ej. CONT-00003" class="field" />
             </label>
             <label class="field-label">Cliente (Escribe Nombre, DNI o RUC)
-              <input name="cliente_ruc" id="quote-cliente-input" list="client-list" required placeholder="Escribe el nombre o documento para buscar…" class="field" autocomplete="off" />
-              <div id="quote-cliente-badge" class="text-xs mt-1 text-emerald-600 font-semibold hidden"></div>
+              <input name="cliente_ruc" id="contract-cliente-input" list="client-list" required placeholder="Escribe DNI, RUC o Nombre para buscar…" class="field" autocomplete="off" />
+              <div id="contract-cliente-badge" class="text-xs mt-1 text-emerald-600 font-semibold hidden"></div>
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">Monto total
               <input name="monto_total" type="number" min="0" step="0.01" required placeholder="ej. 25000" class="field" />
@@ -1521,7 +1521,7 @@
               <input name="fecha" type="date" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001 — entra al costeo de la obra" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">Empleado a reembolsar (opcional)
               <select name="empleado_id" class="field attendance-employee-select"><option value="">— No aplica —</option></select>
@@ -1887,7 +1887,7 @@
               <input name="cliente_ruc" list="client-list" placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">Fecha de instalación (opcional)
               <input name="fecha_instalacion" type="date" class="field" />
@@ -1991,7 +1991,7 @@
               <input name="location_code" placeholder="ej. A-01-R01-N01" class="field" />
             </label>
             <label class="field-label">Código de proyecto (opcional)
-              <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
+              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
               <input name="cliente_ruc" list="client-list" placeholder="ej. 20605309489" class="field" />
@@ -2240,6 +2240,7 @@
       <datalist id="sku-list"></datalist>
       <datalist id="supplier-list"></datalist>
       <datalist id="client-list"></datalist>
+      <datalist id="project-list"></datalist>
       <input type="file" id="nav-icon-upload-input" accept="image/jpeg,image/png,image/webp" class="hidden" />
     </main>
   </div>
@@ -2570,7 +2571,7 @@
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Convertir en cotización</h3>
           <div class="flex flex-wrap items-end gap-2 mb-2">
             <label class="field-label w-36">Producto (opcional)
-              <input id="lead-quote-line-sku" list="sku-list" placeholder="buscar por SKU…" class="field" onchange="fillQuoteLineFromSku('lead-quote-line')" />
+              <input id="lead-quote-line-sku" list="sku-list" placeholder="buscar por SKU o nombre…" class="field" onchange="fillQuoteLineFromSku('lead-quote-line')" oninput="fillQuoteLineFromSku('lead-quote-line')" autocomplete="off" />
             </label>
             <label class="field-label flex-1 min-w-[160px]">Ítem — descripción
               <input id="lead-quote-line-descripcion" placeholder="ej. Panel solar 550W" class="field" />

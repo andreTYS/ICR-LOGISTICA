@@ -170,7 +170,7 @@ async function remove({ sku, quantity, warehouseCode, locationCode, proyectoCodi
     let clienteId = null;
     if (clienteRuc) {
       // clienteRuc acepta RUC o DNI indistintamente
-      const cr = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 OR dni=$1", [clienteRuc]);
+      const cr = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1 OR LOWER(razon_social)=LOWER($1))", [clienteRuc]);
       if (cr.rows.length === 0) throw new AppError("PROJECT_OR_CLIENT_INVALID", `Cliente RUC/DNI '${clienteRuc}' no existe`, 404);
       clienteId = cr.rows[0].cliente_id;
     }
@@ -655,7 +655,7 @@ async function reserve({ sku, quantity, warehouseCode, locationCode, proyectoCod
     let clienteId = null;
     if (clienteRuc) {
       // clienteRuc acepta RUC o DNI indistintamente
-      const cr = await client.query("SELECT cliente_id FROM clientes WHERE ruc=$1 OR dni=$1", [clienteRuc]);
+      const cr = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1 OR LOWER(razon_social)=LOWER($1))", [clienteRuc]);
       if (cr.rows.length === 0) throw new AppError("PROJECT_OR_CLIENT_INVALID", `Cliente RUC/DNI '${clienteRuc}' no existe`, 404);
       clienteId = cr.rows[0].cliente_id;
     }

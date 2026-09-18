@@ -8,7 +8,7 @@ const contabilidad = require("./contabilidadService");
 // -------------------- Helpers --------------------
 
 async function findProveedorByRuc(client, ruc) {
-  const r = await client.query("SELECT * FROM proveedores WHERE ruc = $1 AND activo = true", [ruc]);
+  const r = await client.query("SELECT * FROM proveedores WHERE (ruc = $1 OR LOWER(razon_social) = LOWER($1)) AND activo = true", [ruc]);
   if (r.rows.length === 0) {
     throw new AppError("SUPPLIER_NOT_FOUND", `Proveedor con RUC '${ruc}' no existe o está inactivo`, 404);
   }

@@ -37,7 +37,7 @@ async function crearActivo({ serieNumero, sku, descripcion, clienteRuc, proyecto
     let clienteId = null;
     if (clienteRuc) {
       // clienteRuc acepta RUC o DNI indistintamente
-      const c = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+      const c = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1 OR LOWER(razon_social)=LOWER($1)) AND activo=true", [clienteRuc]);
       if (c.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
       clienteId = c.rows[0].cliente_id;
     }

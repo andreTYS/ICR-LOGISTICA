@@ -196,6 +196,7 @@ function enterApp() {
   loadSkuOptions();
   loadSupplierOptions();
   loadClientOptions();
+  loadProjectOptions();
   loadEmployeeOptions();
   loadTechnicianOptions();
   loadDashboard();
@@ -315,6 +316,7 @@ function goToView(view) {
   });
   currentHelpView = view;
   if (!document.getElementById("help-panel").classList.contains("hidden")) renderHelpPanel(view);
+  setTimeout(initAllAutocompleteBadges, 50);
   if (view === "dashboard") loadDashboard();
   if (view === "calendar") loadCalendar();
   if (view === "stock") loadStock();
@@ -546,40 +548,148 @@ async function loadWarehouseOptions() {
   if (stockFilter) stockFilter.innerHTML = `<option value="">Todos los almacenes</option>${opts}`;
 }
 
+
 let productCatalogBySku = {};
-async function loadSkuOptions() {
-  const r = await api("/inventory/products?q=&page_size=500");
-  const items = r.data?.items || [];
-  const list = document.getElementById("sku-list");
-  list.innerHTML = items.map((p) => `<option value="${p.sku}">${p.nombre}</option>`).join("");
-  productCatalogBySku = Object.fromEntries(items.map((p) => [p.sku, p]));
-}
-
-// Autocompleta descripción + precio (sugerido desde el costo, editable) de un
-// ítem de cotización al elegir un producto del catálogo — reusa el mismo
-// datalist #sku-list que ya cargan las pantallas de Almacén.
-function fillQuoteLineFromSku(prefix) {
-  const sku = document.getElementById(`${prefix}-sku`).value.trim();
-  const producto = productCatalogBySku[sku];
-  if (!producto) return;
-  document.getElementById(`${prefix}-descripcion`).value = producto.nombre;
-  document.getElementById(`${prefix}-precio`).value = producto.costo_unitario ?? "";
-}
-
-
-
-
-
+let productCatalogByName = {};
 let clientsCatalog = [];
-function resolveClientIdentifier(val) {
+let suppliersCatalog = [];
+let projectsCatalog = [];
+
+function resolveProductSku(val) {
   if (!val) return "";
+  const v = val.trim();
+  if (productCatalogBySku[v]) return v;
+  const lower = v.toLowerCase();
+  if (productCatalogByName[lower]) return productCatalogByName[lower].sku;
+  const found = Object.values(productCatalogBySku).find(
+    (p) => p.sku.toLowerCase() === lower || (p.nombre && p.nombre.toLowerCase() === lower) || (p.nombre && p.nombre.toLowerCase().includes(lower) && lower.length >= 3)
+  );
+  return found ? found.sku : v;
+}
+
+function resolveClientIdentifier(val) {
+  if (!val) return null;
   const v = val.trim().toLowerCase();
   const c = clientsCatalog.find((x) =>
     (x.ruc && x.ruc.toLowerCase() === v) ||
     (x.dni && x.dni.toLowerCase() === v) ||
-    (x.razon_social && x.razon_social.toLowerCase() === v)
+    (x.razon_social && x.razon_social.toLowerCase() === v) ||
+    (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
   );
   return c ? (c.ruc || c.dni || c.cliente_id) : val.trim();
+}
+
+function resolveSupplierIdentifier(val) {
+  if (!val) return "";
+  const v = val.trim().toLowerCase();
+  const s = suppliersCatalog.find((x) =>
+    (x.ruc && x.ruc.toLowerCase() === v) ||
+    (x.razon_social && x.razon_social.toLowerCase() === v) ||
+    (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
+  );
+  return s ? s.ruc : val.trim();
+}
+
+function resolveProjectIdentifier(val) {
+  if (!val) return null;
+  const v = val.trim().toLowerCase();
+  const p = projectsCatalog.find((x) =>
+    (x.codigo_proyecto && x.codigo_proyecto.toLowerCase() === v) ||
+    (x.nombre && x.nombre.toLowerCase() === v) ||
+    (x.nombre && x.nombre.toLowerCase().includes(v) && v.length >= 2)
+  );
+  return p ? p.codigo_proyecto : val.trim();
+}
+
+async function loadSkuOptions() {
+  const r = await api("/inventory/products?q=&page_size=500");
+  const items = r.data?.items || [];
+  const list = document.getElementById("sku-list");
+  productCatalogBySku = Object.fromEntries(items.map((p) => [p.sku, p]));
+  productCatalogByName = Object.fromEntries(items.map((p) => [(p.nombre || "").toLowerCase(), p]));
+  if (list) {
+    const opts = [];
+    for (const p of items) {
+      const costoTxt = p.costo_unitario != null ? " · Costo: S/ " + p.costo_unitario : "";
+      opts.push("<option value="" + p.sku + "">" + p.nombre + costoTxt + "</option>");
+      if (p.nombre) opts.push("<option value="" + p.nombre + "">" + p.sku + costoTxt + "</option>");
+    }
+    list.innerHTML = opts.join("");
+  }
+  initSkuAutocompleteAndQuantityDefault();
+}
+
+function fillQuoteLineFromSku(prefix) {
+  const skuInput = document.getElementById(prefix + "-sku");
+  if (!skuInput) return;
+  const rawVal = skuInput.value.trim();
+  if (!rawVal) return;
+  const sku = resolveProductSku(rawVal);
+  const producto = productCatalogBySku[sku];
+  if (!producto) return;
+  skuInput.value = producto.sku;
+  const descEl = document.getElementById(prefix + "-descripcion");
+  if (descEl) descEl.value = producto.nombre;
+  const precioEl = document.getElementById(prefix + "-precio");
+  if (precioEl) precioEl.value = producto.costo_unitario ?? "";
+
+  const cantEl = document.getElementById(prefix + "-cantidad");
+  if (cantEl && (!cantEl.value || Number(cantEl.value) <= 0)) {
+    cantEl.value = "1";
+    cantEl.dispatchEvent(new Event("input", { bubbles: true }));
+    cantEl.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+function handleOcSkuChange() {
+  const input = document.getElementById("oc-item-sku");
+  if (!input) return;
+  const rawVal = input.value.trim();
+  if (!rawVal) return;
+  const sku = resolveProductSku(rawVal);
+  const producto = productCatalogBySku[sku];
+  if (!producto) return;
+  input.value = producto.sku;
+  const costEl = document.getElementById("oc-item-cost");
+  if (costEl && (!costEl.value || Number(costEl.value) === 0)) {
+    costEl.value = producto.costo_unitario ?? "";
+  }
+  const qtyEl = document.getElementById("oc-item-qty");
+  if (qtyEl && (!qtyEl.value || Number(qtyEl.value) <= 0)) {
+    qtyEl.value = "1";
+    qtyEl.dispatchEvent(new Event("input", { bubbles: true }));
+    qtyEl.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+function initSkuAutocompleteAndQuantityDefault() {
+  document.querySelectorAll('input[list="sku-list"]').forEach((input) => {
+    if (input.dataset.skuInit) return;
+    input.dataset.skuInit = "1";
+    const onSkuChanged = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      const sku = resolveProductSku(val);
+      const prod = productCatalogBySku[sku];
+      if (prod && input.id !== "quote-line-sku" && input.id !== "lead-quote-line-sku" && input.id !== "oc-item-sku") {
+        input.value = prod.sku;
+      }
+      const parentForm = input.closest("form") || input.closest(".form-card");
+      if (parentForm) {
+        const qty = parentForm.querySelector('input[name="quantity"], input[name="cantidad"]');
+        if (qty && (!qty.value || Number(qty.value) <= 0)) {
+          qty.value = "1";
+          qty.dispatchEvent(new Event("input", { bubbles: true }));
+          qty.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    };
+    input.addEventListener("change", onSkuChanged);
+    input.addEventListener("input", () => {
+      const sku = resolveProductSku(input.value.trim());
+      if (productCatalogBySku[sku]) onSkuChanged();
+    });
+  });
 }
 
 async function loadClientOptions() {
@@ -590,45 +700,136 @@ async function loadClientOptions() {
   const options = [];
   for (const c of clientsCatalog) {
     const doc = [c.ruc ? "RUC: " + c.ruc : "", c.dni ? "DNI: " + c.dni : ""].filter(Boolean).join(" · ");
-    options.push(`<option value="${c.razon_social}">${doc ? "(" + doc + ")" : ""}</option>`);
-    if (c.dni) options.push(`<option value="${c.dni}">${c.razon_social} (DNI: ${c.dni})</option>`);
-    if (c.ruc && c.ruc !== c.dni) options.push(`<option value="${c.ruc}">${c.razon_social} (RUC: ${c.ruc})</option>`);
+    options.push("<option value="" + c.razon_social + "">" + (doc ? "(" + doc + ")" : "") + "</option>");
+    if (c.dni) options.push("<option value="" + c.dni + "">" + c.razon_social + " (DNI: " + c.dni + ")</option>");
+    if (c.ruc && c.ruc !== c.dni) options.push("<option value="" + c.ruc + "">" + c.razon_social + " (RUC: " + c.ruc + ")</option>");
   }
   list.innerHTML = options.join("");
-  initQuoteClientAutocomplete();
-}
-
-function initQuoteClientAutocomplete() {
-  const input = document.getElementById("quote-cliente-input");
-  const badge = document.getElementById("quote-cliente-badge");
-  if (!input || !badge || input.dataset.autocompInit) return;
-  input.dataset.autocompInit = "1";
-  const updateBadge = () => {
-    const v = input.value.trim().toLowerCase();
-    if (!v) { badge.classList.add("hidden"); badge.textContent = ""; return; }
-    const c = clientsCatalog.find((x) =>
-      (x.ruc && x.ruc.toLowerCase() === v) ||
-      (x.dni && x.dni.toLowerCase() === v) ||
-      (x.razon_social && x.razon_social.toLowerCase() === v) ||
-      (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
-    );
-    if (c) {
-      const doc = c.ruc ? ("RUC: " + c.ruc) : (c.dni ? ("DNI: " + c.dni) : "");
-      badge.textContent = "✓ Cliente: " + c.razon_social + (doc ? " · " + doc : "");
-      badge.classList.remove("hidden");
-    } else {
-      badge.classList.add("hidden");
-    }
-  };
-  input.addEventListener("input", updateBadge);
-  input.addEventListener("change", updateBadge);
+  initAllAutocompleteBadges();
 }
 
 async function loadSupplierOptions() {
   const r = await api("/purchases/suppliers");
   const list = document.getElementById("supplier-list");
   if (!list || r.status !== "success") return;
-  list.innerHTML = (r.data || []).map((s) => `<option value="${s.ruc}">${s.ruc} — ${s.razon_social}</option>`).join("");
+  suppliersCatalog = r.data || [];
+  const options = [];
+  for (const s of suppliersCatalog) {
+    options.push("<option value="" + s.razon_social + "">RUC: " + s.ruc + "</option>");
+    options.push("<option value="" + s.ruc + "">" + s.razon_social + "</option>");
+  }
+  list.innerHTML = options.join("");
+  initAllAutocompleteBadges();
+}
+
+async function loadProjectOptions() {
+  const r = await api("/projects?page_size=300");
+  const list = document.getElementById("project-list");
+  if (!list || r.status !== "success") return;
+  projectsCatalog = r.data?.items || r.data || [];
+  const options = [];
+  for (const p of projectsCatalog) {
+    options.push("<option value="" + p.codigo_proyecto + "">" + (p.nombre || "") + "</option>");
+    if (p.nombre) options.push("<option value="" + p.nombre + "">(" + p.codigo_proyecto + ")</option>");
+  }
+  list.innerHTML = options.join("");
+  initAllAutocompleteBadges();
+}
+
+function initAllAutocompleteBadges() {
+  document.querySelectorAll('input[list="client-list"], input[name="cliente_ruc"]').forEach((input) => {
+    let badge = input.parentElement.querySelector(".client-badge, #quote-cliente-badge, #contract-cliente-badge, .autocomp-client-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "autocomp-client-badge text-xs mt-1 text-emerald-600 font-semibold hidden";
+      input.parentElement.appendChild(badge);
+    }
+    const update = () => {
+      const v = input.value.trim().toLowerCase();
+      if (!v) { badge.classList.add("hidden"); badge.textContent = ""; return; }
+      const c = clientsCatalog.find((x) =>
+        (x.ruc && x.ruc.toLowerCase() === v) ||
+        (x.dni && x.dni.toLowerCase() === v) ||
+        (x.razon_social && x.razon_social.toLowerCase() === v) ||
+        (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
+      );
+      if (c) {
+        const doc = c.ruc ? ("RUC: " + c.ruc) : (c.dni ? ("DNI: " + c.dni) : "");
+        badge.textContent = "✓ Cliente: " + c.razon_social + (doc ? " · " + doc : "");
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    };
+    if (!input.dataset.autocompInit) {
+      input.dataset.autocompInit = "1";
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+    }
+    update();
+  });
+
+  document.querySelectorAll('input[list="supplier-list"], input[name="proveedor_ruc"]').forEach((input) => {
+    let badge = input.parentElement.querySelector(".supplier-badge, .autocomp-supplier-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "autocomp-supplier-badge text-xs mt-1 text-emerald-600 font-semibold hidden";
+      input.parentElement.appendChild(badge);
+    }
+    const update = () => {
+      const v = input.value.trim().toLowerCase();
+      if (!v) { badge.classList.add("hidden"); badge.textContent = ""; return; }
+      const s = suppliersCatalog.find((x) =>
+        (x.ruc && x.ruc.toLowerCase() === v) ||
+        (x.razon_social && x.razon_social.toLowerCase() === v) ||
+        (x.razon_social && x.razon_social.toLowerCase().includes(v) && v.length >= 2)
+      );
+      if (s) {
+        badge.textContent = "✓ Proveedor: " + s.razon_social + " · RUC: " + s.ruc;
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    };
+    if (!input.dataset.autocompInit) {
+      input.dataset.autocompInit = "1";
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+    }
+    update();
+  });
+
+  document.querySelectorAll('input[list="project-list"], input[name="proyecto_codigo"]').forEach((input) => {
+    let badge = input.parentElement.querySelector(".project-badge, .autocomp-project-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "autocomp-project-badge text-xs mt-1 text-blue-600 font-semibold hidden";
+      input.parentElement.appendChild(badge);
+    }
+    const update = () => {
+      const v = input.value.trim().toLowerCase();
+      if (!v) { badge.classList.add("hidden"); badge.textContent = ""; return; }
+      const p = projectsCatalog.find((x) =>
+        (x.codigo_proyecto && x.codigo_proyecto.toLowerCase() === v) ||
+        (x.nombre && x.nombre.toLowerCase() === v) ||
+        (x.nombre && x.nombre.toLowerCase().includes(v) && v.length >= 2)
+      );
+      if (p) {
+        badge.textContent = "✓ Proyecto: " + p.codigo_proyecto + (p.nombre ? " — " + p.nombre : "");
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    };
+    if (!input.dataset.autocompInit) {
+      input.dataset.autocompInit = "1";
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+    }
+    update();
+  });
+
+  initSkuAutocompleteAndQuantityDefault();
 }
 
 async function loadTechnicianOptions() {
@@ -1293,7 +1494,7 @@ document.getElementById("form-receive").addEventListener("submit", async (e) => 
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    product: { sku: f.get("sku") },
+    product: { sku: resolveProductSku(f.get("sku")) },
     quantity: Number(f.get("quantity")),
     warehouse_code: f.get("warehouse_code"),
     location_code: f.get("location_code") || null,
@@ -1323,8 +1524,8 @@ document.getElementById("form-remove").addEventListener("submit", async (e) => {
     warehouse_code: f.get("warehouse_code"),
     location_code: f.get("location_code") || null,
     destination: {
-      proyecto_codigo: f.get("proyecto_codigo") || null,
-      cliente_ruc: f.get("cliente_ruc") || null,
+      proyecto_codigo: resolveProjectIdentifier(f.get("proyecto_codigo")),
+      cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")),
     },
   };
   if (!confirm(`¿Confirmas la salida de ${payload.quantity} × ${payload.product.sku} desde ${payload.warehouse_code}?`)) return;
@@ -1664,7 +1865,7 @@ document.getElementById("form-oc-create").addEventListener("submit", async (e) =
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    proveedor_ruc: f.get("proveedor_ruc"),
+    proveedor_ruc: resolveSupplierIdentifier(f.get("proveedor_ruc")),
     warehouse_code: f.get("warehouse_code"),
     fecha_esperada: f.get("fecha_esperada") || null,
     observaciones: f.get("observaciones") || null,
@@ -1883,7 +2084,7 @@ document.getElementById("form-payable-create").addEventListener("submit", async 
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    proveedor_ruc: f.get("proveedor_ruc"), numero_proveedor: f.get("numero_proveedor") || null,
+    proveedor_ruc: resolveSupplierIdentifier(f.get("proveedor_ruc")), numero_proveedor: f.get("numero_proveedor") || null,
     orden_compra_numero: f.get("orden_compra_numero") || null, monto_total: Number(f.get("monto_total")),
     fecha_emision: f.get("fecha_emision") || null, fecha_vencimiento: f.get("fecha_vencimiento") || null,
   };
@@ -2769,7 +2970,7 @@ document.getElementById("form-lead-create").addEventListener("submit", async (e)
   const payload = {
     channel: "web",
     nombre_contacto: f.get("nombre_contacto"), dni: f.get("dni") || null, empresa: f.get("empresa") || null, telefono: f.get("telefono") || null,
-    email: f.get("email") || null, cliente_ruc: f.get("cliente_ruc") || null, origen: f.get("origen") || null,
+    email: f.get("email") || null, cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")), origen: f.get("origen") || null,
     monto_estimado: f.get("monto_estimado") ? Number(f.get("monto_estimado")) : null,
     fecha_proximo_seguimiento: f.get("fecha_proximo_seguimiento") || null,
   };
@@ -3156,7 +3357,7 @@ document.getElementById("form-contract-create").addEventListener("submit", async
     channel: "web",
     codigo_contrato: f.get("codigo_contrato"),
     cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")),
-    proyecto_codigo: f.get("proyecto_codigo") || null,
+    proyecto_codigo: resolveProjectIdentifier(f.get("proyecto_codigo")),
     monto_total: Number(f.get("monto_total")),
     fecha_firma: f.get("fecha_firma") || null,
     hitos: hitoDraftLines,
@@ -3464,8 +3665,8 @@ document.getElementById("form-asset-create").addEventListener("submit", async (e
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    descripcion: f.get("descripcion"), sku: f.get("sku") || null, serie_numero: f.get("serie_numero") || null,
-    cliente_ruc: f.get("cliente_ruc") || null, proyecto_codigo: f.get("proyecto_codigo") || null,
+    descripcion: f.get("descripcion"), sku: resolveProductSku(f.get("sku")) || null, serie_numero: f.get("serie_numero") || null,
+    cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")), proyecto_codigo: resolveProjectIdentifier(f.get("proyecto_codigo")),
     fecha_instalacion: f.get("fecha_instalacion") || null, garantia_inicio: f.get("garantia_inicio") || null, garantia_fin: f.get("garantia_fin") || null,
   };
   setFormLoading(e.target, true);
@@ -4154,7 +4355,7 @@ document.getElementById("form-kit-item").addEventListener("submit", async (e) =>
   e.preventDefault();
   if (!currentKardexSku) return;
   const f = new FormData(e.target);
-  const payload = { sku: f.get("sku"), quantity: Number(f.get("quantity")) };
+  const payload = { sku: resolveProductSku(f.get("sku")), quantity: Number(f.get("quantity")) };
   setFormLoading(e.target, true);
   try {
     const r = await api(`/inventory/kits/${encodeURIComponent(currentKardexSku)}/items`, { method: "POST", body: JSON.stringify(payload) });
