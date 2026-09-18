@@ -195,6 +195,7 @@ function enterApp() {
   loadWarehouseOptions();
   loadSkuOptions();
   loadSupplierOptions();
+  loadClientOptions();
   loadEmployeeOptions();
   loadTechnicianOptions();
   loadDashboard();
@@ -563,6 +564,28 @@ function fillQuoteLineFromSku(prefix) {
   if (!producto) return;
   document.getElementById(`${prefix}-descripcion`).value = producto.nombre;
   document.getElementById(`${prefix}-precio`).value = producto.costo_unitario ?? "";
+}
+
+
+let clientsCatalog = [];
+async function loadClientOptions() {
+  const r = await api("/projects-clients");
+  const list = document.getElementById("client-list");
+  if (!list || r.status !== "success") return;
+  clientsCatalog = r.data || [];
+  const options = [];
+  for (const c of clientsCatalog) {
+    if (c.ruc) {
+      options.push(`<option value="${c.ruc}">${c.razon_social} (RUC: ${c.ruc}${c.dni ? " · DNI: " + c.dni : ""})</option>`);
+    }
+    if (c.dni && c.dni !== c.ruc) {
+      options.push(`<option value="${c.dni}">${c.razon_social} (DNI: ${c.dni}${c.ruc ? " · RUC: " + c.ruc : ""})</option>`);
+    }
+    if (!c.ruc && !c.dni) {
+      options.push(`<option value="${c.cliente_id}">${c.razon_social}</option>`);
+    }
+  }
+  list.innerHTML = options.join("");
 }
 
 async function loadSupplierOptions() {
@@ -2135,7 +2158,7 @@ document.getElementById("form-client-create").addEventListener("submit", async (
   try {
     const r = await api("/projects-clients", { method: "POST", body: JSON.stringify(payload) });
     renderResult("client-create-result", r);
-    if (r.status === "success") { toast(`Cliente ${r.data.cliente.razon_social} creado`); e.target.reset(); loadClients(); }
+    if (r.status === "success") { toast(`Cliente ${r.data.cliente.razon_social} creado`); e.target.reset(); loadClients(); loadClientOptions(); }
     else toast(r.error.message, false);
   } finally {
     setFormLoading(e.target, false);
@@ -2158,6 +2181,7 @@ async function lookupClientIdentifier(prefix) {
 }
 
 async function loadClients() {
+  loadClientOptions();
   const body = document.getElementById("clients-body");
   body.innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const r = await api("/projects-clients");

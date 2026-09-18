@@ -754,7 +754,7 @@
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
+              <input name="cliente_ruc" list="client-list" placeholder="ej. 20605309489" class="field" />
             </label>
           </div>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar salida</span></button>
@@ -1093,7 +1093,7 @@
               <input name="nombre" required placeholder="ej. Instalación 15kW — Fundo Los Álamos" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20512345678" class="field" />
+              <input name="cliente_ruc" list="client-list" placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Presupuesto (opcional)
               <input name="presupuesto" type="number" min="0" step="0.01" placeholder="ej. 25000" class="field" />
@@ -1249,7 +1249,7 @@
               <input name="email" type="email" placeholder="ej. contacto@empresa.com" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente vinculado (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20512345678, si ya es cliente" class="field" />
+              <input name="cliente_ruc" list="client-list" placeholder="ej. 20512345678, si ya es cliente" class="field" />
             </label>
             <label class="field-label">Origen (opcional)
               <select name="origen" class="field">
@@ -1337,7 +1337,7 @@
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nueva cotización</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-4">
             <label class="field-label">RUC o DNI de cliente
-              <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
+              <input name="cliente_ruc" list="client-list" required placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
@@ -1408,7 +1408,7 @@
               <input name="codigo_contrato" required placeholder="ej. CONT-00003" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente
-              <input name="cliente_ruc" required placeholder="ej. 20512345678" class="field" />
+              <input name="cliente_ruc" list="client-list" required placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
@@ -1882,7 +1882,7 @@
               <input name="serie_numero" placeholder="si el producto tiene control por serie" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20512345678" class="field" />
+              <input name="cliente_ruc" list="client-list" placeholder="ej. 20512345678" class="field" />
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
@@ -1992,7 +1992,7 @@
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />
             </label>
             <label class="field-label">RUC o DNI de cliente (opcional)
-              <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
+              <input name="cliente_ruc" list="client-list" placeholder="ej. 20605309489" class="field" />
             </label>
           </div>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Reservar stock</span></button>
@@ -2237,6 +2237,7 @@
 
       <datalist id="sku-list"></datalist>
       <datalist id="supplier-list"></datalist>
+      <datalist id="client-list"></datalist>
       <input type="file" id="nav-icon-upload-input" accept="image/jpeg,image/png,image/webp" class="hidden" />
     </main>
   </div>
