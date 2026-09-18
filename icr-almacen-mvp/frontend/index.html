@@ -1408,8 +1408,9 @@
             <label class="field-label">Código de contrato
               <input name="codigo_contrato" required placeholder="ej. CONT-00003" class="field" />
             </label>
-            <label class="field-label">RUC o DNI de cliente
-              <input name="cliente_ruc" list="client-list" required placeholder="ej. 20512345678" class="field" />
+            <label class="field-label">Cliente (Escribe Nombre, DNI o RUC)
+              <input name="cliente_ruc" id="quote-cliente-input" list="client-list" required placeholder="Escribe el nombre o documento para buscar…" class="field" autocomplete="off" />
+              <div id="quote-cliente-badge" class="text-xs mt-1 text-emerald-600 font-semibold hidden"></div>
             </label>
             <label class="field-label">Proyecto vinculado (opcional)
               <input name="proyecto_codigo" placeholder="ej. PROY-001" class="field" />

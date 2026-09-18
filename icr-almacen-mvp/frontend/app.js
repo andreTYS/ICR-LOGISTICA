@@ -568,6 +568,7 @@ function fillQuoteLineFromSku(prefix) {
 
 
 
+
 let clientsCatalog = [];
 function resolveClientIdentifier(val) {
   if (!val) return "";
@@ -587,12 +588,9 @@ async function loadClientOptions() {
   clientsCatalog = r.data || [];
   const options = [];
   for (const c of clientsCatalog) {
-    const docInfo = [c.ruc ? "RUC: " + c.ruc : "", c.dni ? "DNI: " + c.dni : ""].filter(Boolean).join(" · ");
-    // Opción por nombre/razón social principal
-    options.push(`<option value="${c.razon_social}">${docInfo ? "(" + docInfo + ")" : ""}</option>`);
-    // Opción por DNI si existe
+    const doc = [c.ruc ? "RUC: " + c.ruc : "", c.dni ? "DNI: " + c.dni : ""].filter(Boolean).join(" · ");
+    options.push(`<option value="${c.razon_social}">${doc ? "(" + doc + ")" : ""}</option>`);
     if (c.dni) options.push(`<option value="${c.dni}">${c.razon_social} (DNI: ${c.dni})</option>`);
-    // Opción por RUC si existe
     if (c.ruc && c.ruc !== c.dni) options.push(`<option value="${c.ruc}">${c.razon_social} (RUC: ${c.ruc})</option>`);
   }
   list.innerHTML = options.join("");
@@ -615,7 +613,7 @@ function initQuoteClientAutocomplete() {
     );
     if (c) {
       const doc = c.ruc ? ("RUC: " + c.ruc) : (c.dni ? ("DNI: " + c.dni) : "");
-      badge.textContent = "✓ Cliente detectado: " + c.razon_social + (doc ? " · " + doc : "");
+      badge.textContent = "✓ Cliente: " + c.razon_social + (doc ? " · " + doc : "");
       badge.classList.remove("hidden");
     } else {
       badge.classList.add("hidden");
@@ -3027,6 +3025,7 @@ function quoteStatusBadge(estado) {
 
 async function loadCotizaciones(page) {
   loadClientOptions();
+  loadClientOptions();
   const body = document.getElementById("quotes-body");
   body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const estado = document.getElementById("quote-filter-estado").value;
@@ -3154,7 +3153,7 @@ document.getElementById("form-contract-create").addEventListener("submit", async
   const payload = {
     channel: "web",
     codigo_contrato: f.get("codigo_contrato"),
-    cliente_ruc: f.get("cliente_ruc"),
+    cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")),
     proyecto_codigo: f.get("proyecto_codigo") || null,
     monto_total: Number(f.get("monto_total")),
     fecha_firma: f.get("fecha_firma") || null,
