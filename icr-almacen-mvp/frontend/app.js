@@ -569,6 +569,7 @@ function fillQuoteLineFromSku(prefix) {
 
 
 
+
 let clientsCatalog = [];
 function resolveClientIdentifier(val) {
   if (!val) return "";
@@ -3024,6 +3025,7 @@ function quoteStatusBadge(estado) {
 }
 
 async function loadCotizaciones(page) {
+  loadClientOptions();
   loadClientOptions();
   loadClientOptions();
   const body = document.getElementById("quotes-body");
