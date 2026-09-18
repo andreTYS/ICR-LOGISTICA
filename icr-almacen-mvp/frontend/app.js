@@ -549,6 +549,7 @@ async function loadWarehouseOptions() {
 }
 
 
+
 let productCatalogBySku = {};
 let productCatalogByName = {};
 let clientsCatalog = [];
@@ -611,8 +612,8 @@ async function loadSkuOptions() {
     const opts = [];
     for (const p of items) {
       const costoTxt = p.costo_unitario != null ? " · Costo: S/ " + p.costo_unitario : "";
-      opts.push("<option value="" + p.sku + "">" + p.nombre + costoTxt + "</option>");
-      if (p.nombre) opts.push("<option value="" + p.nombre + "">" + p.sku + costoTxt + "</option>");
+      opts.push('<option value="' + p.sku + '">' + p.nombre + costoTxt + '</option>');
+      if (p.nombre) opts.push('<option value="' + p.nombre + '">' + p.sku + costoTxt + '</option>');
     }
     list.innerHTML = opts.join("");
   }
@@ -700,9 +701,9 @@ async function loadClientOptions() {
   const options = [];
   for (const c of clientsCatalog) {
     const doc = [c.ruc ? "RUC: " + c.ruc : "", c.dni ? "DNI: " + c.dni : ""].filter(Boolean).join(" · ");
-    options.push("<option value="" + c.razon_social + "">" + (doc ? "(" + doc + ")" : "") + "</option>");
-    if (c.dni) options.push("<option value="" + c.dni + "">" + c.razon_social + " (DNI: " + c.dni + ")</option>");
-    if (c.ruc && c.ruc !== c.dni) options.push("<option value="" + c.ruc + "">" + c.razon_social + " (RUC: " + c.ruc + ")</option>");
+    options.push('<option value="' + c.razon_social + '">' + (doc ? "(" + doc + ")" : "") + '</option>');
+    if (c.dni) options.push('<option value="' + c.dni + '">' + c.razon_social + ' (DNI: ' + c.dni + ')</option>');
+    if (c.ruc && c.ruc !== c.dni) options.push('<option value="' + c.ruc + '">' + c.razon_social + ' (RUC: ' + c.ruc + ')</option>');
   }
   list.innerHTML = options.join("");
   initAllAutocompleteBadges();
@@ -715,8 +716,8 @@ async function loadSupplierOptions() {
   suppliersCatalog = r.data || [];
   const options = [];
   for (const s of suppliersCatalog) {
-    options.push("<option value="" + s.razon_social + "">RUC: " + s.ruc + "</option>");
-    options.push("<option value="" + s.ruc + "">" + s.razon_social + "</option>");
+    options.push('<option value="' + s.razon_social + '">RUC: ' + s.ruc + '</option>');
+    options.push('<option value="' + s.ruc + '">' + s.razon_social + '</option>');
   }
   list.innerHTML = options.join("");
   initAllAutocompleteBadges();
@@ -729,8 +730,8 @@ async function loadProjectOptions() {
   projectsCatalog = r.data?.items || r.data || [];
   const options = [];
   for (const p of projectsCatalog) {
-    options.push("<option value="" + p.codigo_proyecto + "">" + (p.nombre || "") + "</option>");
-    if (p.nombre) options.push("<option value="" + p.nombre + "">(" + p.codigo_proyecto + ")</option>");
+    options.push('<option value="' + p.codigo_proyecto + '">' + (p.nombre || "") + '</option>');
+    if (p.nombre) options.push('<option value="' + p.nombre + '">(' + p.codigo_proyecto + ')</option>');
   }
   list.innerHTML = options.join("");
   initAllAutocompleteBadges();
@@ -1519,7 +1520,7 @@ document.getElementById("form-remove").addEventListener("submit", async (e) => {
   const f = new FormData(e.target);
   const payload = {
     channel: "web",
-    product: { sku: f.get("sku") },
+    product: { sku: resolveProductSku(f.get("sku")) },
     quantity: Number(f.get("quantity")),
     warehouse_code: f.get("warehouse_code"),
     location_code: f.get("location_code") || null,
@@ -3852,8 +3853,8 @@ document.getElementById("form-reserve").addEventListener("submit", async (e) => 
     warehouse_code: f.get("warehouse_code"),
     location_code: f.get("location_code") || null,
     destination: {
-      proyecto_codigo: f.get("proyecto_codigo") || null,
-      cliente_ruc: f.get("cliente_ruc") || null,
+      proyecto_codigo: resolveProjectIdentifier(f.get("proyecto_codigo")),
+      cliente_ruc: resolveClientIdentifier(f.get("cliente_ruc")),
     },
   };
   setFormLoading(e.target, true);
