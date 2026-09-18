@@ -25,7 +25,7 @@ const ROLE_PERMISSIONS = {
   ADMIN: ["*"],
   SUPERVISOR: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
-    "inventory.stock.get", "inventory.stock.search", "inventory.query",
+    "inventory.stock.get", "inventory.stock.search", "inventory.query", "inventory.dispatch_reservation",
     "inventory.adjust", "inventory.adjust.approve", "inventory.alerts.get", "inventory.audit.get",
     "inventory.product.create", "inventory.product.update", "inventory.warehouse.manage",
     "purchases.query", "purchases.replenishment.get",
@@ -45,7 +45,7 @@ const ROLE_PERMISSIONS = {
   ],
   ALMACENERO: [
     "inventory.receive", "inventory.remove", "inventory.transfer",
-    "inventory.stock.get", "inventory.stock.search", "inventory.query",
+    "inventory.stock.get", "inventory.stock.search", "inventory.query", "inventory.dispatch_reservation",
     "purchases.receive", "purchases.query",
     "projects.labor.register", "projects.query",
     "accounting.query",
