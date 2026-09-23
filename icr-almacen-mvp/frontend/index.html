@@ -215,6 +215,10 @@
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2 2 17h16L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8v4M10 14.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Cuentas por cobrar</span>
             </button>
+            <button class="nav-item" data-view="store">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 7l1-4h12l1 4M3 7v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M3 7h14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 10.5a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Tienda</span>
+            </button>
           </div></div>
         </div>
         <!-- ============ MÓDULO: GASTOS ============ -->
@@ -249,6 +253,10 @@
             <button class="nav-item" data-view="accounting-reports">
               <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M4 16V9M9 16V4M14 16v-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Reportes financieros</span>
+            </button>
+            <button class="nav-item" data-view="cash-flow">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none"><path d="M3 10h14M3 10l4-4M3 10l4 4M17 10l-4-4M17 10l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Flujo de Caja</span>
             </button>
           </div></div>
         </div>
@@ -1498,6 +1506,46 @@
         </div>
       </section>
 
+      <!-- ============ TIENDA (venta directa de equipos) ============ -->
+      <section class="view" id="view-store">
+        <form class="form-card mb-7" id="form-store-sale">
+          <div class="grid sm:grid-cols-2 gap-4 mb-5">
+            <label class="field-label">SKU del producto (opcional — vacío = ítem libre)
+              <input name="sku" list="sku-list" placeholder="ej. HERR-MULTIMETRO" class="field" />
+            </label>
+            <label class="field-label">Almacén (obligatorio si hay SKU)
+              <select name="warehouse_code" class="warehouse-select field"><option value="">Selecciona un almacén…</option></select>
+            </label>
+            <label class="field-label sm:col-span-2">Descripción
+              <input name="descripcion" required placeholder="ej. Multímetro Fluke CL120" class="field" />
+            </label>
+            <label class="field-label">Cantidad
+              <input name="cantidad" type="number" min="0.01" step="0.01" required class="field" />
+            </label>
+            <label class="field-label">Precio unitario (S/)
+              <input name="precio_unitario" type="number" min="0" step="0.01" required class="field" />
+            </label>
+            <label class="field-label">RUC o DNI de cliente (opcional)
+              <input name="cliente_ruc" placeholder="ej. 20605309489" class="field" />
+            </label>
+          </div>
+          <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar venta</span></button>
+        </form>
+        <div id="store-sale-result" class="result-box mb-5"></div>
+        <div class="table-card">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">Código</th>
+              <th class="text-left font-semibold px-3 py-2.5">Descripción</th><th class="text-left font-semibold px-3 py-2.5">Cantidad</th>
+              <th class="text-left font-semibold px-3 py-2.5">Total</th><th class="text-left font-semibold px-3 py-2.5">Cliente</th>
+              <th class="text-left font-semibold px-3 py-2.5">Registrado por</th>
+            </tr></thead>
+            <tbody id="store-sales-body"></tbody>
+          </table>
+        </div>
+        <div id="store-sales-pager"></div>
+      </section>
+
       <!-- ============ GASTOS ============ -->
       <section class="view" id="view-expenses">
         <form class="form-card mb-7" id="form-expense-create">
@@ -1790,6 +1838,42 @@
               <th class="text-left font-semibold px-3 py-2.5">Tipo</th><th class="text-left font-semibold px-3 py-2.5">Saldo</th>
             </tr></thead>
             <tbody id="balance-sheet-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ FLUJO DE CAJA ============ -->
+      <section class="view" id="view-cash-flow">
+        <div class="table-card mb-6">
+          <div class="px-4 pt-4 flex flex-wrap items-end justify-between gap-3">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400">Control de caja: ingresos (proyectos + tienda) vs. egresos</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="field-label">Agrupar por
+                <select id="cash-flow-agrupacion" class="field">
+                  <option value="semana">Semana</option>
+                  <option value="mes">Mes</option>
+                </select>
+              </label>
+              <label class="field-label">Desde
+                <input id="cash-flow-desde" type="date" class="field" />
+              </label>
+              <label class="field-label">Hasta
+                <input id="cash-flow-hasta" type="date" class="field" />
+              </label>
+              <button type="button" class="btn-secondary" onclick="loadCashFlow()">Aplicar</button>
+              <button type="button" class="btn-secondary" onclick="exportCashFlowCsv()">Exportar CSV</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4" id="cash-flow-cards"></div>
+          <table class="w-full border-collapse text-sm">
+            <thead><tr class="bg-navy-950 text-white text-[12.5px]">
+              <th class="text-left font-semibold px-3 py-2.5">Período</th>
+              <th class="text-left font-semibold px-3 py-2.5">Ingresos proyectos</th><th class="text-left font-semibold px-3 py-2.5">Ingresos tienda</th>
+              <th class="text-left font-semibold px-3 py-2.5">Total ingresos</th>
+              <th class="text-left font-semibold px-3 py-2.5">Gastos</th><th class="text-left font-semibold px-3 py-2.5">Compras pagadas</th>
+              <th class="text-left font-semibold px-3 py-2.5">Total egresos</th><th class="text-left font-semibold px-3 py-2.5">Neto</th>
+            </tr></thead>
+            <tbody id="cash-flow-body"></tbody>
           </table>
         </div>
       </section>
@@ -2261,6 +2345,26 @@
         </div>
 
         <div class="form-card max-w-lg mt-6">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Datos de la empresa</h3>
+          <p class="text-xs text-slate-500 mb-4">Aparecen en el encabezado de las Cotizaciones y Contratos en PDF que se le entregan al cliente.</p>
+          <form id="form-empresa" class="grid sm:grid-cols-2 gap-4">
+            <label class="field-label sm:col-span-2">Razón social
+              <input name="razon_social" placeholder="ej. Inversiones ICR S.A.C." class="field" />
+            </label>
+            <label class="field-label">RUC
+              <input name="ruc" placeholder="ej. 20605309489" class="field" />
+            </label>
+            <label class="field-label">Teléfono
+              <input name="telefono" placeholder="ej. 054-123456" class="field" />
+            </label>
+            <label class="field-label sm:col-span-2">Dirección
+              <input name="direccion" placeholder="ej. Av. Ejemplo 123, Arequipa" class="field" />
+            </label>
+            <button class="btn-primary btn-loading sm:col-span-2" type="submit"><span class="btn-label">Guardar datos de la empresa</span></button>
+          </form>
+        </div>
+
+        <div class="form-card max-w-lg mt-6">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Íconos del menú</h3>
           <p class="text-xs text-slate-500 mb-4">Reemplazá el ícono de cualquier pantalla o módulo del menú lateral por una imagen propia (JPEG, PNG o WebP). Activá la edición y hacé clic en el ícono que querés cambiar; el ícono se ve pequeño (17px), así que una imagen simple y cuadrada funciona mejor.</p>
           <button id="icon-edit-mode-toggle" type="button" class="btn-secondary" onclick="toggleIconEditMode()">Editar íconos del menú</button>
@@ -2337,6 +2441,33 @@
       </div>
       <div class="px-6 py-4">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" id="proj-costeo-cards"></div>
+
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Avance de la obra</h3>
+        <div id="proj-avance-wrap" class="mb-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+            <span id="proj-avance-label">Sin hitos definidos</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden mb-4">
+            <div id="proj-avance-bar" class="h-full bg-accent rounded-full" style="width:0%"></div>
+          </div>
+        </div>
+        <table class="w-full border-collapse text-sm mb-3">
+          <thead><tr class="text-left text-[11.5px] text-slate-400 uppercase tracking-wide">
+            <th class="font-semibold py-1.5 pr-3">#</th><th class="font-semibold py-1.5 pr-3">Etapa</th>
+            <th class="font-semibold py-1.5 pr-3">Planificada</th><th class="font-semibold py-1.5 pr-3">Real</th>
+            <th class="font-semibold py-1.5 pr-3">Estado</th><th class="font-semibold py-1.5"></th>
+          </tr></thead>
+          <tbody id="proj-hitos-body"></tbody>
+        </table>
+        <form id="form-project-hito" class="flex flex-wrap items-end gap-2 mb-6">
+          <label class="field-label flex-1 min-w-[180px]">Nueva etapa
+            <input name="descripcion" required placeholder="ej. Instalación de estructura" class="field" />
+          </label>
+          <label class="field-label w-36">Fecha planificada
+            <input name="fecha_planificada" type="date" class="field" />
+          </label>
+          <button class="btn-secondary" type="submit">Agregar etapa</button>
+        </form>
 
         <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Materiales consumidos</h3>
         <table class="w-full border-collapse text-sm mb-6">

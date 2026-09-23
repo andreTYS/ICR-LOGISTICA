@@ -343,11 +343,80 @@ async function getBalanceGeneral({ fechaCorte } = {}) {
   };
 }
 
+// Control de caja real (no contable/devengado): junta el dinero que
+// efectivamente entró — cobros de hitos de contrato de Proyectos y ventas
+// de Tienda — contra el que efectivamente salió — gastos operativos y pagos
+// a proveedor — agrupado por semana o mes. Es la vista que responde
+// "cuánto entró por ambos lados y cuánto salió", para reportes periódicos
+// sin tener que sumar cuatro pantallas distintas a mano.
+async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
+  const unidad = agrupacion === "mes" ? "month" : "week";
+  const desde = fechaDesde || "1970-01-01";
+  const hasta = fechaHasta || new Date().toISOString().slice(0, 10);
+
+  const r = await pool.query(
+    `WITH movimientos AS (
+       SELECT fecha_pago AS fecha, 'INGRESO' AS tipo, 'PROYECTOS' AS origen, monto_pagado AS monto
+       FROM contrato_hitos WHERE estado='PAGADO' AND fecha_pago IS NOT NULL
+       UNION ALL
+       SELECT fecha_venta, 'INGRESO', 'TIENDA', monto_total FROM ventas_tienda
+       UNION ALL
+       SELECT fecha, 'EGRESO', 'GASTOS', monto FROM gastos
+       UNION ALL
+       SELECT fecha_pago, 'EGRESO', 'COMPRAS', monto FROM pagos_proveedor
+     )
+     SELECT date_trunc($1, fecha)::date AS periodo, tipo, origen, SUM(monto) AS total
+     FROM movimientos
+     WHERE fecha BETWEEN $2 AND $3
+     GROUP BY periodo, tipo, origen
+     ORDER BY periodo`,
+    [unidad, desde, hasta]
+  );
+
+  const porPeriodo = new Map();
+  for (const row of r.rows) {
+    const key = row.periodo.toISOString().slice(0, 10);
+    if (!porPeriodo.has(key)) {
+      porPeriodo.set(key, {
+        periodo: key, ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_total: 0,
+        egresos_gastos: 0, egresos_compras: 0, egresos_total: 0, neto: 0,
+      });
+    }
+    const bucket = porPeriodo.get(key);
+    const monto = Number(row.total);
+    if (row.tipo === "INGRESO" && row.origen === "PROYECTOS") bucket.ingresos_proyectos += monto;
+    if (row.tipo === "INGRESO" && row.origen === "TIENDA") bucket.ingresos_tienda += monto;
+    if (row.tipo === "EGRESO" && row.origen === "GASTOS") bucket.egresos_gastos += monto;
+    if (row.tipo === "EGRESO" && row.origen === "COMPRAS") bucket.egresos_compras += monto;
+  }
+  const items = [...porPeriodo.values()].map((b) => {
+    b.ingresos_total = b.ingresos_proyectos + b.ingresos_tienda;
+    b.egresos_total = b.egresos_gastos + b.egresos_compras;
+    b.neto = b.ingresos_total - b.egresos_total;
+    return b;
+  });
+
+  const totales = items.reduce(
+    (acc, i) => ({
+      ingresos_proyectos: acc.ingresos_proyectos + i.ingresos_proyectos,
+      ingresos_tienda: acc.ingresos_tienda + i.ingresos_tienda,
+      ingresos_total: acc.ingresos_total + i.ingresos_total,
+      egresos_gastos: acc.egresos_gastos + i.egresos_gastos,
+      egresos_compras: acc.egresos_compras + i.egresos_compras,
+      egresos_total: acc.egresos_total + i.egresos_total,
+      neto: acc.neto + i.neto,
+    }),
+    { ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_total: 0, egresos_gastos: 0, egresos_compras: 0, egresos_total: 0, neto: 0 }
+  );
+
+  return { agrupacion: unidad === "month" ? "mes" : "semana", fecha_desde: desde, fecha_hasta: hasta, items, totales };
+}
+
 module.exports = {
   crearCuenta, listCuentas,
   crearParametroFiscal, listParametrosFiscales, getParametroFiscalVigente,
   crearRegla, listReglas, setReglaActiva,
   crearAsientoManual, generarAsientoAutomatico, contabilizarAsiento, anularAsiento,
   listAsientos, getAsiento,
-  getEstadoResultados, getBalanceGeneral,
+  getEstadoResultados, getBalanceGeneral, getFlujoCaja,
 };

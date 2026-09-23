@@ -8,6 +8,7 @@ const proyectos = require("./services/proyectosService");
 const contabilidad = require("./services/contabilidadService");
 const rrhh = require("./services/rrhhService");
 const ventas = require("./services/ventasService");
+const tienda = require("./services/tiendaService");
 const gastos = require("./services/gastosService");
 const dashboard = require("./services/dashboardService");
 const users = require("./services/userService");
@@ -644,6 +645,33 @@ router.post(
   })
 );
 
+// -------- Hitos de ejecución (avance físico de la obra) --------
+
+router.post(
+  "/projects/:codigo/hitos",
+  requirePermission("projects.update_status"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.crearHitoProyecto({
+      codigoProyecto: req.params.codigo, descripcion: b.descripcion,
+      orden: b.orden ? Number(b.orden) : null, fechaPlanificada: b.fecha_planificada || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.patch(
+  "/projects/hitos/:hitoId",
+  requirePermission("projects.update_status"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.actualizarHitoProyecto({
+      hitoId: req.params.hitoId, estado: b.estado, fechaReal: b.fecha_real || null, observaciones: b.observaciones || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
 router.get(
   "/projects",
   requirePermission("projects.query"),
@@ -807,6 +835,14 @@ router.get(
 );
 
 router.get(
+  "/accounting/reports/cash-flow",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.getFlujoCaja({
+    fechaDesde: req.query.fecha_desde || null, fechaHasta: req.query.fecha_hasta || null, agrupacion: req.query.agrupacion || null,
+  }))
+);
+
+router.get(
   "/accounting/reports/income-statement/pdf",
   requirePermission("accounting.query"),
   handleBinary(async (req) => {
@@ -960,6 +996,35 @@ router.get(
   "/sales-receivables",
   requirePermission("sales.query"),
   handle(async (req) => ventas.listCuentasPorCobrar({ estado: req.query.estado || null }))
+);
+
+// -------- Tienda (segunda fuente de ingresos: venta directa de equipos) --------
+
+router.post(
+  "/store/sales",
+  requirePermission("store.sale.register"),
+  handle(async (req) => {
+    const b = req.body;
+    return tienda.registrarVenta({
+      sku: b.product?.sku || null,
+      warehouseCode: b.warehouse_code || null,
+      descripcion: b.descripcion,
+      cantidad: Number(b.cantidad),
+      precioUnitario: Number(b.precio_unitario),
+      clienteRuc: b.cliente_ruc || null,
+      comprobante: b.comprobante || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.get(
+  "/store/sales",
+  requirePermission("store.query"),
+  handle(async (req) => tienda.listVentas({
+    desde: req.query.desde || null, hasta: req.query.hasta || null,
+    page: req.query.page, pageSize: req.query.page_size,
+  }))
 );
 
 // -------- Gastos --------
@@ -1496,6 +1561,17 @@ router.post(
     if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
     const url = await processAndSaveImage(req.file);
     return settings.setLogoUrl(url);
+  })
+);
+
+router.post(
+  "/settings/empresa",
+  requirePermission("settings.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return settings.setEmpresaInfo({
+      razonSocial: b.razon_social, ruc: b.ruc, direccion: b.direccion, telefono: b.telefono,
+    });
   })
 );
 

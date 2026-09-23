@@ -3,6 +3,7 @@
 // cotizacionesService, ventasService, proyectosService) — este archivo solo
 // se encarga del formato visual, reusando los helpers de pdfService.js.
 const { crearDocumento, renderEncabezado, renderInfoBlock, renderTabla, renderTotalLine, finalizarBuffer } = require("./pdfService");
+const { getSettings } = require("./settingsService");
 
 function money(n) {
   return Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,7 +94,8 @@ async function buildEstadoResultadosPdf(data) {
 
 async function buildCotizacionPdf(cotizacion) {
   const doc = crearDocumento();
-  renderEncabezado(doc, { titulo: "Cotización", subtitulo: cotizacion.codigo });
+  const { empresa } = await getSettings();
+  renderEncabezado(doc, { titulo: "Cotización", subtitulo: cotizacion.codigo, empresa });
 
   const fechaVencimiento = new Date(cotizacion.fecha_emision);
   fechaVencimiento.setDate(fechaVencimiento.getDate() + cotizacion.validez_dias);
@@ -125,7 +127,8 @@ async function buildCotizacionPdf(cotizacion) {
 
 async function buildContratoPdf(contrato) {
   const doc = crearDocumento();
-  renderEncabezado(doc, { titulo: "Contrato de Venta", subtitulo: contrato.codigo_contrato });
+  const { empresa } = await getSettings();
+  renderEncabezado(doc, { titulo: "Contrato de Venta", subtitulo: contrato.codigo_contrato, empresa });
 
   renderInfoBlock(doc, [
     ["Cliente", contrato.cliente_nombre],
