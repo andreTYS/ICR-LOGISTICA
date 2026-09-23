@@ -96,6 +96,159 @@ test("reservar más de lo disponible se rechaza", async () => {
   );
 });
 
+test("reservar deja una alerta STOCK_BAJO si el disponible cae al punto de reorden", async () => {
+  await inventory.createProduct({ sku: "TEST-RESERVA-ALERTA", nombre: "Producto de prueba", tipo_control: "NORMAL", punto_reorden: 2 });
+  await inventory.receive({ sku: "TEST-RESERVA-ALERTA", quantity: 10, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  const r = await inventory.reserve({ sku: "TEST-RESERVA-ALERTA", quantity: 9, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  assert.equal(r.alerta_generada, true);
+});
+
+// -------------------- Despachar reserva hacia obra --------------------
+// Separar materiales para un proyecto (reservar) es solo apartarlos del
+// disponible; despachar es lo que efectivamente sale del almacén camino a
+// la instalación — debe bajar el físico y cerrar (o reducir) la reserva.
+
+test("despachar una reserva completa la convierte en SALIDA a proyecto y la deja CONSUMIDA", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 20, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  const created = await inventory.reserve({
+    sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const antes = await stockOf("PANEL-JA-550", "ALM-001");
+
+  const r = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r.reserva_restante, 0);
+
+  const despues = await stockOf("PANEL-JA-550", "ALM-001");
+  assert.equal(Number(despues.stock_fisico), Number(antes.stock_fisico) - 5);
+  assert.equal(Number(despues.stock_reservado), Number(antes.stock_reservado) - 5);
+  assert.equal(despues.stock_disponible, antes.stock_disponible, "el disponible ya había bajado al reservar, no vuelve a moverse al despachar");
+
+  const movimiento = await pool.query("SELECT tipo_movimiento, proyecto_id FROM movimientos WHERE movimiento_id=$1", [r.movimiento_id]);
+  assert.equal(movimiento.rows[0].tipo_movimiento, "SALIDA");
+  assert.ok(movimiento.rows[0].proyecto_id, "el movimiento de despacho debe quedar ligado al proyecto de la reserva");
+
+  const reservations = await inventory.getReservations({});
+  const found = reservations.find((res) => res.reserva_id === created.reserva_id);
+  assert.equal(found.estado, "CONSUMIDA");
+  assert.equal(found.codigo_proyecto, "PROY-001");
+});
+
+test("despachar parcialmente deja la reserva ACTIVA con el saldo restante (varios viajes a obra)", async () => {
+  const created = await inventory.reserve({
+    sku: "PANEL-JA-550", quantity: 6, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const r1 = await inventory.dispatchReservation({ reservaId: created.reserva_id, cantidad: 4, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r1.reserva_restante, 2);
+
+  const reservations = await inventory.getReservations({ estado: "ACTIVA" });
+  const found = reservations.find((res) => res.reserva_id === created.reserva_id);
+  assert.equal(found.cantidad, "2.00");
+
+  const r2 = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r2.reserva_restante, 0);
+  const cerradas = await inventory.getReservations({ estado: "CONSUMIDA" });
+  assert.ok(cerradas.some((res) => res.reserva_id === created.reserva_id));
+});
+
+test("despachar más de lo reservado se rechaza", async () => {
+  const created = await inventory.reserve({ sku: "PANEL-JA-550", quantity: 3, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: created.reserva_id, cantidad: 99, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("despachar una reserva ya liberada se rechaza", async () => {
+  const created = await inventory.reserve({ sku: "PANEL-JA-550", quantity: 2, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  await inventory.releaseReservation({ reservaId: created.reserva_id, usuarioId: VENTAS, canal: "web" });
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "RESERVATION_NOT_ACTIVE"
+  );
+});
+
+test("despachar una reserva inexistente se rechaza", async () => {
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: "00000000-0000-0000-0000-000000009999", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "RESERVATION_NOT_FOUND"
+  );
+});
+
+// -------------------- Préstamos de herramientas --------------------
+// Una herramienta/caja "retornable" debe volver al almacén, a diferencia de
+// un material que se consume/instala para siempre — cada SALIDA de un
+// producto retornable (directa o vía despacho de reserva) registra
+// automáticamente un préstamo; devolverlo repone stock_fisico.
+
+test("retirar un producto retornable registra un préstamo PRESTADO; uno normal no registra nada", async () => {
+  await inventory.createProduct({ sku: "TALADRO-01", nombre: "Taladro percutor", tipo_control: "NORMAL", retornable: true });
+  await inventory.receive({ sku: "TALADRO-01", quantity: 3, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+
+  const r = await inventory.remove({
+    sku: "TALADRO-01", quantity: 1, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: ALMACENERO, canal: "web",
+  });
+  assert.ok(r.prestamo_id, "una SALIDA de un producto retornable debe crear un préstamo");
+
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  const prestamo = prestamos.find((p) => p.prestamo_id === r.prestamo_id);
+  assert.equal(prestamo.sku, "TALADRO-01");
+  assert.equal(prestamo.codigo_proyecto, "PROY-001");
+
+  // Un material normal (no retornable) no debe dejar rastro en préstamos
+  const rNormal = await inventory.remove({ sku: "PANEL-JA-550", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(rNormal.prestamo_id, null);
+});
+
+test("despachar una reserva de un producto retornable también registra el préstamo", async () => {
+  const created = await inventory.reserve({
+    sku: "TALADRO-01", quantity: 1, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const r = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.ok(r.prestamo_id);
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  assert.ok(prestamos.some((p) => p.prestamo_id === r.prestamo_id));
+});
+
+test("devolver un préstamo repone stock_fisico y lo marca DEVUELTO", async () => {
+  const antes = await stockOf("TALADRO-01", "ALM-001");
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  const prestamo = prestamos.find((p) => p.sku === "TALADRO-01");
+
+  const r = await inventory.returnLoan({ prestamoId: prestamo.prestamo_id, usuarioId: ALMACENERO, canal: "web" });
+  const despues = await stockOf("TALADRO-01", "ALM-001");
+  assert.equal(Number(despues.stock_fisico), Number(antes.stock_fisico) + Number(prestamo.cantidad));
+
+  const movimiento = await pool.query("SELECT tipo_movimiento FROM movimientos WHERE movimiento_id=$1", [r.movimiento_id]);
+  assert.equal(movimiento.rows[0].tipo_movimiento, "DEVOLUCION");
+
+  const cerrados = await inventory.getLoans({ estado: "DEVUELTO" });
+  assert.ok(cerrados.some((p) => p.prestamo_id === prestamo.prestamo_id));
+});
+
+test("devolver un préstamo ya devuelto o inexistente se rechaza", async () => {
+  const prestamos = await inventory.getLoans({ estado: "DEVUELTO" });
+  await assert.rejects(
+    inventory.returnLoan({ prestamoId: prestamos[0].prestamo_id, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "LOAN_NOT_ACTIVE"
+  );
+  await assert.rejects(
+    inventory.returnLoan({ prestamoId: "00000000-0000-0000-0000-000000009999", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "LOAN_NOT_FOUND"
+  );
+});
+
+test("setProductRetornable alterna el flag y se refleja en la próxima SALIDA", async () => {
+  await inventory.createProduct({ sku: "MULTIMETRO-01", nombre: "Multímetro digital", tipo_control: "NORMAL" });
+  await inventory.receive({ sku: "MULTIMETRO-01", quantity: 2, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+
+  const r1 = await inventory.remove({ sku: "MULTIMETRO-01", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r1.prestamo_id, null, "todavía no es retornable");
+
+  await inventory.setProductRetornable("MULTIMETRO-01", true);
+  const r2 = await inventory.remove({ sku: "MULTIMETRO-01", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.ok(r2.prestamo_id, "ahora sí debe generar préstamo");
+});
+
 // -------------------- Ajustes con aprobación --------------------
 
 test("un ajuste queda PENDIENTE y no toca el stock hasta que se aprueba", async () => {
