@@ -549,6 +549,10 @@ CREATE TABLE cotizaciones (
 CREATE TABLE cotizacion_items (
     cotizacion_item_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cotizacion_id       UUID NOT NULL REFERENCES cotizaciones(cotizacion_id) ON DELETE CASCADE,
+    -- Opcional: si el ítem viene del catálogo (en vez de texto libre), queda
+    -- trazado al producto real — así una cotización no puede "inventar" un
+    -- SKU que no existe en Almacén.
+    producto_id         UUID REFERENCES productos(producto_id),
     descripcion         TEXT NOT NULL,
     cantidad            NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
     precio_unitario     NUMERIC(14,2) NOT NULL CHECK (precio_unitario >= 0),
@@ -752,7 +756,8 @@ CREATE TABLE plan_cuentas (
     nombre            TEXT NOT NULL,
     tipo              TEXT NOT NULL CHECK (tipo IN ('ACTIVO','PASIVO','PATRIMONIO','INGRESO','GASTO')),
     cuenta_padre_id   UUID REFERENCES plan_cuentas(cuenta_id),
-    activo            BOOLEAN NOT NULL DEFAULT true
+    activo            BOOLEAN NOT NULL DEFAULT true,
+    CONSTRAINT plan_cuentas_codigo_formato CHECK (codigo ~ '^[0-9]+(\.[0-9]+)*$')
 );
 
 CREATE TABLE parametros_fiscales (
@@ -763,7 +768,8 @@ CREATE TABLE parametros_fiscales (
     vigente_hasta        DATE,
     descripcion          TEXT,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (vigente_hasta IS NULL OR vigente_hasta >= vigente_desde)
+    CHECK (vigente_hasta IS NULL OR vigente_hasta >= vigente_desde),
+    CONSTRAINT parametros_fiscales_valor_no_negativo CHECK (valor >= 0)
 );
 
 -- Un evento de negocio (ej. 'purchases.receive') mapea a un debe/haber fijo.
@@ -775,7 +781,8 @@ CREATE TABLE reglas_imputacion (
     cuenta_haber_id   UUID NOT NULL REFERENCES plan_cuentas(cuenta_id),
     descripcion       TEXT,
     activo            BOOLEAN NOT NULL DEFAULT true,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT reglas_imputacion_evento_formato CHECK (evento ~ '^[a-zA-Z][a-zA-Z0-9_.]*$')
 );
 
 CREATE SEQUENCE asiento_numero_seq START 1;

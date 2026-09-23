@@ -421,6 +421,29 @@ test("importProductsCsv soporta campos entre comillas con comas embebidas", asyn
   assert.equal(items[0].nombre, "Producto, con coma");
 });
 
+// -------------------- Cantidades enteras para unidades discretas --------------------
+
+test("ingresar una cantidad decimal de un producto UND se rechaza", async () => {
+  await assert.rejects(
+    inventory.receive({ sku: "PANEL-JA-550", quantity: 1.5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("despachar una cantidad decimal de un producto UND se rechaza", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await assert.rejects(
+    inventory.remove({ sku: "PANEL-JA-550", quantity: 2.5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("un producto con unidad de medida fraccionable (ej. KG) sí admite cantidades decimales", async () => {
+  await inventory.createProduct({ sku: "CABLE-KG-TEST", nombre: "Cable por peso", unidad_medida: "KG", tipo_control: "NORMAL" });
+  const r = await inventory.receive({ sku: "CABLE-KG-TEST", quantity: 3.75, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(Number(r.stock.stock_fisico), 3.75);
+});
+
 after(async () => {
   await pool.end();
 });

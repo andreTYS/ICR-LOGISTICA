@@ -116,7 +116,7 @@ async function buildCotizacionPdf(cotizacion) {
       money(it.precio_unitario),
       money(it.cantidad * it.precio_unitario),
     ]),
-    widths: [260, 70, 90, 90],
+    widths: [235, 70, 90, 90],
     alignRight: [1, 2, 3],
   });
 
@@ -141,7 +141,7 @@ async function buildContratoPdf(contrato) {
   renderTabla(doc, {
     headers: ["Hito", "Monto", "Fecha esperada", "Estado"],
     rows: contrato.hitos.map((h) => [h.descripcion, money(h.monto), fecha(h.fecha_esperada), h.estado]),
-    widths: [220, 90, 100, 100],
+    widths: [200, 85, 105, 100],
     alignRight: [1],
   });
 
@@ -166,7 +166,7 @@ async function buildRentabilidadPdf({ items, totales }, { estado } = {}) {
       p.margen != null ? money(p.margen) : "-",
       p.margen_pct != null ? `${p.margen_pct}%` : "-",
     ]),
-    widths: [65, 110, 90, 75, 70, 60, 55],
+    widths: [55, 95, 80, 70, 70, 65, 55],
     alignRight: [3, 4, 5, 6],
   });
 

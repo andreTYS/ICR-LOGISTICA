@@ -63,10 +63,15 @@ function renderTabla(doc, { headers, rows, widths, alignRight = [] }) {
   rows.forEach((row, idx) => drawRow(row, { bg: idx % 2 === 1 ? COLORS.zebra : null }));
 }
 
-// Línea de total, alineada a la derecha, debajo de una tabla
+// Línea de total, alineada a la derecha, debajo de una tabla. Recibe x/width
+// explícitos (no el cursor `doc.x` que deja renderTabla, apuntando a la
+// última columna) — si no, el texto queda encajado en un ancho angosto y
+// PDFKit lo parte letra por letra en una cascada vertical.
 function renderTotalLine(doc, label, value) {
   doc.moveDown(0.5);
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.navy).text(`${label}: ${value}`, { align: "right" });
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.navy).text(`${label}: ${value}`, x, doc.y, { width, align: "right" });
 }
 
 function renderPiePagina(doc) {

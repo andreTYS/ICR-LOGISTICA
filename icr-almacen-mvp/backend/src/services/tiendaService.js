@@ -1,7 +1,7 @@
 const { pool } = require("../db");
 const { AppError } = require("../errors");
 const {
-  withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow,
+  withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, requireIntegerIfUnidadDiscreta,
 } = require("./inventoryService");
 const contabilidad = require("./contabilidadService");
 
@@ -37,6 +37,7 @@ async function registrarVenta({ sku, warehouseCode, descripcion, cantidad, preci
     let movimientoId = null;
     if (sku) {
       const producto = await findProductBySku(client, sku);
+      requireIntegerIfUnidadDiscreta(producto, cantidad);
       const almacen = await findWarehouseByCode(client, warehouseCode);
       const stockRow = await lockOrCreateStockRow(client, producto.producto_id, almacen.almacen_id, null);
       if (Number(stockRow.stock_disponible) < Number(cantidad)) {
