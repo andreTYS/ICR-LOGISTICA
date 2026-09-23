@@ -111,7 +111,8 @@ INSERT INTO plan_cuentas (cuenta_id, codigo, nombre, tipo) VALUES
     ('70000000-0000-0000-0000-000000000005', '60', 'Compras', 'GASTO'),
     ('70000000-0000-0000-0000-000000000006', '69', 'Costo de ventas', 'GASTO'),
     ('70000000-0000-0000-0000-000000000007', '70', 'Ventas', 'INGRESO'),
-    ('70000000-0000-0000-0000-000000000008', '63', 'Gastos de servicios prestados por terceros', 'GASTO');
+    ('70000000-0000-0000-0000-000000000008', '63', 'Gastos de servicios prestados por terceros', 'GASTO'),
+    ('70000000-0000-0000-0000-000000000009', '71', 'Ingresos por venta de equipos (Tienda)', 'INGRESO');
 
 INSERT INTO parametros_fiscales (tipo, valor, vigente_desde, descripcion) VALUES
     ('IGV', 18.0000, '2024-01-01', 'Impuesto General a las Ventas — tasa general Perú'),
@@ -121,7 +122,8 @@ INSERT INTO reglas_imputacion (evento, cuenta_debe_id, cuenta_haber_id, descripc
     ('purchases.receive', '70000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000004', 'Recepción de mercadería comprada, pendiente de pago al proveedor'),
     ('sales.milestone_paid', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000007', 'Cobro de un hito de contrato de venta'),
     ('expenses.register', '70000000-0000-0000-0000-000000000008', '70000000-0000-0000-0000-000000000001', 'Registro de un gasto operativo'),
-    ('payables.invoice_paid', '70000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-000000000001', 'Pago de una factura de proveedor');
+    ('payables.invoice_paid', '70000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-000000000001', 'Pago de una factura de proveedor'),
+    ('store.sale.registered', '70000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000009', 'Venta directa de equipo registrada en Tienda');
 
 -- ---------- RRHH: ficha de empleado ligada a los usuarios técnicos/operativos ----------
 -- El costo_hora de acá es el que Proyectos sugiere al registrar mano de obra

@@ -76,6 +76,46 @@ async function registrarManoObra({ codigoProyecto, tecnicoId, fecha, horas, cost
   });
 }
 
+// Agrega una etapa de ejecución al plan de la obra (ej. "Diseño",
+// "Instalación estructura", "Pruebas"). `fechaPlanificada` es solo
+// referencial — un proyecto puede durar más o menos días de lo previsto y
+// eso no invalida el hito, solo se nota en la diferencia con fecha_real.
+async function crearHitoProyecto({ codigoProyecto, descripcion, orden, fechaPlanificada, usuarioId, canal }) {
+  if (!codigoProyecto || !descripcion) {
+    throw new AppError("SCHEMA_INVALID", "codigoProyecto y descripcion son obligatorios", 400);
+  }
+  return withAuditedTransaction("projects.update_status", usuarioId, canal, async (client) => {
+    const pr = await client.query("SELECT proyecto_id FROM proyectos WHERE codigo_proyecto=$1 AND activo=true", [codigoProyecto]);
+    if (pr.rows.length === 0) throw new AppError("PROJECT_NOT_FOUND", `Proyecto '${codigoProyecto}' no existe o está inactivo`, 404);
+    const r = await client.query(
+      `INSERT INTO proyecto_hitos (proyecto_id, descripcion, orden, fecha_planificada, registrado_por)
+       VALUES ($1,$2,COALESCE($3,1),$4,$5) RETURNING *`,
+      [pr.rows[0].proyecto_id, descripcion, orden || null, fechaPlanificada || null, usuarioId]
+    );
+    return { entidad: "proyecto_hitos", entidadId: r.rows[0].hito_id, valorNuevo: { codigoProyecto, descripcion }, hito: r.rows[0] };
+  });
+}
+
+// Marca el avance de un hito. Al pasar a COMPLETADO sin fechaReal explícita,
+// se toma la fecha de hoy — así, si la obra se extendió más días de los
+// planificados, fecha_real simplemente queda después de fecha_planificada
+// sin que nadie tenga que calcular nada a mano.
+async function actualizarHitoProyecto({ hitoId, estado, fechaReal, observaciones, usuarioId, canal }) {
+  const ESTADOS_HITO = ["PENDIENTE", "EN_PROCESO", "COMPLETADO"];
+  if (!hitoId || !ESTADOS_HITO.includes(estado)) {
+    throw new AppError("SCHEMA_INVALID", `hitoId es obligatorio y estado debe ser uno de: ${ESTADOS_HITO.join(", ")}`, 400);
+  }
+  return withAuditedTransaction("projects.update_status", usuarioId, canal, async (client) => {
+    const fecha = estado === "COMPLETADO" ? (fechaReal || new Date().toISOString().slice(0, 10)) : (fechaReal || null);
+    const r = await client.query(
+      `UPDATE proyecto_hitos SET estado=$1, fecha_real=$2, observaciones=COALESCE($3, observaciones) WHERE hito_id=$4 RETURNING *`,
+      [estado, fecha, observaciones || null, hitoId]
+    );
+    if (r.rows.length === 0) throw new AppError("MILESTONE_NOT_FOUND", `Hito '${hitoId}' no existe`, 404);
+    return { entidad: "proyecto_hitos", entidadId: hitoId, valorNuevo: { estado }, hito: r.rows[0] };
+  });
+}
+
 // -------------------- Consultas --------------------
 
 async function listProyectos({ estado, page, pageSize }) {
@@ -144,6 +184,14 @@ async function getProyecto(codigoProyecto) {
     [proyecto.proyecto_id]
   );
 
+  const hitosR = await pool.query(
+    `SELECT * FROM proyecto_hitos WHERE proyecto_id = $1 ORDER BY orden, created_at`,
+    [proyecto.proyecto_id]
+  );
+  const avancePct = hitosR.rows.length > 0
+    ? Math.round((hitosR.rows.filter((h) => h.estado === "COMPLETADO").length / hitosR.rows.length) * 100)
+    : null;
+
   const costoMateriales = materialesR.rows.reduce((sum, row) => sum + Number(row.subtotal), 0);
   const costoManoObra = manoObraR.rows.reduce((sum, row) => sum + Number(row.horas) * Number(row.costo_hora), 0);
   const costoGastos = gastosR.rows.reduce((sum, row) => sum + Number(row.monto), 0);
@@ -156,6 +204,8 @@ async function getProyecto(codigoProyecto) {
     materiales: materialesR.rows,
     mano_obra: manoObraR.rows,
     gastos: gastosR.rows,
+    hitos: hitosR.rows,
+    avance_pct: avancePct,
     costeo: {
       costo_materiales: costoMateriales,
       costo_mano_obra: costoManoObra,
@@ -262,6 +312,6 @@ async function getReporteRentabilidad({ estado } = {}) {
 }
 
 module.exports = {
-  crearProyecto, actualizarEstado, registrarManoObra,
+  crearProyecto, actualizarEstado, registrarManoObra, crearHitoProyecto, actualizarHitoProyecto,
   listProyectos, getProyecto, listTecnicos, crearCliente, listClientes, getReporteRentabilidad,
 };

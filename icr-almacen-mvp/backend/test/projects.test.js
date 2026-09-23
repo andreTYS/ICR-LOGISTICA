@@ -113,6 +113,53 @@ test("el reporte de rentabilidad calcula margen y margen% por proyecto en una so
   assert.ok(reporte.totales.costo_total >= Number(t03.costo_total), "el total agregado debe incluir al menos el costo de PROY-T03");
 });
 
+// -------------------- Hitos de ejecución (avance de obra) --------------------
+// Distinto de contrato_hitos (esos son de cobro): esto rastrea el progreso
+// físico de la instalación, que puede durar más o menos días de lo previsto.
+
+test("agregar hitos y completarlos calcula el % de avance", async () => {
+  await proyectos.crearProyecto({ codigoProyecto: "PROY-T06", nombre: "Con hitos", usuarioId: SUPERVISOR, canal: "web" });
+
+  const h1 = await proyectos.crearHitoProyecto({ codigoProyecto: "PROY-T06", descripcion: "Diseño", orden: 1, usuarioId: SUPERVISOR, canal: "web" });
+  await proyectos.crearHitoProyecto({ codigoProyecto: "PROY-T06", descripcion: "Instalación", orden: 2, usuarioId: SUPERVISOR, canal: "web" });
+  await proyectos.crearHitoProyecto({ codigoProyecto: "PROY-T06", descripcion: "Pruebas", orden: 3, usuarioId: SUPERVISOR, canal: "web" });
+
+  let detalle = await proyectos.getProyecto("PROY-T06");
+  assert.equal(detalle.hitos.length, 3);
+  assert.equal(detalle.avance_pct, 0);
+
+  await proyectos.actualizarHitoProyecto({ hitoId: h1.hito.hito_id, estado: "COMPLETADO", usuarioId: SUPERVISOR, canal: "web" });
+  detalle = await proyectos.getProyecto("PROY-T06");
+  assert.equal(detalle.avance_pct, 33, "1 de 3 completados redondea a 33%");
+  assert.ok(detalle.hitos.find((h) => h.hito_id === h1.hito.hito_id).fecha_real, "completar un hito sin fecha_real explícita usa hoy");
+});
+
+test("un proyecto sin hitos no tiene avance_pct (null, no 0 ni 100)", async () => {
+  await proyectos.crearProyecto({ codigoProyecto: "PROY-T07", nombre: "Sin hitos todavía", usuarioId: SUPERVISOR, canal: "web" });
+  const detalle = await proyectos.getProyecto("PROY-T07");
+  assert.equal(detalle.avance_pct, null);
+});
+
+test("crear un hito en un proyecto inexistente se rechaza", async () => {
+  await assert.rejects(
+    proyectos.crearHitoProyecto({ codigoProyecto: "PROY-NO-EXISTE", descripcion: "X", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "PROJECT_NOT_FOUND"
+  );
+});
+
+test("actualizar un hito inexistente o con estado inválido se rechaza", async () => {
+  await assert.rejects(
+    proyectos.actualizarHitoProyecto({ hitoId: "00000000-0000-0000-0000-000000009999", estado: "COMPLETADO", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "MILESTONE_NOT_FOUND"
+  );
+  await proyectos.crearProyecto({ codigoProyecto: "PROY-T08", nombre: "X", usuarioId: SUPERVISOR, canal: "web" });
+  const h = await proyectos.crearHitoProyecto({ codigoProyecto: "PROY-T08", descripcion: "Y", usuarioId: SUPERVISOR, canal: "web" });
+  await assert.rejects(
+    proyectos.actualizarHitoProyecto({ hitoId: h.hito.hito_id, estado: "NO_EXISTE", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

@@ -7,9 +7,16 @@ function crearDocumento() {
   return new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
 }
 
-function renderEncabezado(doc, { titulo, subtitulo }) {
-  doc.fillColor(COLORS.navy).font("Helvetica-Bold").fontSize(16).text("Inversiones ICR");
-  doc.fillColor(COLORS.text).fontSize(13).text(titulo);
+// `empresa` es opcional (viene de settingsService.getSettings().empresa):
+// mientras nadie complete "Datos de la empresa" en Administración →
+// Configuración, el encabezado se ve igual que siempre.
+function renderEncabezado(doc, { titulo, subtitulo, empresa }) {
+  doc.fillColor(COLORS.navy).font("Helvetica-Bold").fontSize(16).text(empresa?.razon_social || "Inversiones ICR");
+  if (empresa?.ruc || empresa?.direccion || empresa?.telefono) {
+    const linea = [empresa.ruc && `RUC ${empresa.ruc}`, empresa.direccion, empresa.telefono].filter(Boolean).join(" — ");
+    doc.font("Helvetica").fillColor(COLORS.muted).fontSize(8).text(linea);
+  }
+  doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(13).text(titulo);
   if (subtitulo) doc.font("Helvetica").fillColor(COLORS.muted).fontSize(10).text(subtitulo);
   doc.moveDown(0.5);
   doc.strokeColor(COLORS.line).moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();

@@ -172,6 +172,25 @@ CREATE TABLE proyecto_mano_obra (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Seguimiento de avance físico de la obra — distinto de `contrato_hitos`
+-- (esos son de cobro al cliente). Cada proyecto puede durar una cantidad de
+-- días distinta y sufrir extensiones: por eso `fecha_planificada` es solo
+-- una referencia y `fecha_real` se llena cuando el hito realmente se
+-- completa, sin exigir que coincidan. El % de avance del proyecto se
+-- calcula en la app como completados/total, no se guarda como columna.
+CREATE TABLE proyecto_hitos (
+    hito_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proyecto_id        UUID NOT NULL REFERENCES proyectos(proyecto_id) ON DELETE CASCADE,
+    descripcion        TEXT NOT NULL,
+    orden              INT NOT NULL DEFAULT 1,
+    fecha_planificada  DATE,
+    fecha_real         DATE,
+    estado             TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','EN_PROCESO','COMPLETADO')),
+    observaciones      TEXT,
+    registrado_por     UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- RRHH ----------
 -- Ficha de empleado (opcionalmente ligada a un usuario del sistema) y
 -- fichaje de asistencia. No es una planilla completa (PRD §4.2 la deja
@@ -473,6 +492,35 @@ CREATE TABLE comprobantes (
     registrado_por    UUID NOT NULL REFERENCES usuarios(usuario_id),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tipo, serie_numero)
+);
+
+-- ---------- TIENDA ----------
+-- Segunda fuente de ingresos, separada del ciclo Cotización -> Contrato de
+-- Proyectos: venta directa de un equipo (mostrador o entrega inmediata),
+-- sin cronograma de cobro ni obra asociada. producto_id/almacen_id son
+-- opcionales para permitir vender algo fuera de catálogo (servicio,
+-- accesorio suelto); cuando sí vienen, la venta descuenta stock real igual
+-- que un retiro de almacén (ver tiendaService.registrarVenta).
+CREATE SEQUENCE venta_tienda_numero_seq START 1;
+
+CREATE TABLE ventas_tienda (
+    venta_tienda_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo                    TEXT NOT NULL UNIQUE,
+    cliente_id                UUID REFERENCES clientes(cliente_id),
+    producto_id               UUID REFERENCES productos(producto_id),
+    almacen_id                UUID REFERENCES almacenes(almacen_id),
+    descripcion               TEXT NOT NULL,
+    cantidad                  NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    precio_unitario           NUMERIC(14,2) NOT NULL CHECK (precio_unitario >= 0),
+    monto_total               NUMERIC(14,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
+    moneda                    TEXT DEFAULT 'PEN',
+    fecha_venta               DATE NOT NULL DEFAULT CURRENT_DATE,
+    comprobante_tipo          TEXT CHECK (comprobante_tipo IN ('FACTURA','BOLETA','RECIBO')),
+    comprobante_serie_numero  TEXT,
+    movimiento_id             UUID REFERENCES movimientos(movimiento_id),
+    registrado_por            UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((producto_id IS NULL) = (almacen_id IS NULL))
 );
 
 -- ---------- COTIZACIONES ----------
@@ -932,6 +980,9 @@ CREATE INDEX idx_mano_obra_proyecto ON proyecto_mano_obra(proyecto_id);
 CREATE INDEX idx_movimientos_proyecto ON movimientos(proyecto_id);
 CREATE INDEX idx_prestamos_estado ON prestamos_herramientas(estado);
 CREATE INDEX idx_prestamos_proyecto ON prestamos_herramientas(proyecto_id);
+CREATE INDEX idx_proyecto_hitos_proyecto ON proyecto_hitos(proyecto_id);
+CREATE INDEX idx_ventas_tienda_fecha ON ventas_tienda(fecha_venta);
+CREATE INDEX idx_ventas_tienda_cliente ON ventas_tienda(cliente_id);
 CREATE INDEX idx_asiento_lineas_asiento ON asiento_lineas(asiento_id);
 CREATE INDEX idx_asientos_fecha ON asientos(fecha);
 CREATE INDEX idx_parametros_fiscales_tipo ON parametros_fiscales(tipo, vigente_desde);

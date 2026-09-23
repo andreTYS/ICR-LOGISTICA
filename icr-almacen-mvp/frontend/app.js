@@ -244,6 +244,7 @@ const titles = {
   "accounting-rules": ["Reglas de imputación", "Mapeo de eventos de negocio a cuentas debe/haber"],
   "accounting-fiscal": ["Parámetros fiscales", "Tasas versionadas por vigencia (IGV, UIT, detracción)"],
   "accounting-reports": ["Reportes financieros", "Estado de Resultados y Balance General a partir de los asientos contabilizados"],
+  "cash-flow": ["Flujo de Caja", "Dinero que entró (proyectos + tienda) y salió (gastos + pagos a proveedor), por semana o por mes"],
   "rrhh-employees": ["Empleados", "Fichas de personal: cargo, tipo de contrato y costo/hora"],
   "rrhh-attendance": ["Asistencia", "Marcación de entrada y salida por empleado"],
   crm: ["CRM / Leads", "Pipeline comercial: contactos y oportunidades antes de la primera cotización"],
@@ -252,6 +253,7 @@ const titles = {
   "sales-contracts": ["Contratos", "Contratos de venta con cronograma de cobro (hitos)"],
   "sales-receivables": ["Cuentas por cobrar", "Hitos de cobro pendientes y vencidos, por contrato"],
   expenses: ["Gastos", "Gastos operativos: combustible, viáticos, alquiler, servicios, reembolsos y más"],
+  store: ["Tienda", "Venta directa de equipos — segunda fuente de ingresos, separada de los contratos por proyecto"],
   assets: ["Activos instalados", "Equipos instalados en clientes, con garantía y ciclo de mantenimiento"],
   maintenance: ["Mantenimientos", "Mantenimientos preventivos y correctivos, de todos los activos"],
   warranties: ["Garantías por vencer", "Activos con garantía vencida o próxima a vencer"],
@@ -337,6 +339,7 @@ function goToView(view) {
   if (view === "accounting-rules") loadRules();
   if (view === "accounting-fiscal") loadFiscalParams();
   if (view === "accounting-reports") { loadIncomeStatement(); loadBalanceSheet(); }
+  if (view === "cash-flow") loadCashFlow();
   if (view === "rrhh-employees") loadEmployees();
   if (view === "rrhh-attendance") { loadEmployeeOptions(); loadAttendance(); }
   if (view === "crm") loadLeads(1);
@@ -345,6 +348,7 @@ function goToView(view) {
   if (view === "sales-contracts") loadContracts(1);
   if (view === "sales-receivables") loadReceivables();
   if (view === "expenses") loadExpenses(1);
+  if (view === "store") loadStoreSales(1);
   if (view === "assets") loadActivos(1);
   if (view === "maintenance") loadMantenimientos(1);
   if (view === "warranties") loadWarranties();
@@ -358,6 +362,7 @@ function goToView(view) {
   if (view === "integrations") loadIntegrationsStatus();
   if (view === "api-tokens") loadApiTokens();
   if (view === "n8n-webhooks") loadN8nWebhooks();
+  if (view === "settings") loadEmpresaSettings();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -999,6 +1004,11 @@ const HELP_TOPICS = {
     "Balance General: foto de Activo = Pasivo + Patrimonio a una fecha de corte.",
     "Ambos solo consideran asientos en estado CONTABILIZADO.",
   ] },
+  "cash-flow": { tips: [
+    "Es caja real (fecha en que el dinero entró o salió), no devengado — a diferencia de Estado de Resultados/Balance, que solo miran asientos CONTABILIZADO.",
+    "Ingresos: hitos de contrato ya cobrados (Proyectos) + ventas registradas en Tienda.",
+    "Egresos: gastos operativos + pagos ya hechos a proveedores (no lo pendiente por pagar).",
+  ] },
   "rrhh-employees": { tips: ["Ficha de cada empleado: cargo, tipo de contrato y costo/hora — este último se usa para costear mano de obra en Proyectos."] },
   "rrhh-attendance": { tips: ["Marca entrada y salida por empleado; las horas trabajadas se calculan solas al marcar salida."] },
   crm: { tips: [
@@ -1009,6 +1019,7 @@ const HELP_TOPICS = {
   "sales-contracts": { tips: ["Cada contrato tiene un cronograma de cobro (hitos); registrar el pago de un hito dispara el asiento contable automático."] },
   "sales-receivables": { tips: ["Vista consolidada de hitos de cobro pendientes o vencidos, de todos los contratos, para priorizar la cobranza."] },
   expenses: { tips: ["Registra gastos operativos; si vinculas un proyecto, el gasto entra al costeo real de esa obra."] },
+  store: { tips: ["Deja el SKU vacío para vender algo fuera de catálogo (servicio, accesorio suelto) sin tocar el inventario. Si pones un SKU, la venta descuenta stock real del almacén elegido."] },
   assets: { tips: ["Equipos instalados en clientes con garantía y ciclo de mantenimiento — haz clic en uno para ver su historial de mantenimientos."] },
   maintenance: { tips: ["Listado global de mantenimientos preventivos y correctivos de todos los activos, con su estado."] },
   warranties: { tips: ["Activos cuya garantía ya venció o está por vencer dentro de la ventana elegida — útil para avisar al cliente a tiempo."] },
@@ -1734,12 +1745,17 @@ async function loadAlerts() {
 // En error, muestra solo el mensaje en español ya curado por el backend —
 // nunca el código técnico (ej. "SCHEMA_INVALID") ni el JSON crudo, que no le
 // dice nada útil a alguien que no sea desarrollador.
+// El toast que sigue a cada llamado ya dice lo que pasó (incluyendo
+// cualquier código generado, ej. "Contrato CONT-00012 creado") — este
+// cuadro es solo la confirmación visual persistente, nunca el JSON crudo
+// de la respuesta (eso exponía nombres de campos internos y UUIDs al
+// usuario final).
 function renderResult(elId, response) {
   const el = document.getElementById(elId);
   const ok = response.status === "success";
   el.className = `result-box ${ok ? "ok" : "err"}`;
   el.innerHTML = ok
-    ? `<pre>${JSON.stringify(response, null, 2)}</pre>`
+    ? `<p>Listo, la operación se realizó correctamente.</p>`
     : `<p>${response.error?.message || "Ocurrió un error inesperado."}</p>`;
 }
 
@@ -2323,6 +2339,30 @@ async function openProjectModal(codigo) {
       : costeoCard("Presupuesto", "Sin definir", "text-slate-400"),
   ].join("");
 
+  const avanceLabel = document.getElementById("proj-avance-label");
+  const avanceBar = document.getElementById("proj-avance-bar");
+  const hitos = p.hitos || [];
+  if (hitos.length === 0) {
+    avanceLabel.textContent = "Sin etapas definidas todavía";
+    avanceBar.style.width = "0%";
+  } else {
+    const completados = hitos.filter((h) => h.estado === "COMPLETADO").length;
+    avanceLabel.textContent = `${p.avance_pct}% completado (${completados} de ${hitos.length} etapas)`;
+    avanceBar.style.width = `${p.avance_pct}%`;
+  }
+  const hitosBody = document.getElementById("proj-hitos-body");
+  hitosBody.innerHTML = hitos.length
+    ? hitos.map((h, i) => `<tr class="${TR}">
+        <td class="${TD}">${i + 1}</td><td class="${TD}">${h.descripcion}</td>
+        <td class="${TD}">${h.fecha_planificada ? new Date(h.fecha_planificada).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${h.fecha_real ? new Date(h.fecha_real).toLocaleDateString("es-PE") : "—"}</td>
+        <td class="${TD}">${badge(h.estado, h.estado === "COMPLETADO" ? "ok" : h.estado === "EN_PROCESO" ? "ajuste" : "devolucion")}</td>
+        <td class="${TD}">${h.estado !== "COMPLETADO" ? `
+          ${h.estado === "PENDIENTE" ? `<button class="btn-secondary px-2.5 py-1 text-xs mr-1.5" onclick="setHitoEstado('${h.hito_id}','EN_PROCESO')">En proceso</button>` : ""}
+          <button class="btn-primary px-2.5 py-1 text-xs" onclick="setHitoEstado('${h.hito_id}','COMPLETADO')">Completar</button>` : ""}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Todavía no hay etapas definidas para esta obra.", "inbox");
+
   const matBody = document.getElementById("proj-materials-body");
   matBody.innerHTML = (p.materiales || []).length
     ? p.materiales.map((m) => `<tr class="${TR}">
@@ -2361,6 +2401,27 @@ async function setProjectStatus(estado) {
   if (!confirm(`¿Confirmas ${labels[estado] || estado.toLowerCase()} el proyecto ${currentProjectCodigo}?`)) return;
   const r = await api(`/projects/${encodeURIComponent(currentProjectCodigo)}/status`, { method: "POST", body: JSON.stringify({ estado }) });
   if (r.status === "success") { toast(`Proyecto ${estado.toLowerCase()}`); openProjectModal(currentProjectCodigo); loadProjects(1); }
+  else toast(r.error.message, false);
+}
+
+document.getElementById("form-project-hito").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentProjectCodigo) return;
+  const f = new FormData(e.target);
+  const payload = { channel: "web", descripcion: f.get("descripcion"), fecha_planificada: f.get("fecha_planificada") || null };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api(`/projects/${encodeURIComponent(currentProjectCodigo)}/hitos`, { method: "POST", body: JSON.stringify(payload) });
+    if (r.status === "success") { toast("Etapa agregada"); e.target.reset(); openProjectModal(currentProjectCodigo); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function setHitoEstado(hitoId, estado) {
+  const r = await api(`/projects/hitos/${hitoId}`, { method: "PATCH", body: JSON.stringify({ channel: "web", estado }) });
+  if (r.status === "success") { toast(estado === "COMPLETADO" ? "Etapa completada" : "Etapa en proceso"); openProjectModal(currentProjectCodigo); }
   else toast(r.error.message, false);
 }
 
@@ -2700,6 +2761,54 @@ async function exportBalanceSheetPdf() {
   const corte = document.getElementById("balance-sheet-corte").value;
   const params = corte ? `?fecha_corte=${encodeURIComponent(corte)}` : "";
   await downloadPdf(`/accounting/reports/balance-sheet/pdf${params}`, "balance-general.pdf");
+}
+
+// -------- Flujo de Caja --------
+function fetchCashFlow() {
+  const agrupacion = document.getElementById("cash-flow-agrupacion").value;
+  const desde = document.getElementById("cash-flow-desde").value;
+  const hasta = document.getElementById("cash-flow-hasta").value;
+  const params = new URLSearchParams({ agrupacion });
+  if (desde) params.set("fecha_desde", desde);
+  if (hasta) params.set("fecha_hasta", hasta);
+  return api(`/accounting/reports/cash-flow?${params.toString()}`);
+}
+
+async function loadCashFlow() {
+  const body = document.getElementById("cash-flow-body");
+  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await fetchCashFlow();
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(8, r.error?.message || "Tu rol no tiene permiso para ver el flujo de caja.", "lock");
+    document.getElementById("cash-flow-cards").innerHTML = "";
+    return;
+  }
+  const d = r.data;
+  document.getElementById("cash-flow-cards").innerHTML = [
+    costeoCard("Total ingresos", `PEN ${money(d.totales.ingresos_total)}`, "text-emerald-600"),
+    costeoCard("Total egresos", `PEN ${money(d.totales.egresos_total)}`, "text-rose-600"),
+    costeoCard("Neto", `PEN ${money(d.totales.neto)}`, d.totales.neto >= 0 ? "text-navy-950" : "text-rose-600"),
+    costeoCard("Períodos", d.items.length, "text-slate-500"),
+  ].join("");
+  body.innerHTML = d.items.length
+    ? d.items.map((it) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(it.periodo).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}">${money(it.ingresos_proyectos)}</td><td class="${TD}">${money(it.ingresos_tienda)}</td>
+        <td class="${TD} font-semibold">${money(it.ingresos_total)}</td>
+        <td class="${TD}">${money(it.egresos_gastos)}</td><td class="${TD}">${money(it.egresos_compras)}</td>
+        <td class="${TD} font-semibold">${money(it.egresos_total)}</td>
+        <td class="${TD} font-semibold ${it.neto >= 0 ? "text-emerald-600" : "text-rose-600"}">${money(it.neto)}</td>
+      </tr>`).join("")
+    : emptyRow(8, "Sin movimientos de caja en el rango seleccionado.", "inbox");
+}
+
+async function exportCashFlowCsv() {
+  const r = await fetchCashFlow();
+  if (r.status !== "success") { toast(r.error?.message || "No se pudo exportar", false); return; }
+  downloadCsv("flujo-caja.csv",
+    ["Período", "Ingresos proyectos", "Ingresos tienda", "Total ingresos", "Gastos", "Compras pagadas", "Total egresos", "Neto"],
+    r.data.items.map((it) => [it.periodo, it.ingresos_proyectos, it.ingresos_tienda, it.ingresos_total, it.egresos_gastos, it.egresos_compras, it.egresos_total, it.neto])
+  );
 }
 
 // -------- Contabilidad: asientos --------
@@ -3595,6 +3704,53 @@ async function exportReceivablesXlsx() {
   );
 }
 
+// -------- Tienda (venta directa de equipos) --------
+document.getElementById("form-store-sale").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const sku = f.get("sku")?.trim();
+  const warehouseCode = f.get("warehouse_code");
+  if (!!sku !== !!warehouseCode) { toast("Si eliges un SKU, también elige el almacén (y viceversa)", false); return; }
+  const payload = {
+    channel: "web",
+    product: sku ? { sku } : null,
+    warehouse_code: warehouseCode || null,
+    descripcion: f.get("descripcion"),
+    cantidad: Number(f.get("cantidad")),
+    precio_unitario: Number(f.get("precio_unitario")),
+    cliente_ruc: f.get("cliente_ruc") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/store/sales", { method: "POST", body: JSON.stringify(payload) });
+    renderResult("store-sale-result", r);
+    if (r.status === "success") { toast(`Venta ${r.data.venta.codigo} registrada`); e.target.reset(); loadStoreSales(1); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+async function loadStoreSales(page = 1) {
+  const body = document.getElementById("store-sales-body");
+  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await api(`/store/sales?page=${page}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver ventas de tienda.", "lock");
+    return;
+  }
+  const items = r.data?.items || [];
+  body.innerHTML = items.length
+    ? items.map((v) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(v.fecha_venta).toLocaleDateString("es-PE")}</td><td class="${TD}">${v.codigo}</td>
+        <td class="${TD}">${v.descripcion}${v.sku ? ` (${v.sku})` : ""}</td><td class="${TD}">${v.cantidad}</td>
+        <td class="${TD}">S/ ${money(v.monto_total)}</td><td class="${TD}">${v.cliente_nombre || "—"}</td>
+        <td class="${TD}">${v.registrado_por_nombre}</td>
+      </tr>`).join("")
+    : emptyRow(7, "Sin ventas de tienda registradas.", "inbox");
+  renderPager("store-sales-pager", r.data || { total: 0 }, loadStoreSales);
+}
+
 // -------- Gastos --------
 const EXPENSE_CATEGORY_TONES = { COMBUSTIBLE: "transferencia", VIATICOS: "transferencia", ALQUILER: "ajuste", SERVICIOS: "ajuste", SOFTWARE: "transferencia", MANTENIMIENTO: "ajuste", HONORARIOS: "devolucion", REEMBOLSO: "pendiente", OTROS: "devolucion" };
 function expenseCategoryBadge(categoria) {
@@ -4312,6 +4468,37 @@ document.getElementById("form-logo").addEventListener("submit", async (e) => {
   try {
     const r = await uploadFile("/settings/logo", fd);
     if (r.status === "success") { toast("Logo actualizado"); applyLogo(r.data.logo_url); e.target.reset(); }
+    else toast(r.error.message, false);
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+// Precarga el formulario con lo ya guardado para que "Guardar" no borre
+// campos que el usuario no tocó en esta visita (setEmpresaInfo sí soporta
+// updates parciales, pero el formulario siempre manda los 4 campos).
+async function loadEmpresaSettings() {
+  const r = await api("/settings");
+  if (r.status !== "success") return;
+  const form = document.getElementById("form-empresa");
+  const empresa = r.data.empresa || {};
+  form.razon_social.value = empresa.razon_social || "";
+  form.ruc.value = empresa.ruc || "";
+  form.telefono.value = empresa.telefono || "";
+  form.direccion.value = empresa.direccion || "";
+}
+
+document.getElementById("form-empresa").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    razon_social: f.get("razon_social") || null, ruc: f.get("ruc") || null,
+    telefono: f.get("telefono") || null, direccion: f.get("direccion") || null,
+  };
+  setFormLoading(e.target, true);
+  try {
+    const r = await api("/settings/empresa", { method: "POST", body: JSON.stringify(payload) });
+    if (r.status === "success") toast("Datos de la empresa guardados");
     else toast(r.error.message, false);
   } finally {
     setFormLoading(e.target, false);
