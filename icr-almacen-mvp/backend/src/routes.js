@@ -277,6 +277,12 @@ router.post(
   })
 );
 
+router.post(
+  "/inventory/products/:sku/returnable",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.setProductRetornable(req.params.sku, req.body?.retornable))
+);
+
 // -------- Kits ("cajas de herramientas") --------
 
 router.post(
@@ -444,6 +450,24 @@ router.get(
   "/inventory/reservations",
   requirePermission("inventory.query"),
   handle(async (req) => inventory.getReservations({ estado: req.query.estado }))
+);
+
+// -------- Préstamos de herramientas --------
+
+router.post(
+  "/inventory/return_loan",
+  requirePermission("inventory.return_loan"),
+  handle(async (req) => inventory.returnLoan({
+    prestamoId: req.body?.prestamo_id,
+    usuarioId: req.user.usuario_id,
+    canal: req.body?.channel || "web",
+  }))
+);
+
+router.get(
+  "/inventory/loans",
+  requirePermission("inventory.query"),
+  handle(async (req) => inventory.getLoans({ estado: req.query.estado }))
 );
 
 // -------- Ajustes con aprobación --------

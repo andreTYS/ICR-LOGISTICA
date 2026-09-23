@@ -254,6 +254,7 @@ const titles = {
   maintenance: ["Mantenimientos", "Mantenimientos preventivos y correctivos, de todos los activos"],
   warranties: ["Garantías por vencer", "Activos con garantía vencida o próxima a vencer"],
   reservations: ["Reservas", "Stock apartado para proyectos o clientes"],
+  "tool-loans": ["Préstamos de herramientas", "Herramientas y equipos que salieron a obra y deben volver al almacén"],
   adjustments: ["Ajustes de inventario", "Conteos físicos pendientes de aprobación de un supervisor"],
   audit: ["Auditoría", "Registro de todas las acciones ejecutadas sobre el inventario"],
   users: ["Usuarios", "Altas y roles de acceso al panel (solo administradores)"],
@@ -345,6 +346,7 @@ function goToView(view) {
   if (view === "maintenance") loadMantenimientos(1);
   if (view === "warranties") loadWarranties();
   if (view === "reservations") loadReservations();
+  if (view === "tool-loans") loadLoans();
   if (view === "adjustments") loadAdjustments();
   if (view === "audit") loadAuditLog();
   if (view === "users") loadUsers();
@@ -750,6 +752,7 @@ const HELP_TOPICS = {
   maintenance: { tips: ["Listado global de mantenimientos preventivos y correctivos de todos los activos, con su estado."] },
   warranties: { tips: ["Activos cuya garantía ya venció o está por vencer dentro de la ventana elegida — útil para avisar al cliente a tiempo."] },
   reservations: { tips: ["Aparta stock para un proyecto o cliente sin descontarlo todavía del inventario disponible. Cuando el material efectivamente sale rumbo a obra, usa \"Despachar a obra\" (puedes hacerlo en varios viajes); \"Liberar\" es solo para cancelar sin que nada haya salido."] },
+  "tool-loans": { tips: ["Un producto marcado como \"retornable\" (herramientas, equipos, cajas) genera aquí un préstamo automáticamente cada vez que sale del almacén — a diferencia de un material que se instala para siempre. Registra el retorno cuando vuelva de la obra para reponer el stock físico."] },
   adjustments: { tips: ["Un conteo físico que no cuadra con el sistema queda pendiente hasta que un supervisor lo apruebe."] },
   audit: { tips: ["Registro de solo lectura de toda acción ejecutada sobre el inventario — quién, qué y cuándo."] },
   users: { tips: ["Alta de usuarios y asignación de rol — el rol determina qué puede hacer cada quien (ver Roles y permisos)."] },
@@ -1310,6 +1313,7 @@ document.getElementById("form-product").addEventListener("submit", async (e) => 
   const payload = Object.fromEntries(f.entries());
   payload.stock_minimo = Number(payload.stock_minimo || 0);
   payload.punto_reorden = Number(payload.punto_reorden || 0);
+  payload.retornable = f.get("retornable") === "on";
   setFormLoading(e.target, true);
   try {
     const r = await api("/inventory/product", { method: "POST", body: JSON.stringify(payload) });
@@ -1337,7 +1341,7 @@ async function loadProducts(page = 1) {
   body.innerHTML = items.length
     ? items.map((p) => `<tr class="${TR} row-clickable" onclick="openKardex('${p.sku}')" title="Ver Kardex de ${p.sku}">
       <td class="${TD}">${productThumbHtml(p)}</td>
-      <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
+      <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}${p.retornable ? ` ${badge("RETORNABLE", "ok")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
       <td class="${TD}"><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">Subir foto</button></td>
     </tr>`).join("")
@@ -3651,6 +3655,40 @@ async function dispatchReservationAction(reservaId, cantidadReservada) {
     toast(r.data.reserva_restante > 0 ? `Despachado. Queda reservado: ${r.data.reserva_restante}` : "Despachado en su totalidad");
     loadReservations();
   } else toast(r.error.message, false);
+}
+
+// -------- Préstamos de herramientas --------
+async function loadLoans() {
+  const body = document.getElementById("loans-body");
+  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const estado = document.getElementById("loans-estado-filter").value;
+  const r = await api(`/inventory/loans${estado ? `?estado=${estado}` : ""}`);
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(8, r.error?.message || "Tu rol no tiene permiso para ver préstamos.", "lock");
+    return;
+  }
+  const items = r.data || [];
+  body.innerHTML = items.length
+    ? items.map((p) => {
+        const destino = p.codigo_proyecto
+          ? `${p.codigo_proyecto}${p.proyecto_nombre ? ` — ${p.proyecto_nombre}` : ""}`
+          : (p.cliente_nombre || "—");
+        return `<tr class="${TR}">
+        <td class="${TD}">${new Date(p.fecha_prestamo).toLocaleString("es-PE")}</td>
+        <td class="${TD}">${p.sku}</td><td class="${TD}">${p.almacen_codigo}</td>
+        <td class="${TD}">${p.cantidad}</td><td class="${TD}">${destino}</td><td class="${TD}">${p.solicitante}</td>
+        <td class="${TD}">${badge(p.estado, p.estado === "PRESTADO" ? "ajuste" : "ok")}</td>
+        <td class="${TD}">${p.estado === "PRESTADO" ? `<button class="btn-primary px-3 py-1.5 text-xs" onclick="returnLoanAction('${p.prestamo_id}')">Registrar retorno</button>` : ""}</td>
+      </tr>`;
+      }).join("")
+    : emptyRow(8, "Sin préstamos registrados.", "inbox");
+}
+
+async function returnLoanAction(prestamoId) {
+  if (!confirm("¿Confirmar que esta herramienta/equipo volvió al almacén? Esto repone el stock físico.")) return;
+  const r = await api("/inventory/return_loan", { method: "POST", body: JSON.stringify({ prestamo_id: prestamoId }) });
+  if (r.status === "success") { toast("Retorno registrado"); loadLoans(); }
+  else toast(r.error.message, false);
 }
 
 // -------- Ajustes --------

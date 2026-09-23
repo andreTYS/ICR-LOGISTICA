@@ -217,6 +217,13 @@ CREATE TABLE productos (
     costo_unitario  NUMERIC(14,2) DEFAULT 0,
     imagen_url      TEXT,
     es_kit          BOOLEAN NOT NULL DEFAULT false,
+    -- Herramientas, equipos y cajas ("cajas de herramientas") que se prestan
+    -- para un trabajo y deben volver al almacén, a diferencia de un material
+    -- normal (paneles, cables, baterías) que se consume/instala para
+    -- siempre. Cuando es true, cada SALIDA de este producto (directa o vía
+    -- despacho de una reserva) registra automáticamente un préstamo en
+    -- `prestamos_herramientas` — ver inventoryService.remove/dispatchReservation.
+    retornable      BOOLEAN NOT NULL DEFAULT false,
     activo          BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -338,6 +345,28 @@ CREATE TABLE movimientos (
     serie_id              UUID REFERENCES series(serie_id),
     usuario_id            UUID NOT NULL REFERENCES usuarios(usuario_id),
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Préstamo de una herramienta/equipo/caja (producto con `retornable = true`)
+-- a un proyecto: se crea automáticamente cuando ese producto sale del
+-- almacén (inventory.remove o inventory.dispatch_reservation) y se cierra
+-- con inventory.return_loan, que genera el movimiento DEVOLUCION y repone
+-- stock_fisico. A diferencia de `reservas` (aparta stock disponible antes
+-- de salir), esto rastrea stock que ya salió físicamente y tiene que volver.
+CREATE TABLE prestamos_herramientas (
+    prestamo_id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    producto_id              UUID NOT NULL REFERENCES productos(producto_id),
+    cantidad                 NUMERIC(14,2) NOT NULL CHECK (cantidad > 0),
+    almacen_id               UUID NOT NULL REFERENCES almacenes(almacen_id),
+    ubicacion_id             UUID REFERENCES ubicaciones(ubicacion_id),
+    proyecto_id              UUID REFERENCES proyectos(proyecto_id),
+    cliente_id               UUID REFERENCES clientes(cliente_id),
+    usuario_id               UUID NOT NULL REFERENCES usuarios(usuario_id),
+    movimiento_salida_id     UUID NOT NULL REFERENCES movimientos(movimiento_id),
+    movimiento_devolucion_id UUID REFERENCES movimientos(movimiento_id),
+    estado                   TEXT NOT NULL DEFAULT 'PRESTADO' CHECK (estado IN ('PRESTADO','DEVUELTO')),
+    fecha_prestamo           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    fecha_devolucion         TIMESTAMPTZ
 );
 
 -- ---------- COMPRAS ----------
@@ -901,6 +930,8 @@ CREATE INDEX idx_oc_items_orden ON orden_compra_items(orden_compra_id);
 CREATE INDEX idx_recepcion_items_recepcion ON recepcion_items(recepcion_id);
 CREATE INDEX idx_mano_obra_proyecto ON proyecto_mano_obra(proyecto_id);
 CREATE INDEX idx_movimientos_proyecto ON movimientos(proyecto_id);
+CREATE INDEX idx_prestamos_estado ON prestamos_herramientas(estado);
+CREATE INDEX idx_prestamos_proyecto ON prestamos_herramientas(proyecto_id);
 CREATE INDEX idx_asiento_lineas_asiento ON asiento_lineas(asiento_id);
 CREATE INDEX idx_asientos_fecha ON asientos(fecha);
 CREATE INDEX idx_parametros_fiscales_tipo ON parametros_fiscales(tipo, vigente_desde);

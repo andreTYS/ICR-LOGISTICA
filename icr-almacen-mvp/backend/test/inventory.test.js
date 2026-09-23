@@ -174,6 +174,81 @@ test("despachar una reserva inexistente se rechaza", async () => {
   );
 });
 
+// -------------------- Préstamos de herramientas --------------------
+// Una herramienta/caja "retornable" debe volver al almacén, a diferencia de
+// un material que se consume/instala para siempre — cada SALIDA de un
+// producto retornable (directa o vía despacho de reserva) registra
+// automáticamente un préstamo; devolverlo repone stock_fisico.
+
+test("retirar un producto retornable registra un préstamo PRESTADO; uno normal no registra nada", async () => {
+  await inventory.createProduct({ sku: "TALADRO-01", nombre: "Taladro percutor", tipo_control: "NORMAL", retornable: true });
+  await inventory.receive({ sku: "TALADRO-01", quantity: 3, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+
+  const r = await inventory.remove({
+    sku: "TALADRO-01", quantity: 1, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: ALMACENERO, canal: "web",
+  });
+  assert.ok(r.prestamo_id, "una SALIDA de un producto retornable debe crear un préstamo");
+
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  const prestamo = prestamos.find((p) => p.prestamo_id === r.prestamo_id);
+  assert.equal(prestamo.sku, "TALADRO-01");
+  assert.equal(prestamo.codigo_proyecto, "PROY-001");
+
+  // Un material normal (no retornable) no debe dejar rastro en préstamos
+  const rNormal = await inventory.remove({ sku: "PANEL-JA-550", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(rNormal.prestamo_id, null);
+});
+
+test("despachar una reserva de un producto retornable también registra el préstamo", async () => {
+  const created = await inventory.reserve({
+    sku: "TALADRO-01", quantity: 1, warehouseCode: "ALM-001", proyectoCodigo: "PROY-001", usuarioId: VENTAS, canal: "web",
+  });
+  const r = await inventory.dispatchReservation({ reservaId: created.reserva_id, usuarioId: ALMACENERO, canal: "web" });
+  assert.ok(r.prestamo_id);
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  assert.ok(prestamos.some((p) => p.prestamo_id === r.prestamo_id));
+});
+
+test("devolver un préstamo repone stock_fisico y lo marca DEVUELTO", async () => {
+  const antes = await stockOf("TALADRO-01", "ALM-001");
+  const prestamos = await inventory.getLoans({ estado: "PRESTADO" });
+  const prestamo = prestamos.find((p) => p.sku === "TALADRO-01");
+
+  const r = await inventory.returnLoan({ prestamoId: prestamo.prestamo_id, usuarioId: ALMACENERO, canal: "web" });
+  const despues = await stockOf("TALADRO-01", "ALM-001");
+  assert.equal(Number(despues.stock_fisico), Number(antes.stock_fisico) + Number(prestamo.cantidad));
+
+  const movimiento = await pool.query("SELECT tipo_movimiento FROM movimientos WHERE movimiento_id=$1", [r.movimiento_id]);
+  assert.equal(movimiento.rows[0].tipo_movimiento, "DEVOLUCION");
+
+  const cerrados = await inventory.getLoans({ estado: "DEVUELTO" });
+  assert.ok(cerrados.some((p) => p.prestamo_id === prestamo.prestamo_id));
+});
+
+test("devolver un préstamo ya devuelto o inexistente se rechaza", async () => {
+  const prestamos = await inventory.getLoans({ estado: "DEVUELTO" });
+  await assert.rejects(
+    inventory.returnLoan({ prestamoId: prestamos[0].prestamo_id, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "LOAN_NOT_ACTIVE"
+  );
+  await assert.rejects(
+    inventory.returnLoan({ prestamoId: "00000000-0000-0000-0000-000000009999", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "LOAN_NOT_FOUND"
+  );
+});
+
+test("setProductRetornable alterna el flag y se refleja en la próxima SALIDA", async () => {
+  await inventory.createProduct({ sku: "MULTIMETRO-01", nombre: "Multímetro digital", tipo_control: "NORMAL" });
+  await inventory.receive({ sku: "MULTIMETRO-01", quantity: 2, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+
+  const r1 = await inventory.remove({ sku: "MULTIMETRO-01", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.equal(r1.prestamo_id, null, "todavía no es retornable");
+
+  await inventory.setProductRetornable("MULTIMETRO-01", true);
+  const r2 = await inventory.remove({ sku: "MULTIMETRO-01", quantity: 1, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  assert.ok(r2.prestamo_id, "ahora sí debe generar préstamo");
+});
+
 // -------------------- Ajustes con aprobación --------------------
 
 test("un ajuste queda PENDIENTE y no toca el stock hasta que se aprueba", async () => {

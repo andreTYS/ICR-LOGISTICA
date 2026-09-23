@@ -68,6 +68,20 @@ async function maybeCreateLowStockAlert(client, productoId, almacenId, stockDisp
   return true;
 }
 
+// Si el producto es retornable (herramienta/equipo/caja que debe volver),
+// registra el préstamo asociado al movimiento SALIDA que lo sacó del
+// almacén. Compartido por inventory.remove y inventory.dispatch_reservation
+// — un material normal (retornable=false) no genera ninguna fila acá.
+async function maybeCreateLoan(client, { producto, cantidad, almacenId, ubicacionId, proyectoId, clienteId, usuarioId, movimientoSalidaId }) {
+  if (!producto.retornable) return null;
+  const r = await client.query(
+    `INSERT INTO prestamos_herramientas (producto_id, cantidad, almacen_id, ubicacion_id, proyecto_id, cliente_id, usuario_id, movimiento_salida_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING prestamo_id`,
+    [producto.producto_id, cantidad, almacenId, ubicacionId, proyectoId, clienteId, usuarioId, movimientoSalidaId]
+  );
+  return r.rows[0].prestamo_id;
+}
+
 // Busca un documento existente (tipo+número) o lo crea. Compartido por
 // inventory.receive y el flujo de recepción de compras.
 async function findOrCreateDocumento(client, documento) {
@@ -236,6 +250,11 @@ async function remove({ sku, quantity, warehouseCode, locationCode, proyectoCodi
       client, producto.producto_id, almacen.almacen_id, stockR.rows[0].stock_disponible, producto.punto_reorden
     );
 
+    const prestamoId = await maybeCreateLoan(client, {
+      producto, cantidad: quantity, almacenId: almacen.almacen_id, ubicacionId: ubicacion?.ubicacion_id || null,
+      proyectoId, clienteId, usuarioId, movimientoSalidaId: movR.rows[0].movimiento_id,
+    });
+
     return {
       entidad: "movimientos",
       entidadId: movR.rows[0].movimiento_id,
@@ -244,6 +263,7 @@ async function remove({ sku, quantity, warehouseCode, locationCode, proyectoCodi
       movimiento_id: movR.rows[0].movimiento_id,
       stock: stockR.rows[0],
       alerta_generada: alertaGenerada,
+      prestamo_id: prestamoId,
     };
   });
 }
@@ -349,15 +369,27 @@ async function searchProducts({ query, page, pageSize }) {
 }
 
 async function createProduct(data) {
-  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario } = data;
+  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, retornable } = data;
   if (!sku || !nombre || !tipo_control) {
     throw new AppError("SCHEMA_INVALID", "sku, nombre y tipo_control son obligatorios", 400);
   }
   const r = await pool.query(
-    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario)
-     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10) RETURNING *`,
-    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0]
+    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, retornable)
+     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10,$11) RETURNING *`,
+    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0, retornable === true || retornable === "true"]
   );
+  return r.rows[0];
+}
+
+// Alterna si un producto es retornable (herramienta/equipo/caja que debe
+// volver al almacén) — mismo criterio granular que setProductPhoto en vez
+// de un PATCH genérico de producto, que no existe en este servicio.
+async function setProductRetornable(sku, retornable) {
+  const r = await pool.query(
+    "UPDATE productos SET retornable=$1 WHERE sku=$2 AND activo=true RETURNING *",
+    [!!retornable, sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
   return r.rows[0];
 }
 
@@ -774,10 +806,16 @@ async function dispatchReservation({ reservaId, cantidad, documento, usuarioId, 
       await client.query("UPDATE reservas SET estado='CONSUMIDA' WHERE reserva_id=$1", [reservaId]);
     }
 
-    const productoR = await client.query("SELECT punto_reorden FROM productos WHERE producto_id=$1", [reserva.producto_id]);
+    const productoR = await client.query("SELECT * FROM productos WHERE producto_id=$1", [reserva.producto_id]);
+    const producto = productoR.rows[0];
     const alertaGenerada = await maybeCreateLowStockAlert(
-      client, reserva.producto_id, reserva.almacen_id, stockR.rows[0].stock_disponible, productoR.rows[0].punto_reorden
+      client, reserva.producto_id, reserva.almacen_id, stockR.rows[0].stock_disponible, producto.punto_reorden
     );
+
+    const prestamoId = await maybeCreateLoan(client, {
+      producto, cantidad: cantidadDespacho, almacenId: reserva.almacen_id, ubicacionId: reserva.ubicacion_id,
+      proyectoId: reserva.proyecto_id, clienteId: reserva.cliente_id, usuarioId, movimientoSalidaId: movR.rows[0].movimiento_id,
+    });
 
     return {
       entidad: "reservas",
@@ -788,6 +826,7 @@ async function dispatchReservation({ reservaId, cantidad, documento, usuarioId, 
       stock: stockR.rows[0],
       reserva_restante: restante,
       alerta_generada: alertaGenerada,
+      prestamo_id: prestamoId,
     };
   });
 }
@@ -807,6 +846,72 @@ async function getReservations({ estado }) {
      LEFT JOIN clientes cl ON cl.cliente_id = r.cliente_id
      ${where}
      ORDER BY r.fecha_reserva DESC LIMIT 200`,
+    params
+  );
+  return res.rows;
+}
+
+// -------------------- Préstamos de herramientas --------------------
+
+// Cierra un préstamo: genera el movimiento DEVOLUCION y repone stock_fisico
+// en el almacén/ubicación de donde había salido. No hay devolución parcial
+// a propósito — una caja de herramientas no se reparte, vuelve completa o
+// sigue prestada.
+async function returnLoan({ prestamoId, usuarioId, canal }) {
+  if (!prestamoId) throw new AppError("SCHEMA_INVALID", "prestamoId es obligatorio", 400);
+  return withAuditedTransaction("inventory.return_loan", usuarioId, canal, async (client) => {
+    const r = await client.query("SELECT * FROM prestamos_herramientas WHERE prestamo_id=$1 FOR UPDATE", [prestamoId]);
+    if (r.rows.length === 0) throw new AppError("LOAN_NOT_FOUND", `Préstamo '${prestamoId}' no existe`, 404);
+    const prestamo = r.rows[0];
+    if (prestamo.estado !== "PRESTADO") {
+      throw new AppError("LOAN_NOT_ACTIVE", `El préstamo ya está en estado '${prestamo.estado}'`, 409);
+    }
+
+    const movR = await client.query(
+      `INSERT INTO movimientos (tipo_movimiento, producto_id, cantidad, almacen_destino_id, ubicacion_destino_id, proyecto_id, cliente_id, usuario_id)
+       VALUES ('DEVOLUCION',$1,$2,$3,$4,$5,$6,$7) RETURNING movimiento_id, transaction_id`,
+      [prestamo.producto_id, prestamo.cantidad, prestamo.almacen_id, prestamo.ubicacion_id, prestamo.proyecto_id, prestamo.cliente_id, usuarioId]
+    );
+
+    await lockOrCreateStockRow(client, prestamo.producto_id, prestamo.almacen_id, prestamo.ubicacion_id);
+    const stockR = await client.query(
+      `UPDATE stock SET stock_fisico = stock_fisico + $1, updated_at = now()
+       WHERE producto_id=$2 AND almacen_id=$3 AND ubicacion_id IS NOT DISTINCT FROM $4
+       RETURNING stock_fisico, stock_disponible`,
+      [prestamo.cantidad, prestamo.producto_id, prestamo.almacen_id, prestamo.ubicacion_id]
+    );
+
+    await client.query(
+      "UPDATE prestamos_herramientas SET estado='DEVUELTO', movimiento_devolucion_id=$1, fecha_devolucion=now() WHERE prestamo_id=$2",
+      [movR.rows[0].movimiento_id, prestamoId]
+    );
+
+    return {
+      entidad: "prestamos_herramientas",
+      entidadId: prestamoId,
+      transactionId: movR.rows[0].transaction_id,
+      valorNuevo: { estado: "DEVUELTO" },
+      movimiento_id: movR.rows[0].movimiento_id,
+      stock: stockR.rows[0],
+    };
+  });
+}
+
+async function getLoans({ estado }) {
+  const params = [];
+  let where = "";
+  if (estado) { params.push(estado); where = "WHERE pr.estado = $1"; }
+  const res = await pool.query(
+    `SELECT pr.*, p.sku, p.nombre AS producto_nombre, a.codigo AS almacen_codigo, u.nombre_completo AS solicitante,
+            proy.codigo_proyecto, proy.nombre AS proyecto_nombre, cl.razon_social AS cliente_nombre
+     FROM prestamos_herramientas pr
+     JOIN productos p ON p.producto_id = pr.producto_id
+     JOIN almacenes a ON a.almacen_id = pr.almacen_id
+     JOIN usuarios u ON u.usuario_id = pr.usuario_id
+     LEFT JOIN proyectos proy ON proy.proyecto_id = pr.proyecto_id
+     LEFT JOIN clientes cl ON cl.cliente_id = pr.cliente_id
+     ${where}
+     ORDER BY pr.fecha_prestamo DESC LIMIT 200`,
     params
   );
   return res.rows;
@@ -907,9 +1012,10 @@ module.exports = {
   getStock, searchProducts, createProduct, importProductsCsv, getMovements, getAlerts, listWarehouses,
   listWarehousesManaged, crearAlmacen, actualizarAlmacen, crearUbicacion, actualizarUbicacion,
   reserve, releaseReservation, dispatchReservation, getReservations,
+  returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
 };
