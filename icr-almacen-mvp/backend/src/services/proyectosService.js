@@ -21,7 +21,7 @@ async function crearProyecto({ codigoProyecto, nombre, clienteRuc, responsableId
     if (clienteRuc) {
       // clienteRuc acepta RUC o DNI indistintamente — un cliente persona
       // natural sin RUC se identifica solo por DNI.
-      const r = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1) AND activo=true", [clienteRuc]);
+      const r = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1 OR LOWER(razon_social)=LOWER($1)) AND activo=true", [clienteRuc]);
       if (r.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
       clienteId = r.rows[0].cliente_id;
     }

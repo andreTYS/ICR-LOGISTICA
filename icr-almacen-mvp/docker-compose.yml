@@ -60,5 +60,6 @@ networks:
   icr_internal:
     external: true
   traefik_public:
+    name: n8n_default
     external: true
     # Debe coincidir con el nombre de la red externa que ya usa Traefik en el VPS
