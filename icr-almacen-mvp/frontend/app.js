@@ -1745,12 +1745,17 @@ async function loadAlerts() {
 // En error, muestra solo el mensaje en español ya curado por el backend —
 // nunca el código técnico (ej. "SCHEMA_INVALID") ni el JSON crudo, que no le
 // dice nada útil a alguien que no sea desarrollador.
+// El toast que sigue a cada llamado ya dice lo que pasó (incluyendo
+// cualquier código generado, ej. "Contrato CONT-00012 creado") — este
+// cuadro es solo la confirmación visual persistente, nunca el JSON crudo
+// de la respuesta (eso exponía nombres de campos internos y UUIDs al
+// usuario final).
 function renderResult(elId, response) {
   const el = document.getElementById(elId);
   const ok = response.status === "success";
   el.className = `result-box ${ok ? "ok" : "err"}`;
   el.innerHTML = ok
-    ? `<pre>${JSON.stringify(response, null, 2)}</pre>`
+    ? `<p>Listo, la operación se realizó correctamente.</p>`
     : `<p>${response.error?.message || "Ocurrió un error inesperado."}</p>`;
 }
 
