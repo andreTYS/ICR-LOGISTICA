@@ -32,7 +32,7 @@ const navIcons = require("./services/navIconsService");
 const xlsxService = require("./services/xlsxService");
 const reportesPdf = require("./services/reportesPdfService");
 const rucService = require("./services/rucService");
-const { AppError } = require("./errors");
+const { AppError, translatePgError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
 
 // Máximo 10 intentos de login por IP cada 15 minutos, para frenar fuerza bruta
@@ -52,12 +52,13 @@ function handle(fn) {
       const data = await fn(req);
       res.json({ request_id: requestId, status: "success", data, error: null });
     } catch (err) {
-      if (err instanceof AppError) {
-        res.status(err.status).json({
+      const translated = err instanceof AppError ? err : translatePgError(err);
+      if (translated) {
+        res.status(translated.status).json({
           request_id: requestId,
           status: "error",
           data: null,
-          error: { code: err.code, message: err.message, details: err.details },
+          error: { code: translated.code, message: translated.message, details: translated.details },
         });
       } else {
         console.error(err);
@@ -1603,8 +1604,9 @@ router.use((err, req, res, next) => {
     const message = err.code === "LIMIT_FILE_SIZE" ? "El archivo supera el tamaño máximo permitido (3MB)" : err.message;
     return res.status(400).json({ status: "error", data: null, error: { code: "UPLOAD_ERROR", message } });
   }
-  if (err instanceof AppError) {
-    return res.status(err.status).json({ status: "error", data: null, error: { code: err.code, message: err.message, details: err.details } });
+  const translated = err instanceof AppError ? err : translatePgError(err);
+  if (translated) {
+    return res.status(translated.status).json({ status: "error", data: null, error: { code: translated.code, message: translated.message, details: translated.details } });
   }
   console.error(err);
   res.status(500).json({ status: "error", data: null, error: { code: "INTERNAL_ERROR", message: "Error interno del servidor" } });

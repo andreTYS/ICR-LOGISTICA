@@ -40,9 +40,18 @@ async function crearContrato({ codigoContrato, clienteRuc, proyectoCodigo, monto
     );
     const contrato = r.rows[0];
 
+    let totalHitos = 0;
     for (const [i, h] of (hitos || []).entries()) {
       if (!h.descripcion || !h.monto || h.monto <= 0) {
         throw new AppError("SCHEMA_INVALID", "cada hito requiere descripcion y monto (>0)", 400);
+      }
+      totalHitos += Number(h.monto);
+      if (totalHitos > Number(montoTotal)) {
+        throw new AppError(
+          "MILESTONE_EXCEEDS_TOTAL",
+          `La suma de los hitos (${totalHitos}) supera el monto total del contrato (${montoTotal})`,
+          400
+        );
       }
       await client.query(
         `INSERT INTO contrato_hitos (contrato_id, descripcion, monto, fecha_esperada, orden) VALUES ($1,$2,$3,$4,$5)`,
@@ -59,10 +68,22 @@ async function agregarHito({ codigoContrato, descripcion, monto, fechaEsperada, 
     throw new AppError("SCHEMA_INVALID", "codigoContrato, descripcion y monto (>0) son obligatorios", 400);
   }
   return withAuditedTransaction("sales.milestone.add", usuarioId, canal, async (client) => {
-    const cont = await client.query("SELECT contrato_id, estado FROM contratos WHERE codigo_contrato=$1", [codigoContrato]);
+    const cont = await client.query("SELECT contrato_id, estado, monto_total FROM contratos WHERE codigo_contrato=$1", [codigoContrato]);
     if (cont.rows.length === 0) throw new AppError("CONTRACT_NOT_FOUND", `Contrato '${codigoContrato}' no existe`, 404);
     if (cont.rows[0].estado === "CANCELADO" || cont.rows[0].estado === "FINALIZADO") {
       throw new AppError("CONTRACT_NOT_ACTIVE", `El contrato '${codigoContrato}' está ${cont.rows[0].estado.toLowerCase()}, no admite nuevos hitos`, 400);
+    }
+    const sumaR = await client.query(
+      "SELECT COALESCE(SUM(monto),0) AS total FROM contrato_hitos WHERE contrato_id=$1 AND estado <> 'ANULADO'",
+      [cont.rows[0].contrato_id]
+    );
+    const nuevoTotal = Number(sumaR.rows[0].total) + Number(monto);
+    if (nuevoTotal > Number(cont.rows[0].monto_total)) {
+      throw new AppError(
+        "MILESTONE_EXCEEDS_TOTAL",
+        `Este hito dejaría los hitos del contrato en ${nuevoTotal}, por encima del monto total (${cont.rows[0].monto_total})`,
+        400
+      );
     }
     const ordenR = await client.query("SELECT COALESCE(MAX(orden),0) + 1 AS siguiente FROM contrato_hitos WHERE contrato_id=$1", [cont.rows[0].contrato_id]);
     const r = await client.query(
@@ -98,6 +119,13 @@ async function registrarPagoHito({ codigoContrato, hitoId, fechaPago, montoPagad
     if (hito.estado === "ANULADO") throw new AppError("MILESTONE_VOID", "Este hito está anulado, no se puede cobrar", 400);
 
     const monto = montoPagado != null ? Number(montoPagado) : Number(hito.monto);
+    if (monto <= 0 || monto > Number(hito.monto)) {
+      throw new AppError(
+        "SCHEMA_INVALID",
+        `montoPagado debe ser mayor a 0 y no superar el monto del hito (${hito.monto})`,
+        400
+      );
+    }
     const upd = await client.query(
       `UPDATE contrato_hitos SET estado='PAGADO', fecha_pago=COALESCE($2,CURRENT_DATE), monto_pagado=$3
        WHERE hito_id=$1 RETURNING *`,

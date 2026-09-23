@@ -81,7 +81,10 @@ function csvEscape(value) {
 }
 function downloadCsv(filename, headers, rows) {
   const lines = [headers.join(","), ...rows.map((row) => row.map(csvEscape).join(","))];
-  downloadBlob(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" }), filename);
+  // BOM (﻿): sin esto, Excel en Windows abre el CSV como Windows-1252
+  // en vez de UTF-8 y las tildes/ñ se ven como "Â©" — con el BOM detecta
+  // UTF-8 correctamente.
+  downloadBlob(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }), filename);
 }
 
 function downloadBlob(blob, filename) {
@@ -3165,8 +3168,10 @@ function addLeadQuoteDraftLine() {
   const descripcion = document.getElementById("lead-quote-line-descripcion").value.trim();
   const cantidad = Number(document.getElementById("lead-quote-line-cantidad").value || 0);
   const precio_unitario = Number(document.getElementById("lead-quote-line-precio").value || 0);
+  const skuVal = resolveProductSku(document.getElementById("lead-quote-line-sku").value.trim());
+  const sku = productCatalogBySku[skuVal] ? skuVal : null;
   if (!descripcion || cantidad <= 0 || precio_unitario < 0) { toast("Ingresa descripción, cantidad (>0) y precio unitario (>=0) del ítem", false); return; }
-  leadQuoteDraftLines.push({ descripcion, cantidad, precio_unitario });
+  leadQuoteDraftLines.push({ descripcion, cantidad, precio_unitario, sku });
   document.getElementById("lead-quote-line-descripcion").value = "";
   document.getElementById("lead-quote-line-cantidad").value = "";
   document.getElementById("lead-quote-line-precio").value = "";
@@ -3296,7 +3301,11 @@ function addQuoteDraftLine() {
   const cantidad = Number(document.getElementById("quote-line-cantidad").value || 0);
   const precio_unitario = Number(document.getElementById("quote-line-precio").value || 0);
   if (!descripcion || cantidad <= 0 || precio_unitario < 0) { toast("Ingresa descripción, cantidad (>0) y precio unitario (>=0) del ítem", false); return; }
-  quoteDraftLines.push({ descripcion, cantidad, precio_unitario });
+  // Si el SKU tipeado coincide con el catálogo, se envía al backend para
+  // que el ítem quede enlazado al producto real (en vez de texto libre).
+  const skuVal = resolveProductSku(document.getElementById("quote-line-sku").value.trim());
+  const sku = productCatalogBySku[skuVal] ? skuVal : null;
+  quoteDraftLines.push({ descripcion, cantidad, precio_unitario, sku });
   document.getElementById("quote-line-descripcion").value = "";
   document.getElementById("quote-line-cantidad").value = "";
   document.getElementById("quote-line-precio").value = "";

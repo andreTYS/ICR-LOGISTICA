@@ -25,7 +25,7 @@ test("crear un contrato con hitos iniciales", async () => {
     montoTotal: 10000, usuarioId: SUPERVISOR, canal: "web",
     hitos: [
       { descripcion: "Adelanto 50%", monto: 5000, fecha_esperada: null },
-      { descripcion: "Entrega final 50%", monto: 5000, fecha_esperada: null },
+      { descripcion: "Entrega final 50%", monto: 4500, fecha_esperada: null },
     ],
   });
   assert.equal(r.contrato.estado, "VIGENTE");
@@ -123,6 +123,37 @@ test("cuentas por cobrar agrega hitos pendientes y vence automáticamente los qu
   const pendiente = reporte.items.find((h) => h.codigo_contrato === "CONT-T01" && h.descripcion === "Entrega final 50%");
   assert.ok(pendiente, "el segundo hito de CONT-T01, todavía sin pagar, debería aparecer como pendiente");
   assert.equal(pendiente.estado, "PENDIENTE");
+});
+
+test("crear un contrato cuyos hitos iniciales superan el monto total se rechaza", async () => {
+  await assert.rejects(
+    ventas.crearContrato({
+      codigoContrato: "CONT-T05", clienteRuc: CLIENTE_RUC, montoTotal: 1000, usuarioId: SUPERVISOR, canal: "web",
+      hitos: [{ descripcion: "Adelanto", monto: 1500, fecha_esperada: null }],
+    }),
+    (err) => err.code === "MILESTONE_EXCEEDS_TOTAL"
+  );
+});
+
+test("agregar un hito que deja la suma por encima del monto total del contrato se rechaza", async () => {
+  await ventas.crearContrato({ codigoContrato: "CONT-T06", clienteRuc: CLIENTE_RUC, montoTotal: 1000, usuarioId: SUPERVISOR, canal: "web" });
+  await ventas.agregarHito({ codigoContrato: "CONT-T06", descripcion: "Hito 1", monto: 700, usuarioId: SUPERVISOR, canal: "web" });
+  await assert.rejects(
+    ventas.agregarHito({ codigoContrato: "CONT-T06", descripcion: "Hito 2", monto: 400, usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "MILESTONE_EXCEEDS_TOTAL"
+  );
+});
+
+test("registrar un pago con monto mayor al del hito se rechaza (no deja saldo pendiente negativo)", async () => {
+  await ventas.crearContrato({
+    codigoContrato: "CONT-T07", clienteRuc: CLIENTE_RUC, montoTotal: 500, usuarioId: SUPERVISOR, canal: "web",
+    hitos: [{ descripcion: "Pago único", monto: 500, fecha_esperada: null }],
+  });
+  const detalle = await ventas.getContrato("CONT-T07");
+  await assert.rejects(
+    ventas.registrarPagoHito({ codigoContrato: "CONT-T07", hitoId: detalle.hitos[0].hito_id, montoPagado: 999999, usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
 });
 
 after(async () => {

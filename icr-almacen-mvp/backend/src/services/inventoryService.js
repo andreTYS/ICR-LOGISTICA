@@ -11,6 +11,20 @@ async function findProductBySku(client, sku) {
   return r.rows[0];
 }
 
+// La unidad por defecto ("UND", ~99% del catálogo) es una unidad física
+// discreta: no se puede ingresar/despachar "1.09 UND" de una batería o un
+// panel. Unidades explícitas de peso/longitud/volumen (KG, M, L, etc.) sí
+// admiten fracciones — solo se restringe cuando la unidad es la genérica.
+function requireIntegerIfUnidadDiscreta(producto, cantidad) {
+  if (producto.unidad_medida === "UND" && !Number.isInteger(Number(cantidad))) {
+    throw new AppError(
+      "SCHEMA_INVALID",
+      `La cantidad de '${producto.sku}' debe ser un número entero (unidad: UND), se recibió ${cantidad}`,
+      400
+    );
+  }
+}
+
 async function findWarehouseByCode(client, code) {
   const r = await client.query("SELECT * FROM almacenes WHERE codigo = $1 AND activo = true", [code]);
   if (r.rows.length === 0) {
@@ -153,6 +167,7 @@ async function receive({ sku, quantity, warehouseCode, locationCode, documento, 
 
   return withAuditedTransaction("inventory.receive", usuarioId, canal, async (client) => {
     const producto = await findProductBySku(client, sku);
+    requireIntegerIfUnidadDiscreta(producto, quantity);
     const almacen = await findWarehouseByCode(client, warehouseCode);
     const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
 
@@ -191,6 +206,7 @@ async function remove({ sku, quantity, warehouseCode, locationCode, proyectoCodi
 
   return withAuditedTransaction("inventory.remove", usuarioId, canal, async (client) => {
     const producto = await findProductBySku(client, sku);
+    requireIntegerIfUnidadDiscreta(producto, quantity);
     const almacen = await findWarehouseByCode(client, warehouseCode);
     const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
 
@@ -1018,4 +1034,5 @@ module.exports = {
   setProductPhoto, setProductRetornable, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
+  requireIntegerIfUnidadDiscreta,
 };

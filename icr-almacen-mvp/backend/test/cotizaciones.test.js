@@ -100,6 +100,38 @@ test("el listado de cotizaciones pagina y filtra por estado", async () => {
   assert.ok(r.items.every((c) => c.estado === "BORRADOR"));
 });
 
+test("un ítem con sku del catálogo queda enlazado al producto real", async () => {
+  const { cotizacion } = await cotizaciones.crearCotizacion({
+    clienteRuc: CLIENTE_RUC,
+    items: [{ descripcion: "Panel solar 550W", cantidad: 3, precio_unitario: 700, sku: "PANEL-JA-550" }],
+    usuarioId: VENTAS_USER, canal: "web",
+  });
+  const detalle = await cotizaciones.getCotizacion(cotizacion.codigo);
+  assert.ok(detalle.items[0].producto_id, "el ítem debería quedar enlazado a un producto_id");
+});
+
+test("un ítem con sku inexistente se rechaza (no se puede cotizar un producto que no existe)", async () => {
+  await assert.rejects(
+    cotizaciones.crearCotizacion({
+      clienteRuc: CLIENTE_RUC,
+      items: [{ descripcion: "Producto inventado", cantidad: 1, precio_unitario: 10, sku: "NO-EXISTE-SKU" }],
+      usuarioId: VENTAS_USER, canal: "web",
+    }),
+    (err) => err.code === "PRODUCT_NOT_FOUND"
+  );
+});
+
+test("un ítem con sku de un producto UND y cantidad decimal se rechaza", async () => {
+  await assert.rejects(
+    cotizaciones.crearCotizacion({
+      clienteRuc: CLIENTE_RUC,
+      items: [{ descripcion: "Panel solar 550W", cantidad: 1.5, precio_unitario: 700, sku: "PANEL-JA-550" }],
+      usuarioId: VENTAS_USER, canal: "web",
+    }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

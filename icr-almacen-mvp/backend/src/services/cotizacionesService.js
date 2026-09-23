@@ -1,6 +1,6 @@
 const { pool } = require("../db");
 const { AppError } = require("../errors");
-const { withAuditedTransaction } = require("./inventoryService");
+const { withAuditedTransaction, findProductBySku, requireIntegerIfUnidadDiscreta } = require("./inventoryService");
 const ventas = require("./ventasService");
 
 const ESTADOS_VALIDOS = ["BORRADOR", "ENVIADA", "ACEPTADA", "RECHAZADA", "CONVERTIDA"];
@@ -48,9 +48,18 @@ async function crearCotizacion({ clienteRuc, proyectoCodigo, moneda, fechaEmisio
       if (!it.descripcion || !it.cantidad || it.cantidad <= 0 || it.precio_unitario == null || it.precio_unitario < 0) {
         throw new AppError("SCHEMA_INVALID", "cada ítem requiere descripcion, cantidad (>0) y precio_unitario (>=0)", 400);
       }
+      // sku opcional: si se indica, el ítem debe existir en el catálogo (no
+      // se puede cotizar un producto inventado) y respeta la misma regla de
+      // cantidades enteras que Almacén para unidades discretas (UND).
+      let productoId = null;
+      if (it.sku) {
+        const producto = await findProductBySku(client, it.sku);
+        requireIntegerIfUnidadDiscreta(producto, it.cantidad);
+        productoId = producto.producto_id;
+      }
       await client.query(
-        `INSERT INTO cotizacion_items (cotizacion_id, descripcion, cantidad, precio_unitario, orden) VALUES ($1,$2,$3,$4,$5)`,
-        [cotizacion.cotizacion_id, it.descripcion, it.cantidad, it.precio_unitario, i + 1]
+        `INSERT INTO cotizacion_items (cotizacion_id, producto_id, descripcion, cantidad, precio_unitario, orden) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [cotizacion.cotizacion_id, productoId, it.descripcion, it.cantidad, it.precio_unitario, i + 1]
       );
     }
 
