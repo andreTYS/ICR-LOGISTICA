@@ -42,4 +42,56 @@ async function buildWorkbookBuffer({ sheetName, headers, rows }) {
   return workbook.xlsx.writeBuffer();
 }
 
-module.exports = { buildWorkbookBuffer, MAX_ROWS };
+// Extrae el valor "plano" de una celda de exceljs: texto/número/fecha tal
+// cual, pero una fórmula o rich-text vienen como objeto ({result: ...} o
+// {richText: [...]}) que hay que desenvolver antes de usarlos como dato.
+function plainCellValue(value) {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object") {
+    if ("result" in value) return value.result;
+    if ("richText" in value) return value.richText.map((t) => t.text).join("");
+    if ("text" in value) return value.text;
+  }
+  return value;
+}
+
+// Lee la primera hoja de un .xlsx subido (Excel/LibreOffice real, no CSV) y
+// la convierte en un arreglo de filas-objeto, usando la fila 1 como
+// encabezado — mismo espíritu que parseCsv en inventoryService, pero para
+// el formato binario que la gente ya usa día a día en sus planillas.
+async function parseWorkbookBuffer(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch (err) {
+    throw new AppError("SCHEMA_INVALID", "No se pudo leer el archivo — ¿es un .xlsx válido?", 400);
+  }
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new AppError("SCHEMA_INVALID", "El archivo no tiene ninguna hoja", 400);
+
+  const headers = [];
+  sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(plainCellValue(cell.value) ?? "").trim().toLowerCase();
+  });
+  if (!headers.some(Boolean)) {
+    throw new AppError("SCHEMA_INVALID", "El archivo no tiene fila de encabezado", 400);
+  }
+
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const data = {};
+    let hasValue = false;
+    headers.forEach((h, i) => {
+      if (!h) return;
+      const value = plainCellValue(row.getCell(i + 1).value);
+      if (value !== null && value !== undefined && value !== "") hasValue = true;
+      data[h] = value;
+    });
+    if (hasValue) rows.push(data);
+  });
+  return rows;
+}
+
+module.exports = { buildWorkbookBuffer, parseWorkbookBuffer, MAX_ROWS };

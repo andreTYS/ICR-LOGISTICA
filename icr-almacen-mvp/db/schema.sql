@@ -738,8 +738,12 @@ CREATE TABLE archivos_adjuntos (
 -- mano de obra); uno ligado a un empleado es un reembolso.
 CREATE TABLE gastos (
     gasto_id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- EQUIPOS_OBRA/MOVILIDAD/MATERIAL/SUELDO/OFICINA/FLETES/ALIMENTACION se
+    -- agregaron para reflejar cómo el negocio ya categorizaba gastos de
+    -- campo/obra a mano en su planilla de flujo de caja.
     categoria                 TEXT NOT NULL CHECK (categoria IN
-                                ('COMBUSTIBLE','VIATICOS','ALQUILER','SERVICIOS','SOFTWARE','MANTENIMIENTO','HONORARIOS','REEMBOLSO','OTROS')),
+                                ('COMBUSTIBLE','VIATICOS','ALQUILER','SERVICIOS','SOFTWARE','MANTENIMIENTO','HONORARIOS','REEMBOLSO',
+                                 'EQUIPOS_OBRA','MOVILIDAD','MATERIAL','SUELDO','OFICINA','FLETES','ALIMENTACION','OTROS')),
     descripcion                TEXT NOT NULL,
     monto                      NUMERIC(14,2) NOT NULL CHECK (monto > 0),
     moneda                     TEXT DEFAULT 'PEN',

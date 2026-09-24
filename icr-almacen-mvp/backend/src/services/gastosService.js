@@ -2,10 +2,19 @@ const { pool } = require("../db");
 const { AppError } = require("../errors");
 const { withAuditedTransaction } = require("./inventoryService");
 const contabilidad = require("./contabilidadService");
+const { parseWorkbookBuffer } = require("./xlsxService");
 
+// EQUIPOS_OBRA/MOVILIDAD/MATERIAL/SUELDO/OFICINA/FLETES/ALIMENTACION se
+// agregaron a pedido, para reflejar cómo el negocio ya venía categorizando
+// gastos a mano en su planilla de flujo de caja (equipos/obra, movilidad,
+// material, sueldo, oficina, fletes, caja pizarro/menús) — antes todo eso
+// cargaba forzado en "OTROS" porque el enum solo cubría gastos de oficina
+// típicos (software, honorarios, etc.), no gastos de campo/obra.
 const CATEGORIAS_VALIDAS = [
   "COMBUSTIBLE", "VIATICOS", "ALQUILER", "SERVICIOS", "SOFTWARE",
-  "MANTENIMIENTO", "HONORARIOS", "REEMBOLSO", "OTROS",
+  "MANTENIMIENTO", "HONORARIOS", "REEMBOLSO",
+  "EQUIPOS_OBRA", "MOVILIDAD", "MATERIAL", "SUELDO", "OFICINA", "FLETES", "ALIMENTACION",
+  "OTROS",
 ];
 const TIPOS_COMPROBANTE_VALIDOS = ["FACTURA", "BOLETA", "RECIBO"];
 
@@ -86,4 +95,46 @@ async function listGastos({ categoria, proyectoCodigo, page, pageSize } = {}) {
   return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
 }
 
-module.exports = { registrarGasto, listGastos, CATEGORIAS_VALIDAS };
+// Importación masiva de gastos desde un .xlsx real (Excel/LibreOffice, no
+// solo CSV) — columnas: fecha, categoria, descripcion, monto (obligatorias);
+// moneda, proyecto_codigo, comprobante_tipo, comprobante_serie_numero
+// (opcionales). Mismo criterio que importProductsCsv en inventoryService:
+// cada fila pasa por registrarGasto de forma independiente (con su asiento
+// automático best-effort incluido), un error en una no aborta el resto.
+async function importGastosXlsx(buffer, { usuarioId, canal }) {
+  const rows = await parseWorkbookBuffer(buffer);
+  if (rows.length === 0) {
+    throw new AppError("SCHEMA_INVALID", "El archivo no tiene filas de datos", 400);
+  }
+
+  const detalle = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const fila = i + 2; // +1 por índice base 0, +1 por la fila de encabezado
+    try {
+      const fecha = r.fecha instanceof Date ? r.fecha.toISOString().slice(0, 10) : (r.fecha ? String(r.fecha).trim() : null);
+      const comprobanteTipo = r.comprobante_tipo ? String(r.comprobante_tipo).trim().toUpperCase() : null;
+      await registrarGasto({
+        categoria: String(r.categoria || "").trim().toUpperCase(),
+        descripcion: String(r.descripcion || "").trim(),
+        monto: Number(r.monto),
+        moneda: r.moneda ? String(r.moneda).trim() : null,
+        fecha,
+        proyectoCodigo: r.proyecto_codigo ? String(r.proyecto_codigo).trim() : null,
+        comprobante: comprobanteTipo ? { tipo: comprobanteTipo, serie_numero: r.comprobante_serie_numero ? String(r.comprobante_serie_numero).trim() : null } : null,
+        usuarioId, canal,
+      });
+      detalle.push({ fila, descripcion: r.descripcion || "", ok: true });
+    } catch (err) {
+      detalle.push({ fila, descripcion: r.descripcion || "", ok: false, error: err.message || "Error desconocido" });
+    }
+  }
+  return {
+    total: detalle.length,
+    exitosos: detalle.filter((d) => d.ok).length,
+    fallidos: detalle.filter((d) => !d.ok).length,
+    detalle,
+  };
+}
+
+module.exports = { registrarGasto, listGastos, importGastosXlsx, CATEGORIAS_VALIDAS };
