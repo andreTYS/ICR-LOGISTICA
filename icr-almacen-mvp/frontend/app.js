@@ -1194,6 +1194,36 @@ async function loadDashboardModuleSummary() {
 // -------- Gráfico de actividad (Ingresos vs Salidas, últimos 7 días) --------
 // Paleta validada para 2 series categóricas (CVD-safe, ver skill dataviz):
 // azul #2a78d6 = Ingresos, naranja #eb6834 = Salidas.
+// Paso "redondo" entre líneas de referencia (1, 2, 5, 10, 20, 50…) para que
+// el eje Y de un gráfico de barras muestre valores medibles de un vistazo,
+// en vez de solo la altura relativa de cada barra. minStep=1 fuerza pasos
+// enteros para gráficos de conteos (no tiene sentido "1.5 movimientos").
+function niceStep(max, targetTicks = 4, minStep = 0) {
+  if (!(max > 0)) return Math.max(1, minStep);
+  const rawStep = max / targetTicks;
+  const exp = Math.floor(Math.log10(rawStep));
+  const base = Math.pow(10, exp);
+  const norm = rawStep / base;
+  const niceNorm = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return Math.max(niceNorm * base, minStep);
+}
+
+// Plano cartesiano compartido por los gráficos de barras del Panel: líneas
+// de referencia horizontales + valores en el eje Y, para que se puedan leer
+// magnitudes reales y no solo comparar alturas entre barras.
+function buildYAxisGrid({ max, W, H, padLeft, padTop, padBottom, targetTicks = 4, minStep = 0, formatTick }) {
+  const step = niceStep(max, targetTicks, minStep);
+  const top = Math.max(step, Math.ceil(max / step) * step);
+  const plotH = H - padTop - padBottom;
+  let svg = "";
+  for (let v = 0; v <= top + step / 1e6; v += step) {
+    const y = H - padBottom - (v / top) * plotH;
+    svg += `<line x1="${padLeft}" y1="${y.toFixed(2)}" x2="${W}" y2="${y.toFixed(2)}" stroke="#eef2f6" stroke-width="1"/>`;
+    svg += `<text x="${padLeft - 8}" y="${(y + 3.5).toFixed(2)}" text-anchor="end" font-size="10" fill="#94a3b8">${formatTick(v)}</text>`;
+  }
+  return { gridSvg: svg, top };
+}
+
 function renderActivityChart(movements) {
   const el = document.getElementById("activity-chart");
   const days = [];
@@ -1217,20 +1247,24 @@ function renderActivityChart(movements) {
     };
   });
 
-  const max = Math.max(1, ...counts.map((c) => Math.max(c.ingresos, c.salidas)));
-  const W = 700, H = 150, padBottom = 22, padTop = 8;
-  const groupW = W / counts.length;
+  const rawMax = Math.max(1, ...counts.map((c) => Math.max(c.ingresos, c.salidas)));
+  const W = 700, H = 150, padLeft = 24, padBottom = 22, padTop = 8;
+  const { gridSvg, top } = buildYAxisGrid({
+    max: rawMax, W, H, padLeft, padTop, padBottom, minStep: 1,
+    formatTick: (v) => Math.round(v).toLocaleString("es-PE"),
+  });
+  const groupW = (W - padLeft) / counts.length;
   const barW = Math.min(22, groupW / 2 - 6);
-  const scale = (v) => (v / max) * (H - padBottom - padTop);
+  const scale = (v) => (v / top) * (H - padBottom - padTop);
   const roundedTopBar = (x, y, w, h, r) => {
     if (h <= 0) return "";
     r = Math.min(r, h, w / 2);
     return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
   };
 
-  let bars = "";
+  let bars = gridSvg;
   counts.forEach((c, i) => {
-    const gx = i * groupW + groupW / 2;
+    const gx = padLeft + i * groupW + groupW / 2;
     const x1 = gx - barW - 2;
     const x2 = gx + 2;
     const hIn = scale(c.ingresos);
@@ -1241,7 +1275,6 @@ function renderActivityChart(movements) {
         onmouseenter="showChartTip(event,'Ingresos · ${c.label}: ${c.ingresos}')" onmousemove="moveChartTip(event)" onmouseleave="hideChartTip()"></path>`;
     bars += `<path class="chart-bar" fill="#eb6834" d="${roundedTopBar(x2, yOut, barW, hOut, 3)}"
         onmouseenter="showChartTip(event,'Salidas · ${c.label}: ${c.salidas}')" onmousemove="moveChartTip(event)" onmouseleave="hideChartTip()"></path>`;
-    bars += `<line x1="${i * groupW}" y1="${H - padBottom}" x2="${(i + 1) * groupW}" y2="${H - padBottom}" stroke="#e2e8f0" stroke-width="1"/>`;
     bars += `<text x="${gx}" y="${H - 5}" text-anchor="middle" font-size="10.5" fill="#94a3b8">${c.label}</text>`;
   });
 
@@ -1290,20 +1323,24 @@ function renderCashflowChart(rows) {
     label: new Date(row.mes).toLocaleDateString("es-PE", { month: "short", year: "2-digit" }),
     ingresos: Number(row.ingresos), gastos: Number(row.gastos),
   }));
-  const max = Math.max(1, ...points.map((p) => Math.max(p.ingresos, p.gastos)));
-  const W = 700, H = 170, padBottom = 22, padTop = 8;
-  const groupW = W / Math.max(1, points.length);
+  const rawMax = Math.max(1, ...points.map((p) => Math.max(p.ingresos, p.gastos)));
+  const W = 700, H = 170, padLeft = 46, padBottom = 22, padTop = 8;
+  const { gridSvg, top } = buildYAxisGrid({
+    max: rawMax, W, H, padLeft, padTop, padBottom,
+    formatTick: (v) => `S/ ${Math.round(v).toLocaleString("es-PE")}`,
+  });
+  const groupW = (W - padLeft) / Math.max(1, points.length);
   const barW = Math.min(34, groupW / 2 - 8);
-  const scale = (v) => (v / max) * (H - padBottom - padTop);
+  const scale = (v) => (v / top) * (H - padBottom - padTop);
   const roundedTopBar = (x, y, w, h, r) => {
     if (h <= 0) return "";
     r = Math.min(r, h, w / 2);
     return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
   };
 
-  let bars = "";
+  let bars = gridSvg;
   points.forEach((pt, i) => {
-    const gx = i * groupW + groupW / 2;
+    const gx = padLeft + i * groupW + groupW / 2;
     const x1 = gx - barW - 2, x2 = gx + 2;
     const hIn = scale(pt.ingresos), hOut = scale(pt.gastos);
     const yIn = H - padBottom - hIn, yOut = H - padBottom - hOut;
@@ -1311,7 +1348,6 @@ function renderCashflowChart(rows) {
         onmouseenter="showChartTip(event,'Ingresos · ${pt.label}: PEN ${money(pt.ingresos)}','tip-cashflow')" onmousemove="moveChartTip(event,'tip-cashflow')" onmouseleave="hideChartTip('tip-cashflow')"></path>`;
     bars += `<path class="chart-bar" fill="#eb6834" d="${roundedTopBar(x2, yOut, barW, hOut, 3)}"
         onmouseenter="showChartTip(event,'Gastos · ${pt.label}: PEN ${money(pt.gastos)}','tip-cashflow')" onmousemove="moveChartTip(event,'tip-cashflow')" onmouseleave="hideChartTip('tip-cashflow')"></path>`;
-    bars += `<line x1="${i * groupW}" y1="${H - padBottom}" x2="${(i + 1) * groupW}" y2="${H - padBottom}" stroke="#e2e8f0" stroke-width="1"/>`;
     bars += `<text x="${gx}" y="${H - 5}" text-anchor="middle" font-size="10.5" fill="#94a3b8">${pt.label}</text>`;
   });
 
@@ -1681,7 +1717,17 @@ async function loadProducts(page = 1) {
       <td class="${TD}">${p.categoria || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
       <td class="${TD}">${p.precio_venta != null ? money(p.precio_venta) : "—"}</td>
-      <td class="${TD} flex gap-1.5"><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">Subir foto</button><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); editProductPrecioVenta('${p.sku}', ${p.precio_venta ?? "null"})">Precio</button><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); editProductCategoria('${p.sku}', ${JSON.stringify(p.categoria ?? null)})">Categoría</button></td>
+      <td class="${TD} flex gap-1.5">
+        <button class="btn-icon" title="Subir foto" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 7h2l1-2h6l1 2h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.4" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
+        <button class="btn-icon" title="Editar precio de venta" onclick="event.stopPropagation(); editProductPrecioVenta('${p.sku}', ${p.precio_venta ?? "null"})">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10.5 3H4a1 1 0 0 0-1 1v6.5a1 1 0 0 0 .3.7l7 7a1 1 0 0 0 1.4 0l6.5-6.5a1 1 0 0 0 0-1.4l-7-7a1 1 0 0 0-.7-.3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="7" cy="7" r="1.1" fill="currentColor"/></svg>
+        </button>
+        <button class="btn-icon" title="Editar categoría" onclick="event.stopPropagation(); editProductCategoria('${p.sku}', ${JSON.stringify(p.categoria ?? null)})">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h3l1.5 2h6.5A1.5 1.5 0 0 1 17 7.5v7A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5v-9Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+      </td>
     </tr>`).join("")
     : emptyRow(9, "Sin resultados.", "search");
   renderPager("products-pager", r.data || { total: 0 }, loadProducts);
