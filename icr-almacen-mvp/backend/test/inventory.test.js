@@ -514,6 +514,37 @@ test("setProductPrecioVenta rechaza un SKU inexistente", async () => {
   );
 });
 
+test("createProduct acepta categoria y setProductCategoria la actualiza o la quita", async () => {
+  const creado = await inventory.createProduct({
+    sku: "CATEGORIA-01",
+    nombre: "Producto con categoría",
+    tipo_control: "NORMAL",
+    categoria: "PANELES",
+  });
+  assert.equal(creado.categoria, "PANELES");
+
+  const actualizado = await inventory.setProductCategoria("CATEGORIA-01", "BATERIAS");
+  assert.equal(actualizado.categoria, "BATERIAS");
+
+  const sinCategoria = await inventory.setProductCategoria("CATEGORIA-01", null);
+  assert.equal(sinCategoria.categoria, null);
+});
+
+test("setProductCategoria rechaza un SKU inexistente", async () => {
+  await assert.rejects(
+    inventory.setProductCategoria("SKU-QUE-NO-EXISTE", "PANELES"),
+    (err) => err.code === "PRODUCT_NOT_FOUND"
+  );
+});
+
+test("importProductsCsv acepta una columna categoria opcional", async () => {
+  const csv = "sku,nombre,tipo_control,categoria\nCATEGORIA-CSV-01,Producto importado,NORMAL,ALARMA RISCO";
+  const resultado = await inventory.importProductsCsv(csv);
+  assert.equal(resultado.exitosos, 1);
+  const { items } = await inventory.searchProducts({ query: "CATEGORIA-CSV-01" });
+  assert.equal(items[0].categoria, "ALARMA RISCO");
+});
+
 after(async () => {
   await pool.end();
 });

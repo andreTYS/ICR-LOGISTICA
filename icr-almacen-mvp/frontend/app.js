@@ -1670,7 +1670,7 @@ function productThumbHtml(p) {
 
 async function loadProducts(page = 1) {
   const body = document.getElementById("products-body");
-  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="9" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const q = document.getElementById("product-q").value.trim();
   const r = await api(`/inventory/products?q=${encodeURIComponent(q)}&page=${page}`);
   const items = r.data?.items || [];
@@ -1678,11 +1678,12 @@ async function loadProducts(page = 1) {
     ? items.map((p) => `<tr class="${TR} row-clickable" onclick="openKardex('${p.sku}')" title="Ver Kardex de ${p.sku}">
       <td class="${TD}">${productThumbHtml(p)}</td>
       <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}${p.retornable ? ` ${badge("RETORNABLE", "ok")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
+      <td class="${TD}">${p.categoria || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
       <td class="${TD}">${p.precio_venta != null ? money(p.precio_venta) : "—"}</td>
-      <td class="${TD} flex gap-1.5"><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">Subir foto</button><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); editProductPrecioVenta('${p.sku}', ${p.precio_venta ?? "null"})">Precio</button></td>
+      <td class="${TD} flex gap-1.5"><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">Subir foto</button><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); editProductPrecioVenta('${p.sku}', ${p.precio_venta ?? "null"})">Precio</button><button class="btn-secondary px-3 py-1.5 text-xs" onclick="event.stopPropagation(); editProductCategoria('${p.sku}', ${JSON.stringify(p.categoria ?? null)})">Categoría</button></td>
     </tr>`).join("")
-    : emptyRow(8, "Sin resultados.", "search");
+    : emptyRow(9, "Sin resultados.", "search");
   renderPager("products-pager", r.data || { total: 0 }, loadProducts);
 }
 
@@ -1692,6 +1693,15 @@ async function editProductPrecioVenta(sku, actual) {
   const precio_venta = input.trim() === "" ? null : Number(input);
   const r = await api(`/inventory/products/${encodeURIComponent(sku)}/precio-venta`, { method: "POST", body: JSON.stringify({ channel: "web", precio_venta }) });
   if (r.status === "success") { toast(`Precio de ${sku} actualizado`); loadProducts(); }
+  else toast(r.error.message, false);
+}
+
+async function editProductCategoria(sku, actual) {
+  const input = prompt(`Categoría de negocio para ${sku} (vacío para quitarla):`, actual ?? "");
+  if (input === null) return;
+  const categoria = input.trim() === "" ? null : input.trim();
+  const r = await api(`/inventory/products/${encodeURIComponent(sku)}/categoria`, { method: "POST", body: JSON.stringify({ channel: "web", categoria }) });
+  if (r.status === "success") { toast(`Categoría de ${sku} actualizada`); loadProducts(); }
   else toast(r.error.message, false);
 }
 
