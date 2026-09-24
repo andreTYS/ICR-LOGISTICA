@@ -234,6 +234,10 @@ CREATE TABLE productos (
     punto_reorden   NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (punto_reorden >= 0),
     stock_maximo    NUMERIC(14,2),
     costo_unitario  NUMERIC(14,2) DEFAULT 0,
+    -- Precio público/de lista para venta (Tienda, tienda online) — distinto
+    -- de costo_unitario (interno, usado para costeo/margen). NULL = todavía
+    -- sin precio de lista definido, se muestra "a cotizar".
+    precio_venta    NUMERIC(14,2) CHECK (precio_venta IS NULL OR precio_venta >= 0),
     imagen_url      TEXT,
     es_kit          BOOLEAN NOT NULL DEFAULT false,
     -- Herramientas, equipos y cajas ("cajas de herramientas") que se prestan
