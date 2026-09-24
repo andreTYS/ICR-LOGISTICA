@@ -121,6 +121,30 @@ test("importGastosXlsx importa filas válidas de un .xlsx real y reporta errores
   assert.ok(listado.items.some((g) => g.descripcion === "Taxi a obra" && g.codigo_proyecto === PROYECTO_CODIGO));
 });
 
+test("buildImportTemplate genera una hoja de instrucciones y una de Gastos con listas desplegables y fila de ejemplo", async () => {
+  const buffer = await gastos.buildImportTemplate();
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  assert.deepEqual(workbook.worksheets.map((s) => s.name), ["Instrucciones", "Gastos"]);
+
+  const sheet = workbook.getWorksheet("Gastos");
+  assert.deepEqual(sheet.getRow(1).values.slice(1), [
+    "fecha", "categoria", "descripcion", "monto", "moneda", "proyecto_codigo", "comprobante_tipo", "comprobante_serie_numero",
+  ]);
+  assert.equal(sheet.getRow(2).getCell(2).value, "MATERIAL"); // fila de ejemplo
+
+  const validacionCategoria = sheet.getCell("B2").dataValidation;
+  assert.equal(validacionCategoria.type, "list");
+  assert.ok(validacionCategoria.formulae[0].includes("EQUIPOS_OBRA"));
+  assert.ok(validacionCategoria.formulae[0].includes("ALIMENTACION"));
+
+  const validacionComprobante = sheet.getCell("G2").dataValidation;
+  assert.equal(validacionComprobante.type, "list");
+  assert.ok(validacionComprobante.formulae[0].includes("FACTURA"));
+});
+
 test("importGastosXlsx rechaza un archivo sin filas de datos", async () => {
   const buffer = await xlsxService.buildWorkbookBuffer({
     sheetName: "Gastos",

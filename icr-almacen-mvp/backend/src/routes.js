@@ -1116,11 +1116,7 @@ router.get(
   "/expenses/import-template",
   requirePermission("expenses.register"),
   handleBinary(async () => {
-    const buffer = await xlsxService.buildWorkbookBuffer({
-      sheetName: "Gastos",
-      headers: ["fecha", "categoria", "descripcion", "monto", "moneda", "proyecto_codigo", "comprobante_tipo", "comprobante_serie_numero"],
-      rows: [["2026-09-24", "MATERIAL", "Ejemplo: cable solar 6mm", 366, "PEN", "", "", ""]],
-    });
+    const buffer = await gastos.buildImportTemplate();
     return { buffer, filename: "plantilla-gastos.xlsx", contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
   })
 );
