@@ -293,6 +293,12 @@ router.post(
   handle(async (req) => inventory.setProductPrecioVenta(req.params.sku, req.body?.precio_venta))
 );
 
+router.post(
+  "/inventory/products/:sku/categoria",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.setProductCategoria(req.params.sku, req.body?.categoria))
+);
+
 // -------- Kits ("cajas de herramientas") --------
 
 router.post(

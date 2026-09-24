@@ -238,6 +238,11 @@ CREATE TABLE productos (
     -- de costo_unitario (interno, usado para costeo/margen). NULL = todavía
     -- sin precio de lista definido, se muestra "a cotizar".
     precio_venta    NUMERIC(14,2) CHECK (precio_venta IS NULL OR precio_venta >= 0),
+    -- Categoría de negocio libre (ej. "PANELES", "ALARMA RISCO", "BATERIAS"),
+    -- para filtrar en el ERP y en la tienda online. No es un catálogo cerrado
+    -- a propósito: el volumen y variedad real del catálogo (~40 categorías)
+    -- hace que una tabla de categorías separada sea prematura por ahora.
+    categoria       TEXT,
     imagen_url      TEXT,
     es_kit          BOOLEAN NOT NULL DEFAULT false,
     -- Herramientas, equipos y cajas ("cajas de herramientas") que se prestan

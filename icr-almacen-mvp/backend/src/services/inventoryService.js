@@ -386,15 +386,28 @@ async function searchProducts({ query, page, pageSize }) {
 }
 
 async function createProduct(data) {
-  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, retornable } = data;
+  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, categoria, retornable } = data;
   if (!sku || !nombre || !tipo_control) {
     throw new AppError("SCHEMA_INVALID", "sku, nombre y tipo_control son obligatorios", 400);
   }
   const r = await pool.query(
-    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, retornable)
-     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10,$11,$12) RETURNING *`,
-    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0, precio_venta || null, retornable === true || retornable === "true"]
+    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, categoria, retornable)
+     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10,$11,$12,$13) RETURNING *`,
+    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0, precio_venta || null, categoria || null, retornable === true || retornable === "true"]
   );
+  return r.rows[0];
+}
+
+// Categoría de negocio libre (ej. "PANELES", "BATERIAS") — no es un catálogo
+// cerrado, ver comentario en schema.sql. Mismo criterio granular que
+// setProductPhoto/setProductRetornable/setProductPrecioVenta.
+async function setProductCategoria(sku, categoria) {
+  const valor = categoria === null || categoria === undefined || categoria === "" ? null : String(categoria).trim();
+  const r = await pool.query(
+    "UPDATE productos SET categoria=$1 WHERE sku=$2 AND activo=true RETURNING *",
+    [valor, sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
   return r.rows[0];
 }
 
@@ -494,6 +507,7 @@ async function importProductsCsv(csvText) {
         stock_maximo: data.stock_maximo ? Number(data.stock_maximo) : null,
         costo_unitario: data.costo_unitario ? Number(data.costo_unitario) : 0,
         precio_venta: data.precio_venta ? Number(data.precio_venta) : null,
+        categoria: data.categoria || null,
       });
       detalle.push({ fila: i + 1, sku: data.sku, ok: true });
     } catch (err) {
@@ -1054,7 +1068,7 @@ module.exports = {
   returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, setProductRetornable, setProductPrecioVenta, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
   requireIntegerIfUnidadDiscreta,
