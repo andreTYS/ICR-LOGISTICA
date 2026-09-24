@@ -2537,6 +2537,7 @@
           <button class="btn-danger px-3 py-1.5 text-xs" onclick="setContractStatus('CANCELADO')">Cancelar</button>
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="openDocumentsModal('contrato', currentContractId, `Contrato ${currentContractCodigo}`)">Documentos</button>
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="exportContractPdf()">Exportar PDF</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="sendContractEmail()">Enviar por correo</button>
           <button onclick="closeContractModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -2797,6 +2798,7 @@
           <button class="btn-danger px-3 py-1.5 text-xs" onclick="setQuoteStatus('RECHAZADA')">Rechazar</button>
           <button class="btn-primary px-3 py-1.5 text-xs" onclick="convertQuote()">Convertir en contrato</button>
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="exportQuotePdf()">Exportar PDF</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" onclick="sendQuoteEmail()">Enviar por correo</button>
           <button onclick="closeQuoteModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>

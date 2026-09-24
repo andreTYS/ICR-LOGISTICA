@@ -969,19 +969,29 @@ const HELP_TOPICS = {
   ] },
   receive: { tips: ["Registra entrada de mercadería a un almacén y ubicación específicos.", "Si el producto usa número de serie o lote, el formulario lo pedirá."] },
   remove: { tips: ["Registra salida/despacho de stock.", "No permite dejar el stock en negativo — si falla, revisa el saldo en Stock."] },
-  transfer: { tips: ["Mueve stock entre dos almacenes en una sola operación atómica: sale de uno y entra al otro, o no pasa nada."] },
+  transfer: { tips: [
+    "Mueve stock entre dos almacenes en una sola operación atómica: sale de uno y entra al otro, o no pasa nada.",
+    "Si el producto usa número de serie o lote, se transfieren las unidades específicas elegidas, no solo una cantidad genérica.",
+  ] },
   products: { tips: [
     "Los productos tipo 'kit' agrupan varios ítems — al despachar un kit se descuentan sus componentes.",
     "Desactivar un producto lo oculta de nuevas operaciones sin borrar su historial.",
   ] },
-  movements: { tips: ["Ledger completo e inmutable de todo lo que entró, salió o se transfirió. Exporta a CSV para análisis externo."] },
-  alerts: { tips: ["Lista productos por debajo de su punto de reorden — es la misma señal que dispara sugerencias en Reabastecimiento."] },
+  movements: { tips: [
+    "Ledger completo e inmutable de todo lo que entró, salió o se transfirió. Exporta a CSV para análisis externo.",
+    "Filtra por SKU o almacén para reconstruir el historial completo de un producto puntual (auditoría, reclamo de cliente, etc.).",
+  ] },
+  alerts: { tips: [
+    "Lista productos por debajo de su punto de reorden — es la misma señal que dispara sugerencias en Reabastecimiento.",
+    "Ajustar el punto de reorden de un producto (en Productos) cambia cuándo aparece acá, sin tocar el stock actual.",
+  ] },
   warehouses: { tips: [
     "Crea almacenes y sus ubicaciones internas (pasillo/rack/nivel) para tener trazabilidad fina del stock.",
     "Desactivar un almacén no borra su historial, solo evita que se sigan registrando movimientos nuevos ahí.",
   ] },
   purchases: { tips: [
     "Flujo: crear orden → enviar al proveedor → recibir (total o parcial). Una recepción parcial deja el resto como pendiente (backorder).",
+    "Cada recepción genera su propio movimiento de ingreso a stock — el historial completo de qué llegó y cuándo queda en Movimientos.",
   ] },
   "purchases-replenishment": { tips: ["Sugerencias automáticas de cantidad a comprar según punto de reorden y stock actual — punto de partida para crear una orden de compra."] },
   "purchases-suppliers": { tips: ["Catálogo de proveedores usado al crear órdenes de compra y registrar facturas en Cuentas por pagar."] },
@@ -1018,26 +1028,77 @@ const HELP_TOPICS = {
     "Un lead es un contacto/oportunidad antes de tener una cotización formal — cuando se gana, se convierte en cotización con un clic.",
     "Registra cada llamada, email o reunión como actividad para no perder el hilo del seguimiento.",
   ] },
-  quotes: { tips: ["Cotiza antes del contrato — una cotización ACEPTADA se convierte en contrato con un clic, sin volver a digitar los ítems."] },
-  "sales-contracts": { tips: ["Cada contrato tiene un cronograma de cobro (hitos); registrar el pago de un hito dispara el asiento contable automático."] },
-  "sales-receivables": { tips: ["Vista consolidada de hitos de cobro pendientes o vencidos, de todos los contratos, para priorizar la cobranza."] },
-  expenses: { tips: ["Registra gastos operativos; si vinculas un proyecto, el gasto entra al costeo real de esa obra."] },
+  quotes: { tips: [
+    "Cotiza antes del contrato — una cotización ACEPTADA se convierte en contrato con un clic, sin volver a digitar los ítems.",
+    "Si elegís un producto del catálogo por SKU, el ítem queda validado contra Almacén (no se puede cotizar algo que no existe).",
+    "Desde el detalle de la cotización, \"Enviar por correo\" la manda al cliente como PDF adjunto, sin salir del sistema.",
+  ] },
+  "sales-contracts": { tips: [
+    "Cada contrato tiene un cronograma de cobro (hitos); registrar el pago de un hito dispara el asiento contable automático.",
+    "La suma de los hitos nunca puede superar el monto total del contrato — el sistema lo valida al agregar cada uno.",
+    "Desde el detalle del contrato, \"Enviar por correo\" lo manda al cliente como PDF adjunto.",
+  ] },
+  "sales-receivables": { tips: [
+    "Vista consolidada de hitos de cobro pendientes o vencidos, de todos los contratos, para priorizar la cobranza.",
+    "Un hito PENDIENTE pasa solo a VENCIDO cuando su fecha esperada ya pasó — no hace falta marcarlo a mano.",
+  ] },
+  expenses: { tips: [
+    "Registra gastos operativos; si vinculas un proyecto, el gasto entra al costeo real de esa obra.",
+    "Un gasto con empleado a reembolsar queda trazado para RR.HH., aunque el pago en sí se gestione fuera del sistema.",
+  ] },
   store: { tips: ["Deja el SKU vacío para vender algo fuera de catálogo (servicio, accesorio suelto) sin tocar el inventario. Si pones un SKU, la venta descuenta stock real del almacén elegido."] },
-  assets: { tips: ["Equipos instalados en clientes con garantía y ciclo de mantenimiento — haz clic en uno para ver su historial de mantenimientos."] },
-  maintenance: { tips: ["Listado global de mantenimientos preventivos y correctivos de todos los activos, con su estado."] },
-  warranties: { tips: ["Activos cuya garantía ya venció o está por vencer dentro de la ventana elegida — útil para avisar al cliente a tiempo."] },
+  assets: { tips: [
+    "Equipos instalados en clientes con garantía y ciclo de mantenimiento — haz clic en uno para ver su historial de mantenimientos.",
+    "Si el equipo viene de un producto con número de serie, vincularlo ahí conecta la garantía con ese ingreso de stock específico.",
+  ] },
+  maintenance: { tips: [
+    "Listado global de mantenimientos preventivos y correctivos de todos los activos, con su estado.",
+    "Programar un mantenimiento marca el activo EN_MANTENIMIENTO; al completarlo vuelve solo a OPERATIVO.",
+  ] },
+  warranties: { tips: [
+    "Activos cuya garantía ya venció o está por vencer dentro de la ventana elegida — útil para avisar al cliente a tiempo.",
+    "Un activo RETIRADO no aparece acá aunque su garantía haya vencido — ya no importa si fue dado de baja.",
+  ] },
   reservations: { tips: ["Aparta stock para un proyecto o cliente sin descontarlo todavía del inventario disponible. Cuando el material efectivamente sale rumbo a obra, usa \"Despachar a obra\" (puedes hacerlo en varios viajes); \"Liberar\" es solo para cancelar sin que nada haya salido."] },
   "tool-loans": { tips: ["Un producto marcado como \"retornable\" (herramientas, equipos, cajas) genera aquí un préstamo automáticamente cada vez que sale del almacén — a diferencia de un material que se instala para siempre. Registra el retorno cuando vuelva de la obra para reponer el stock físico."] },
-  adjustments: { tips: ["Un conteo físico que no cuadra con el sistema queda pendiente hasta que un supervisor lo apruebe."] },
-  audit: { tips: ["Registro de solo lectura de toda acción ejecutada sobre el inventario — quién, qué y cuándo."] },
-  users: { tips: ["Alta de usuarios y asignación de rol — el rol determina qué puede hacer cada quien (ver Roles y permisos)."] },
-  "module-access": { tips: ["Apaga módulos completos por rol sin tocar código — por ejemplo, ocultar Contabilidad al rol VENTAS."] },
-  "role-permissions": { tips: ["Mapa de solo lectura: qué acción puede ejecutar cada rol. Para cambiarlo hay que modificar el código (es la fuente de verdad de seguridad)."] },
-  integrations: { tips: [
-    "Muestra si las integraciones opcionales (IA, Telegram) están configuradas, sin exponer las claves.",
-    "'No configurado' significa que falta esa variable de entorno en el servidor.",
+  adjustments: { tips: [
+    "Un conteo físico que no cuadra con el sistema queda pendiente hasta que un supervisor lo apruebe.",
+    "Aprobar un ajuste actualiza el stock físico al valor contado; rechazarlo lo descarta sin tocar el inventario.",
   ] },
-  settings: { tips: ["Personalización visual del panel (por ahora, el logo)."] },
+  audit: { tips: [
+    "Registro de solo lectura de toda acción ejecutada sobre el inventario — quién, qué y cuándo.",
+    "Incluye también los intentos fallidos (ej. un ingreso rechazado por stock insuficiente), no solo lo que se concretó.",
+  ] },
+  users: { tips: [
+    "Alta de usuarios y asignación de rol — el rol determina qué puede hacer cada quien (ver Roles y permisos).",
+    "Desactivar un usuario le corta el acceso sin borrar su historial de auditoría ni lo que registró antes.",
+  ] },
+  "module-access": { tips: [
+    "Apaga módulos completos por rol sin tocar código — por ejemplo, ocultar Contabilidad al rol VENTAS.",
+    "Esto oculta el módulo del menú; no reemplaza el permiso real de cada acción (ver Roles y permisos).",
+  ] },
+  "role-permissions": { tips: ["Mapa de solo lectura: qué acción puede ejecutar cada rol. Para cambiarlo hay que modificar el código (es la fuente de verdad de seguridad)."] },
+  chatbot: { tips: [
+    "Bandeja de las conversaciones que llegan por el widget de chat de la web o por Telegram, vía N8N.",
+    "El asistente responde con datos reales del ERP (stock, cotizaciones, cuentas por cobrar, etc.), no respuestas genéricas — necesita GEMINI_API_KEY configurada en el servidor (ver Integraciones).",
+    "El mensaje de bienvenida y si el chatbot está habilitado se configuran desde el botón de ajustes de esta misma pantalla.",
+  ] },
+  "api-tokens": { tips: [
+    "Tokens de larga duración para que un sistema externo (N8N, un script) llame a la API del ERP sin usar la sesión de un usuario humano.",
+    "Un token \"actúa como\" el usuario que elijas y hereda exactamente sus permisos — no existe un rol especial para integraciones.",
+    "El valor del token solo se muestra una vez, al crearlo. Si se pierde, hay que revocarlo y generar uno nuevo.",
+  ] },
+  "n8n-webhooks": { tips: [
+    "Webhooks salientes: el ERP avisa a N8N (con un POST) apenas ocurre un evento elegido, en vez de que N8N tenga que consultar el ERP.",
+    "Cada webhook se prueba con \"Enviar de prueba\" antes de depender de él en un flujo real.",
+  ] },
+  integrations: { tips: [
+    "Muestra si las integraciones opcionales (IA, Telegram, Google Drive, correo) están configuradas, sin exponer las claves.",
+    "'No configurado' significa que falta esa variable de entorno en el servidor — no es un error de la app, hay que completarla en el VPS.",
+  ] },
+  settings: { tips: [
+    "Personalización visual del panel (logo) y los datos de la empresa (razón social, RUC, dirección, teléfono) que salen en los PDF.",
+  ] },
 };
 const HELP_DEFAULT_TIPS = ["Todavía no hay una guía específica para esta pantalla. Si tienes dudas, usa el Asistente ICR (el ícono de chat) para preguntar en lenguaje natural."];
 let currentHelpView = "dashboard";
@@ -3284,6 +3345,7 @@ async function convertLeadToQuote() {
 // -------- Ventas: cotizaciones --------
 let quoteDraftLines = [];
 let currentQuoteCodigo = null;
+let currentQuoteContacto = null;
 
 function renderQuoteDraftLines() {
   const body = document.getElementById("quote-draft-lines-body");
@@ -3391,6 +3453,7 @@ async function openQuoteModal(codigo) {
     return;
   }
   const c = r.data;
+  currentQuoteContacto = c.cliente_contacto || null;
   document.getElementById("quote-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${quoteStatusBadge(c.estado)}`;
 
   const isTerminal = c.estado === "CONVERTIDA" || c.estado === "RECHAZADA";
@@ -3420,6 +3483,15 @@ async function exportQuotePdf() {
   await downloadPdf(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/pdf`, `${currentQuoteCodigo}.pdf`);
 }
 
+async function sendQuoteEmail() {
+  if (!currentQuoteCodigo) return;
+  const to = prompt("Enviar cotización a este correo:", currentQuoteContacto || "");
+  if (!to) return;
+  const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/send-email`, { method: "POST", body: JSON.stringify({ channel: "web", to }) });
+  if (r.status === "success") toast(`Cotización enviada a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
+}
+
 async function setQuoteStatus(estado) {
   if (!currentQuoteCodigo) return;
   const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
@@ -3443,6 +3515,7 @@ async function convertQuote() {
 let hitoDraftLines = [];
 let currentContractCodigo = null;
 let currentContractId = null;
+let currentContractContacto = null;
 let currentPayHitoId = null;
 
 function renderHitoDraftLines() {
@@ -3553,6 +3626,7 @@ async function openContractModal(codigo) {
   }
   const c = r.data;
   currentContractId = c.contrato_id;
+  currentContractContacto = c.cliente_contacto || null;
   document.getElementById("contract-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${contractStatusBadge(c.estado)}`;
 
   const isTerminal = c.estado === "FINALIZADO" || c.estado === "CANCELADO";
@@ -3594,6 +3668,15 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeContr
 async function exportContractPdf() {
   if (!currentContractCodigo) return;
   await downloadPdf(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/pdf`, `${currentContractCodigo}.pdf`);
+}
+
+async function sendContractEmail() {
+  if (!currentContractCodigo) return;
+  const to = prompt("Enviar contrato a este correo:", currentContractContacto || "");
+  if (!to) return;
+  const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/send-email`, { method: "POST", body: JSON.stringify({ channel: "web", to }) });
+  if (r.status === "success") toast(`Contrato enviado a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
 }
 
 async function setContractStatus(estado) {
@@ -4333,6 +4416,7 @@ async function loadIntegrationsStatus() {
     { label: "Bot de Telegram — token", key: "telegram_bot" },
     { label: "Bot de Telegram — webhook", key: "telegram_webhook" },
     { label: "Google Drive (documentos)", key: "google_drive" },
+    { label: "Correo (envío de Cotizaciones/Contratos)", key: "correo" },
   ];
   container.innerHTML = items.map(({ label, key }) => {
     const s = r.data[key];

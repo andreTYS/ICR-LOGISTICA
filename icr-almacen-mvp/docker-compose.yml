@@ -32,6 +32,21 @@ services:
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el .env antes de desplegar}
       ALLOWED_ORIGIN: https://${DOMAIN:-almacen.icr.example.com}
+      # Integraciones opcionales — todas se leen desde el .env de este mismo
+      # directorio (docker compose lo carga solo). Sin definir, cada una
+      # responde "no configurado" en vez de fallar (ver README).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      RUC_API_URL: ${RUC_API_URL:-}
+      RUC_API_TOKEN: ${RUC_API_TOKEN:-}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
     volumes:
       - icr_almacen_uploads:/app/uploads
     depends_on:
