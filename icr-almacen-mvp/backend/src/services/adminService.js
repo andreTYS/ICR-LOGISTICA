@@ -22,6 +22,7 @@ function getIntegrationsStatus() {
     telegram_bot: { configurado: !!process.env.TELEGRAM_BOT_TOKEN, variable: "TELEGRAM_BOT_TOKEN" },
     telegram_webhook: { configurado: !!process.env.TELEGRAM_WEBHOOK_SECRET, variable: "TELEGRAM_WEBHOOK_SECRET" },
     google_drive: { configurado: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON && !!process.env.GOOGLE_DRIVE_FOLDER_ID, variable: "GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_DRIVE_FOLDER_ID" },
+    correo: { configurado: !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS, variable: "SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS" },
   };
 }
 

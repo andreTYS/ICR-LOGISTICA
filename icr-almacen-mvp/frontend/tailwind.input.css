@@ -296,12 +296,12 @@ body { font-feature-settings: "cv11"; }
 
 /* -------- Result / toast / alert states -------- */
 .result-box { margin-top: 18px; font-size: 13px; }
-.result-box pre {
-  background: #00004C; color: #d7dcec; padding: 14px; border-radius: 8px;
-  overflow-x: auto; font-size: 12.5px; margin: 0;
+.result-box p {
+  margin: 0; padding: 10px 14px; border-radius: 8px; border-left: 3px solid transparent;
+  line-height: 1.4;
 }
-.result-box.ok pre { border-left: 4px solid #059669; }
-.result-box.err pre { border-left: 4px solid #e11d48; }
+.result-box.ok p { background: #ecfdf5; color: #047857; border-left-color: #059669; }
+.result-box.err p { background: #fff1f2; color: #be123c; border-left-color: #e11d48; }
 
 .toast {
   padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;

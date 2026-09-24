@@ -31,6 +31,7 @@ const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDoc
 const navIcons = require("./services/navIconsService");
 const xlsxService = require("./services/xlsxService");
 const reportesPdf = require("./services/reportesPdfService");
+const mail = require("./services/mailService");
 const rucService = require("./services/rucService");
 const { AppError, translatePgError } = require("./errors");
 const { login, requireAuth, requirePermission } = require("./auth");
@@ -993,6 +994,24 @@ router.get(
   })
 );
 
+router.post(
+  "/sales/contracts/:codigo/send-email",
+  requirePermission("sales.contract.manage"),
+  handle(async (req) => {
+    const contrato = await ventas.getContrato(req.params.codigo);
+    const to = req.body?.to || contrato.cliente_contacto;
+    const buffer = await reportesPdf.buildContratoPdf(contrato);
+    await mail.enviarDocumentoPorCorreo({
+      to,
+      subject: `Contrato ${contrato.codigo_contrato} — Inversiones ICR`,
+      text: `Estimado(a) ${contrato.cliente_nombre || ""},\n\nAdjuntamos el contrato ${contrato.codigo_contrato}.\n\nSaludos,\nInversiones ICR`,
+      filename: `${contrato.codigo_contrato}.pdf`,
+      buffer,
+    });
+    return { enviado_a: to };
+  })
+);
+
 router.get(
   "/sales-receivables",
   requirePermission("sales.query"),
@@ -1147,6 +1166,24 @@ router.get(
     const cotizacion = await cotizaciones.getCotizacion(req.params.codigo);
     const buffer = await reportesPdf.buildCotizacionPdf(cotizacion);
     return { buffer, filename: `${cotizacion.codigo}.pdf`, contentType: "application/pdf" };
+  })
+);
+
+router.post(
+  "/quotes/:codigo/send-email",
+  requirePermission("quotes.manage"),
+  handle(async (req) => {
+    const cotizacion = await cotizaciones.getCotizacion(req.params.codigo);
+    const to = req.body?.to || cotizacion.cliente_contacto;
+    const buffer = await reportesPdf.buildCotizacionPdf(cotizacion);
+    await mail.enviarDocumentoPorCorreo({
+      to,
+      subject: `Cotización ${cotizacion.codigo} — Inversiones ICR`,
+      text: `Estimado(a) ${cotizacion.cliente_nombre || ""},\n\nAdjuntamos la cotización ${cotizacion.codigo}.\n\nSaludos,\nInversiones ICR`,
+      filename: `${cotizacion.codigo}.pdf`,
+      buffer,
+    });
+    return { enviado_a: to };
   })
 );
 
