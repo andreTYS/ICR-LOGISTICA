@@ -37,6 +37,7 @@ test("crear un contrato con hitos iniciales", async () => {
   assert.equal(detalle.monto_cobrado, 0);
   assert.equal(detalle.saldo_pendiente, 10000);
   assert.equal(detalle.cliente_contacto, "proyectos@vilcahnos.example", "getContrato debe traer el contacto del cliente (usado para 'Enviar por correo')");
+  assert.equal(detalle.cliente_telefono, "054221100", "getContrato debe traer el teléfono del cliente (usado para 'Enviar por WhatsApp')");
 });
 
 test("crear un contrato con un RUC de cliente inexistente se rechaza", async () => {

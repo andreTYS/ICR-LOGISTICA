@@ -202,7 +202,7 @@ async function listContratos({ estado, page, pageSize }) {
 
 async function getContrato(codigoContrato) {
   const coR = await pool.query(
-    `SELECT co.*, c.razon_social AS cliente_nombre, c.ruc AS cliente_ruc, c.contacto AS cliente_contacto, pr.codigo_proyecto, u.nombre_completo AS responsable_nombre
+    `SELECT co.*, c.razon_social AS cliente_nombre, c.ruc AS cliente_ruc, c.contacto AS cliente_contacto, c.telefono AS cliente_telefono, pr.codigo_proyecto, u.nombre_completo AS responsable_nombre
      FROM contratos co
      LEFT JOIN clientes c ON c.cliente_id = co.cliente_id
      LEFT JOIN proyectos pr ON pr.proyecto_id = co.proyecto_id

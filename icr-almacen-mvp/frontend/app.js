@@ -1031,12 +1031,12 @@ const HELP_TOPICS = {
   quotes: { tips: [
     "Cotiza antes del contrato — una cotización ACEPTADA se convierte en contrato con un clic, sin volver a digitar los ítems.",
     "Si elegís un producto del catálogo por SKU, el ítem queda validado contra Almacén (no se puede cotizar algo que no existe).",
-    "Desde el detalle de la cotización, \"Enviar por correo\" la manda al cliente como PDF adjunto, sin salir del sistema.",
+    "Desde el detalle de la cotización, \"Enviar por correo\" o \"Enviar por WhatsApp\" la mandan al cliente como PDF adjunto, sin salir del sistema.",
   ] },
   "sales-contracts": { tips: [
     "Cada contrato tiene un cronograma de cobro (hitos); registrar el pago de un hito dispara el asiento contable automático.",
     "La suma de los hitos nunca puede superar el monto total del contrato — el sistema lo valida al agregar cada uno.",
-    "Desde el detalle del contrato, \"Enviar por correo\" lo manda al cliente como PDF adjunto.",
+    "Desde el detalle del contrato, \"Enviar por correo\" o \"Enviar por WhatsApp\" lo mandan al cliente como PDF adjunto.",
   ] },
   "sales-receivables": { tips: [
     "Vista consolidada de hitos de cobro pendientes o vencidos, de todos los contratos, para priorizar la cobranza.",
@@ -3346,6 +3346,7 @@ async function convertLeadToQuote() {
 let quoteDraftLines = [];
 let currentQuoteCodigo = null;
 let currentQuoteContacto = null;
+let currentQuoteTelefono = null;
 
 function renderQuoteDraftLines() {
   const body = document.getElementById("quote-draft-lines-body");
@@ -3454,6 +3455,7 @@ async function openQuoteModal(codigo) {
   }
   const c = r.data;
   currentQuoteContacto = c.cliente_contacto || null;
+  currentQuoteTelefono = c.cliente_telefono || null;
   document.getElementById("quote-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${quoteStatusBadge(c.estado)}`;
 
   const isTerminal = c.estado === "CONVERTIDA" || c.estado === "RECHAZADA";
@@ -3492,6 +3494,15 @@ async function sendQuoteEmail() {
   else toast(r.error.message, false);
 }
 
+async function sendQuoteWhatsapp() {
+  if (!currentQuoteCodigo) return;
+  const to = prompt("Enviar cotización a este WhatsApp (código de país + número, ej. 51987654321):", currentQuoteTelefono || "");
+  if (!to) return;
+  const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/send-whatsapp`, { method: "POST", body: JSON.stringify({ channel: "web", to }) });
+  if (r.status === "success") toast(`Cotización enviada por WhatsApp a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
+}
+
 async function setQuoteStatus(estado) {
   if (!currentQuoteCodigo) return;
   const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}/status`, { method: "POST", body: JSON.stringify({ channel: "web", estado }) });
@@ -3516,6 +3527,7 @@ let hitoDraftLines = [];
 let currentContractCodigo = null;
 let currentContractId = null;
 let currentContractContacto = null;
+let currentContractTelefono = null;
 let currentPayHitoId = null;
 
 function renderHitoDraftLines() {
@@ -3627,6 +3639,7 @@ async function openContractModal(codigo) {
   const c = r.data;
   currentContractId = c.contrato_id;
   currentContractContacto = c.cliente_contacto || null;
+  currentContractTelefono = c.cliente_telefono || null;
   document.getElementById("contract-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${contractStatusBadge(c.estado)}`;
 
   const isTerminal = c.estado === "FINALIZADO" || c.estado === "CANCELADO";
@@ -3676,6 +3689,15 @@ async function sendContractEmail() {
   if (!to) return;
   const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/send-email`, { method: "POST", body: JSON.stringify({ channel: "web", to }) });
   if (r.status === "success") toast(`Contrato enviado a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
+}
+
+async function sendContractWhatsapp() {
+  if (!currentContractCodigo) return;
+  const to = prompt("Enviar contrato a este WhatsApp (código de país + número, ej. 51987654321):", currentContractTelefono || "");
+  if (!to) return;
+  const r = await api(`/sales/contracts/${encodeURIComponent(currentContractCodigo)}/send-whatsapp`, { method: "POST", body: JSON.stringify({ channel: "web", to }) });
+  if (r.status === "success") toast(`Contrato enviado por WhatsApp a ${r.data.enviado_a}`);
   else toast(r.error.message, false);
 }
 
@@ -4417,6 +4439,7 @@ async function loadIntegrationsStatus() {
     { label: "Bot de Telegram — webhook", key: "telegram_webhook" },
     { label: "Google Drive (documentos)", key: "google_drive" },
     { label: "Correo (envío de Cotizaciones/Contratos)", key: "correo" },
+    { label: "WhatsApp (Evolution API)", key: "whatsapp" },
   ];
   container.innerHTML = items.map(({ label, key }) => {
     const s = r.data[key];

@@ -145,6 +145,33 @@ test("las sugerencias de reabastecimiento incluyen productos por debajo del punt
   assert.equal(Number(found.cantidad_sugerida), 998);
 });
 
+test("crear una orden de compra con cantidad decimal de un producto UND se rechaza", async () => {
+  await assert.rejects(
+    compras.crearOrdenCompra({
+      proveedorRuc: PROVEEDOR_RUC, warehouseCode: "ALM-001",
+      items: [{ sku: "PANEL-JA-550", quantity: 1.5 }],
+      usuarioId: COMPRAS_USER, canal: "web",
+    }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("recibir una cantidad decimal de un producto UND se rechaza", async () => {
+  const oc = await compras.crearOrdenCompra({
+    proveedorRuc: PROVEEDOR_RUC, warehouseCode: "ALM-001",
+    items: [{ sku: "PANEL-JA-550", quantity: 5 }],
+    usuarioId: COMPRAS_USER, canal: "web",
+  });
+  await compras.enviarOrdenCompra({ numero: oc.numero, usuarioId: COMPRAS_USER, canal: "web" });
+  await assert.rejects(
+    compras.recibirOrdenCompra({
+      numero: oc.numero, items: [{ sku: "PANEL-JA-550", quantity: 2.5 }],
+      usuarioId: ALMACENERO, canal: "web",
+    }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

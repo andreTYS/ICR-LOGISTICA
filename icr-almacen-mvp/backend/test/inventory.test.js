@@ -444,6 +444,45 @@ test("un producto con unidad de medida fraccionable (ej. KG) sí admite cantidad
   assert.equal(Number(r.stock.stock_fisico), 3.75);
 });
 
+test("reservar una cantidad decimal de un producto UND se rechaza", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await assert.rejects(
+    inventory.reserve({ sku: "PANEL-JA-550", quantity: 1.5, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("despachar una reserva con una cantidad decimal se rechaza", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  const reserva = await inventory.reserve({ sku: "PANEL-JA-550", quantity: 4, warehouseCode: "ALM-001", usuarioId: VENTAS, canal: "web" });
+  await assert.rejects(
+    inventory.dispatchReservation({ reservaId: reserva.reserva_id, cantidad: 1.5, usuarioId: VENTAS, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("transferir una cantidad decimal de un producto UND se rechaza", async () => {
+  await inventory.receive({ sku: "PANEL-JA-550", quantity: 5, warehouseCode: "ALM-001", usuarioId: ALMACENERO, canal: "web" });
+  await assert.rejects(
+    inventory.transfer({ sku: "PANEL-JA-550", quantity: 1.5, fromWarehouseCode: "ALM-001", toWarehouseCode: "ALM-002", usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("un ajuste con cantidad física decimal de un producto UND se rechaza", async () => {
+  await assert.rejects(
+    inventory.adjustCreate({ sku: "PANEL-JA-550", warehouseCode: "ALM-001", cantidadFisica: 2.5, usuarioId: ALMACENERO, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("agregar un item a un kit con cantidad decimal de un producto UND se rechaza", async () => {
+  await assert.rejects(
+    inventory.addKitItem({ kitSku: "INV-GROWATT-5K", itemSku: "PANEL-JA-550", quantity: 1.5 }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

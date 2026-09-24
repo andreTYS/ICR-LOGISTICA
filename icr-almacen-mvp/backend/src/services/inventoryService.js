@@ -291,6 +291,7 @@ async function transfer({ sku, quantity, fromWarehouseCode, fromLocationCode, to
 
   return withAuditedTransaction("inventory.transfer", usuarioId, canal, async (client) => {
     const producto = await findProductBySku(client, sku);
+    requireIntegerIfUnidadDiscreta(producto, quantity);
     const almacenOrigen = await findWarehouseByCode(client, fromWarehouseCode);
     const almacenDestino = await findWarehouseByCode(client, toWarehouseCode);
     const ubicacionOrigen = await findLocation(client, almacenOrigen.almacen_id, fromLocationCode);
@@ -514,11 +515,12 @@ async function addKitItem({ kitSku, itemSku, quantity }) {
   }
   const kitR = await pool.query("SELECT producto_id, es_kit FROM productos WHERE sku=$1 AND activo=true", [kitSku]);
   if (kitR.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${kitSku}' no existe o está inactivo`, 404);
-  const itemR = await pool.query("SELECT producto_id, es_kit FROM productos WHERE sku=$1 AND activo=true", [itemSku]);
+  const itemR = await pool.query("SELECT producto_id, es_kit, unidad_medida FROM productos WHERE sku=$1 AND activo=true", [itemSku]);
   if (itemR.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${itemSku}' no existe o está inactivo`, 404);
   if (itemR.rows[0].es_kit) {
     throw new AppError("SCHEMA_INVALID", "No se admiten kits anidados (el item tampoco puede ser un kit)", 400);
   }
+  requireIntegerIfUnidadDiscreta({ sku: itemSku, unidad_medida: itemR.rows[0].unidad_medida }, quantity);
 
   await pool.query("UPDATE productos SET es_kit = true WHERE producto_id = $1", [kitR.rows[0].producto_id]);
   const r = await pool.query(
@@ -698,6 +700,7 @@ async function reserve({ sku, quantity, warehouseCode, locationCode, proyectoCod
   }
   return withAuditedTransaction("inventory.reserve", usuarioId, canal, async (client) => {
     const producto = await findProductBySku(client, sku);
+    requireIntegerIfUnidadDiscreta(producto, quantity);
     const almacen = await findWarehouseByCode(client, warehouseCode);
     const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
 
@@ -789,6 +792,9 @@ async function dispatchReservation({ reservaId, cantidad, documento, usuarioId, 
     if (!(cantidadDespacho > 0) || cantidadDespacho > Number(reserva.cantidad)) {
       throw new AppError("SCHEMA_INVALID", `cantidad debe ser mayor a 0 y no superar lo reservado (${reserva.cantidad})`, 400);
     }
+    const productoR = await client.query("SELECT * FROM productos WHERE producto_id=$1", [reserva.producto_id]);
+    const producto = productoR.rows[0];
+    requireIntegerIfUnidadDiscreta(producto, cantidadDespacho);
 
     let documentoId = null;
     if (documento?.tipo_documento && documento?.numero_documento) {
@@ -822,8 +828,6 @@ async function dispatchReservation({ reservaId, cantidad, documento, usuarioId, 
       await client.query("UPDATE reservas SET estado='CONSUMIDA' WHERE reserva_id=$1", [reservaId]);
     }
 
-    const productoR = await client.query("SELECT * FROM productos WHERE producto_id=$1", [reserva.producto_id]);
-    const producto = productoR.rows[0];
     const alertaGenerada = await maybeCreateLowStockAlert(
       client, reserva.producto_id, reserva.almacen_id, stockR.rows[0].stock_disponible, producto.punto_reorden
     );
@@ -941,6 +945,7 @@ async function adjustCreate({ sku, warehouseCode, locationCode, cantidadFisica, 
   }
   return withAuditedTransaction("inventory.adjust", usuarioId, canal, async (client) => {
     const producto = await findProductBySku(client, sku);
+    requireIntegerIfUnidadDiscreta(producto, cantidadFisica);
     const almacen = await findWarehouseByCode(client, warehouseCode);
     const ubicacion = await findLocation(client, almacen.almacen_id, locationCode);
     const stockRow = await lockOrCreateStockRow(client, producto.producto_id, almacen.almacen_id, ubicacion?.ubicacion_id || null);
