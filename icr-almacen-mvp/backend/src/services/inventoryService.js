@@ -386,15 +386,32 @@ async function searchProducts({ query, page, pageSize }) {
 }
 
 async function createProduct(data) {
-  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, retornable } = data;
+  const { sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, retornable } = data;
   if (!sku || !nombre || !tipo_control) {
     throw new AppError("SCHEMA_INVALID", "sku, nombre y tipo_control son obligatorios", 400);
   }
   const r = await pool.query(
-    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, retornable)
-     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10,$11) RETURNING *`,
-    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0, retornable === true || retornable === "true"]
+    `INSERT INTO productos (sku, nombre, marca, modelo, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo, costo_unitario, precio_venta, retornable)
+     VALUES ($1,$2,$3,$4,COALESCE($5,'UND'),$6,COALESCE($7,0),COALESCE($8,0),$9,$10,$11,$12) RETURNING *`,
+    [sku, nombre, marca || null, modelo || null, unidad_medida, tipo_control, stock_minimo, punto_reorden, stock_maximo || null, costo_unitario || 0, precio_venta || null, retornable === true || retornable === "true"]
   );
+  return r.rows[0];
+}
+
+// Precio público/de lista de venta — distinto de costo_unitario (interno, se
+// usa para costeo y márgenes). Sin definir, el producto se muestra "a
+// cotizar" en la tienda en vez de con un precio fijo. Mismo criterio
+// granular que setProductPhoto/setProductRetornable.
+async function setProductPrecioVenta(sku, precioVenta) {
+  const valor = precioVenta === null || precioVenta === undefined || precioVenta === "" ? null : Number(precioVenta);
+  if (valor !== null && (!Number.isFinite(valor) || valor < 0)) {
+    throw new AppError("SCHEMA_INVALID", "precioVenta debe ser un número mayor o igual a 0 (o vacío para quitarlo)", 400);
+  }
+  const r = await pool.query(
+    "UPDATE productos SET precio_venta=$1 WHERE sku=$2 AND activo=true RETURNING *",
+    [valor, sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
   return r.rows[0];
 }
 
@@ -476,6 +493,7 @@ async function importProductsCsv(csvText) {
         punto_reorden: data.punto_reorden ? Number(data.punto_reorden) : 0,
         stock_maximo: data.stock_maximo ? Number(data.stock_maximo) : null,
         costo_unitario: data.costo_unitario ? Number(data.costo_unitario) : 0,
+        precio_venta: data.precio_venta ? Number(data.precio_venta) : null,
       });
       detalle.push({ fila: i + 1, sku: data.sku, ok: true });
     } catch (err) {
@@ -1036,7 +1054,7 @@ module.exports = {
   returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, setProductRetornable, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, setProductPrecioVenta, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
   requireIntegerIfUnidadDiscreta,

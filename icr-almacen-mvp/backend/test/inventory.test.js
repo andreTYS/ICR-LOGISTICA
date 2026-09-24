@@ -483,6 +483,37 @@ test("agregar un item a un kit con cantidad decimal de un producto UND se rechaz
   );
 });
 
+test("createProduct acepta precio_venta y setProductPrecioVenta lo actualiza o lo quita", async () => {
+  const creado = await inventory.createProduct({
+    sku: "PRECIO-VENTA-01",
+    nombre: "Producto con precio de lista",
+    tipo_control: "NORMAL",
+    precio_venta: 199.9,
+  });
+  assert.equal(Number(creado.precio_venta), 199.9);
+
+  const actualizado = await inventory.setProductPrecioVenta("PRECIO-VENTA-01", 249.5);
+  assert.equal(Number(actualizado.precio_venta), 249.5);
+
+  const sinPrecio = await inventory.setProductPrecioVenta("PRECIO-VENTA-01", null);
+  assert.equal(sinPrecio.precio_venta, null);
+});
+
+test("setProductPrecioVenta rechaza un valor negativo", async () => {
+  await inventory.createProduct({ sku: "PRECIO-VENTA-02", nombre: "Producto sin precio", tipo_control: "NORMAL" });
+  await assert.rejects(
+    inventory.setProductPrecioVenta("PRECIO-VENTA-02", -5),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("setProductPrecioVenta rechaza un SKU inexistente", async () => {
+  await assert.rejects(
+    inventory.setProductPrecioVenta("SKU-QUE-NO-EXISTE", 10),
+    (err) => err.code === "PRODUCT_NOT_FOUND"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

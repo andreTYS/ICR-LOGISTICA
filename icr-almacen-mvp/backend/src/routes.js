@@ -287,6 +287,12 @@ router.post(
   handle(async (req) => inventory.setProductRetornable(req.params.sku, req.body?.retornable))
 );
 
+router.post(
+  "/inventory/products/:sku/precio-venta",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.setProductPrecioVenta(req.params.sku, req.body?.precio_venta))
+);
+
 // -------- Kits ("cajas de herramientas") --------
 
 router.post(
