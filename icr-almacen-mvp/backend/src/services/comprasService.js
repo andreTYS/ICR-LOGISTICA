@@ -2,6 +2,7 @@ const { pool } = require("../db");
 const { AppError } = require("../errors");
 const {
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
+  requireIntegerIfUnidadDiscreta,
 } = require("./inventoryService");
 const contabilidad = require("./contabilidadService");
 
@@ -58,6 +59,7 @@ async function crearOrdenCompra({ proveedorRuc, warehouseCode, items, fechaEsper
         throw new AppError("SCHEMA_INVALID", "cada item requiere sku y quantity (>0)", 400);
       }
       const producto = await findProductBySku(client, it.sku);
+      requireIntegerIfUnidadDiscreta(producto, it.quantity);
       await client.query(
         `INSERT INTO orden_compra_items (orden_compra_id, producto_id, cantidad_pedida, costo_unitario)
          VALUES ($1,$2,$3,$4)`,
@@ -134,6 +136,7 @@ async function recibirOrdenCompra({ numero, items, documento, usuarioId, canal }
         throw new AppError("SCHEMA_INVALID", "cada item requiere sku y quantity (>0)", 400);
       }
       const producto = await findProductBySku(client, it.sku);
+      requireIntegerIfUnidadDiscreta(producto, it.quantity);
 
       const itemR = await client.query(
         `SELECT * FROM orden_compra_items WHERE orden_compra_id = $1 AND producto_id = $2 FOR UPDATE`,

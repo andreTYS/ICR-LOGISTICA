@@ -34,6 +34,7 @@ test("crear una cotización calcula el total a partir de sus ítems", async () =
   assert.equal(detalle.items.length, 2);
   assert.equal(detalle.total, 20 * 700 + 4000);
   assert.equal(detalle.cliente_contacto, "proyectos@vilcahnos.example", "getCotizacion debe traer el contacto del cliente (usado para 'Enviar por correo')");
+  assert.equal(detalle.cliente_telefono, "054221100", "getCotizacion debe traer el teléfono del cliente (usado para 'Enviar por WhatsApp')");
 });
 
 test("una cotización sin ítems se rechaza", async () => {
