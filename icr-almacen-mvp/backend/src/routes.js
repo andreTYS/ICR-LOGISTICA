@@ -27,7 +27,7 @@ const archivos = require("./services/archivosService");
 const calendario = require("./services/calendarioService");
 const openapi = require("./openapi");
 const driveService = require("./services/driveService");
-const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile } = require("./uploads");
+const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, uploadSpreadsheet } = require("./uploads");
 const navIcons = require("./services/navIconsService");
 const xlsxService = require("./services/xlsxService");
 const reportesPdf = require("./services/reportesPdfService");
@@ -1100,6 +1100,29 @@ router.get(
     categoria: req.query.categoria || null, proyectoCodigo: req.query.proyecto_codigo || null,
     page: req.query.page, pageSize: req.query.page_size,
   }))
+);
+
+router.post(
+  "/expenses/import-xlsx",
+  requirePermission("expenses.register"),
+  uploadSpreadsheet.single("file"),
+  handle(async (req) => {
+    if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
+    return gastos.importGastosXlsx(req.file.buffer, { usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" });
+  })
+);
+
+router.get(
+  "/expenses/import-template",
+  requirePermission("expenses.register"),
+  handleBinary(async () => {
+    const buffer = await xlsxService.buildWorkbookBuffer({
+      sheetName: "Gastos",
+      headers: ["fecha", "categoria", "descripcion", "monto", "moneda", "proyecto_codigo", "comprobante_tipo", "comprobante_serie_numero"],
+      rows: [["2026-09-24", "MATERIAL", "Ejemplo: cable solar 6mm", 366, "PEN", "", "", ""]],
+    });
+    return { buffer, filename: "plantilla-gastos.xlsx", contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+  })
 );
 
 // -------- Cuentas por pagar --------

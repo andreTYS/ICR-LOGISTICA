@@ -63,3 +63,32 @@ test("buildWorkbookBuffer sanea nombres de hoja inválidos (caracteres prohibido
   assert.ok(workbook.worksheets[0].name.length <= 31);
   assert.doesNotMatch(workbook.worksheets[0].name, /[\\/*?:[\]]/);
 });
+
+test("parseWorkbookBuffer lee la primera hoja usando la fila 1 como encabezado (en minúsculas)", async () => {
+  const buffer = await xlsxService.buildWorkbookBuffer({
+    sheetName: "Datos",
+    headers: ["Fecha", "Categoria", "Monto"],
+    rows: [["2026-09-01", "MATERIAL", 100]],
+  });
+  const rows = await xlsxService.parseWorkbookBuffer(buffer);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].categoria, "MATERIAL");
+  assert.equal(rows[0].monto, 100);
+});
+
+test("parseWorkbookBuffer ignora filas completamente vacías", async () => {
+  const buffer = await xlsxService.buildWorkbookBuffer({
+    sheetName: "Datos",
+    headers: ["a", "b"],
+    rows: [["1", "2"], ["", ""], ["3", "4"]],
+  });
+  const rows = await xlsxService.parseWorkbookBuffer(buffer);
+  assert.equal(rows.length, 2);
+});
+
+test("parseWorkbookBuffer rechaza un archivo que no es un .xlsx válido", async () => {
+  await assert.rejects(
+    xlsxService.parseWorkbookBuffer(Buffer.from("esto no es un excel")),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});

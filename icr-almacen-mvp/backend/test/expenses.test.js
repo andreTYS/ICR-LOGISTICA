@@ -14,6 +14,7 @@ const { pool } = require("../src/db");
 const gastos = require("../src/services/gastosService");
 const proyectos = require("../src/services/proyectosService");
 const contabilidad = require("../src/services/contabilidadService");
+const xlsxService = require("../src/services/xlsxService");
 
 const SUPERVISOR = "00000000-0000-0000-0000-000000000003";
 const PROYECTO_CODIGO = "PROY-001"; // seed.sql
@@ -91,6 +92,45 @@ test("el listado de gastos pagina y filtra por categoría y proyecto", async () 
 
   const porProyecto = await gastos.listGastos({ proyectoCodigo: PROYECTO_CODIGO });
   assert.ok(porProyecto.items.some((g) => g.codigo_proyecto === PROYECTO_CODIGO));
+});
+
+test("registrar un gasto acepta las categorías de campo/obra agregadas a pedido", async () => {
+  const r = await gastos.registrarGasto({
+    categoria: "EQUIPOS_OBRA", descripcion: "Rack de pared para obra", monto: 280, usuarioId: SUPERVISOR, canal: "web",
+  });
+  assert.equal(r.gasto.categoria, "EQUIPOS_OBRA");
+});
+
+test("importGastosXlsx importa filas válidas de un .xlsx real y reporta errores por fila sin abortar el resto", async () => {
+  const buffer = await xlsxService.buildWorkbookBuffer({
+    sheetName: "Gastos",
+    headers: ["fecha", "categoria", "descripcion", "monto", "proyecto_codigo"],
+    rows: [
+      ["2026-09-01", "MATERIAL", "Cable solar 6mm", 366, ""],
+      ["2026-09-02", "CATEGORIA_QUE_NO_EXISTE", "Fila inválida", 100, ""],
+      ["2026-09-03", "MOVILIDAD", "Taxi a obra", 45, PROYECTO_CODIGO],
+    ],
+  });
+  const resultado = await gastos.importGastosXlsx(buffer, { usuarioId: SUPERVISOR, canal: "web" });
+  assert.equal(resultado.total, 3);
+  assert.equal(resultado.exitosos, 2);
+  assert.equal(resultado.fallidos, 1);
+  assert.equal(resultado.detalle[1].ok, false);
+
+  const listado = await gastos.listGastos({ categoria: "MOVILIDAD" });
+  assert.ok(listado.items.some((g) => g.descripcion === "Taxi a obra" && g.codigo_proyecto === PROYECTO_CODIGO));
+});
+
+test("importGastosXlsx rechaza un archivo sin filas de datos", async () => {
+  const buffer = await xlsxService.buildWorkbookBuffer({
+    sheetName: "Gastos",
+    headers: ["fecha", "categoria", "descripcion", "monto"],
+    rows: [],
+  });
+  await assert.rejects(
+    gastos.importGastosXlsx(buffer, { usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
 });
 
 after(async () => {

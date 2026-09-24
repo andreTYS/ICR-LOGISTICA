@@ -1363,7 +1363,9 @@ function renderCashflowChart(rows) {
 // una barra de un solo tono, con la categoría como etiqueta directa — no
 // hace falta paleta categórica ni leyenda.
 const EXPENSE_CATEGORY_LABELS = {
-  COMBUSTIBLE: "Combustible", VIATICOS: "Viáticos", ALQUILER: "Alquiler", SERVICIOS: "Servicios",
+  EQUIPOS_OBRA: "Equipos / obra", MATERIAL: "Material", MOVILIDAD: "Movilidad", FLETES: "Fletes",
+  COMBUSTIBLE: "Combustible", VIATICOS: "Viáticos", ALIMENTACION: "Alimentación", SUELDO: "Sueldo",
+  ALQUILER: "Alquiler", OFICINA: "Oficina", SERVICIOS: "Servicios",
   SOFTWARE: "Software", MANTENIMIENTO: "Mantenimiento", HONORARIOS: "Honorarios", REEMBOLSO: "Reembolso", OTROS: "Otros",
 };
 
@@ -3932,7 +3934,12 @@ async function loadStoreSales(page = 1) {
 }
 
 // -------- Gastos --------
-const EXPENSE_CATEGORY_TONES = { COMBUSTIBLE: "transferencia", VIATICOS: "transferencia", ALQUILER: "ajuste", SERVICIOS: "ajuste", SOFTWARE: "transferencia", MANTENIMIENTO: "ajuste", HONORARIOS: "devolucion", REEMBOLSO: "pendiente", OTROS: "devolucion" };
+const EXPENSE_CATEGORY_TONES = {
+  EQUIPOS_OBRA: "ok", MATERIAL: "ok", MOVILIDAD: "transferencia", FLETES: "transferencia",
+  COMBUSTIBLE: "transferencia", VIATICOS: "transferencia", ALIMENTACION: "pendiente", SUELDO: "ajuste",
+  ALQUILER: "ajuste", OFICINA: "ajuste", SERVICIOS: "ajuste", SOFTWARE: "transferencia", MANTENIMIENTO: "ajuste",
+  HONORARIOS: "devolucion", REEMBOLSO: "pendiente", OTROS: "devolucion",
+};
 function expenseCategoryBadge(categoria) {
   return badge(EXPENSE_CATEGORY_LABELS[categoria] || categoria, EXPENSE_CATEGORY_TONES[categoria] || "devolucion");
 }
@@ -3988,6 +3995,42 @@ async function loadExpenses(page) {
       </tr>`).join("")
     : emptyRow(7, "Sin gastos registrados todavía.", "inbox");
   renderPager("expenses-pager", r.data, (p) => loadExpenses(p));
+}
+
+// -------- Gastos: importación masiva desde Excel --------
+async function importExpensesXlsx(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const result = document.getElementById("expenses-import-result");
+  result.innerHTML = `<p class="text-sm text-slate-400 italic">Importando…</p>`;
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const r = await uploadFile("/expenses/import-xlsx", formData);
+    if (r.status !== "success") {
+      result.innerHTML = `<div class="result-box err">${r.error.message}</div>`;
+      toast(r.error.message, false);
+      return;
+    }
+    const { total, exitosos, fallidos, detalle } = r.data;
+    const fallidasHtml = fallidos > 0
+      ? `<ul class="mt-2 text-xs text-rose-600 list-disc pl-4">${detalle.filter((d) => !d.ok).map((d) => `<li>Fila ${d.fila} (${d.descripcion || "sin descripción"}): ${d.error}</li>`).join("")}</ul>`
+      : "";
+    result.innerHTML = `<div class="result-box ${fallidos > 0 ? "err" : "ok"}">
+      <p>Importación completa: ${exitosos} de ${total} gastos registrados${fallidos > 0 ? `, ${fallidos} con error` : ""}.</p>
+      ${fallidasHtml}
+    </div>`;
+    toast(`${exitosos} gasto(s) importado(s)`, fallidos === 0);
+    loadExpenses(1);
+  } finally {
+    inputEl.value = "";
+  }
+}
+
+async function downloadExpensesTemplate() {
+  const res = await fetch(`${API}/expenses/import-template`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) { toast("No se pudo descargar la plantilla", false); return; }
+  downloadBlob(await res.blob(), "plantilla-gastos.xlsx");
 }
 
 // -------- Activos: activos instalados --------

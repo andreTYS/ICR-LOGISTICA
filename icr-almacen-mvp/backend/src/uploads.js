@@ -105,4 +105,23 @@ async function deleteUploadedFile(url) {
   }
 }
 
-module.exports = { upload, uploadsDir, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, deleteUploadedFile };
+// -------------------- Importación masiva desde Excel (.xlsx) --------------------
+// Solo en memoria — nunca se guarda en /uploads, el buffer se lee una vez
+// (xlsxService.parseWorkbookBuffer) y se descarta después de procesarlo.
+const SPREADSHEET_MAX_SIZE = 5 * 1024 * 1024; // 5MB — una planilla de gastos no debería pesar más que eso
+const ALLOWED_SPREADSHEET_TYPES = {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true, // .xlsx
+  "application/vnd.ms-excel": true, // .xls legado, que algunos navegadores siguen mandando así
+};
+const uploadSpreadsheet = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: SPREADSHEET_MAX_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_SPREADSHEET_TYPES[file.mimetype]) {
+      return cb(new AppError("INVALID_FILE_TYPE", "Solo se aceptan archivos Excel (.xlsx)", 400));
+    }
+    cb(null, true);
+  },
+});
+
+module.exports = { upload, uploadsDir, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, deleteUploadedFile, uploadSpreadsheet };
