@@ -1,3 +1,4 @@
+const ExcelJS = require("exceljs");
 const { pool } = require("../db");
 const { AppError } = require("../errors");
 const { withAuditedTransaction } = require("./inventoryService");
@@ -137,4 +138,61 @@ async function importGastosXlsx(buffer, { usuarioId, canal }) {
   };
 }
 
-module.exports = { registrarGasto, listGastos, importGastosXlsx, CATEGORIAS_VALIDAS };
+const HEADER_STYLE = { font: { bold: true, color: { argb: "FFFFFFFF" } }, fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF00004C" } } };
+
+// Plantilla de importación pensada para que la llene directamente la
+// persona de campo (no alguien técnico): hoja de instrucciones en español
+// simple + listas desplegables en las columnas que tienen un valor fijo
+// (categoría, tipo de comprobante) para que no se pueda escribir mal y la
+// fila se rechace después al importar.
+async function buildImportTemplate() {
+  const workbook = new ExcelJS.Workbook();
+
+  const instrucciones = workbook.addWorksheet("Instrucciones");
+  instrucciones.columns = [{ width: 26 }, { width: 80 }];
+  const tituloRow = instrucciones.addRow(["Columna", "Qué poner"]);
+  tituloRow.eachCell((cell) => Object.assign(cell, HEADER_STYLE));
+  [
+    ["fecha", "Fecha en que se pagó el gasto. Formato día/mes/año, ej: 24/09/2026."],
+    ["categoria", "Elige una opción de la lista (clic en la celda de la hoja \"Gastos\" y aparece una flechita a la derecha)."],
+    ["descripcion", "Una frase corta que diga qué fue el gasto. Ej: \"Cable solar 6mm para obra Fundo Vilca\"."],
+    ["monto", "Solo el número, sin \"S/\" ni comas. Ej: 366.50"],
+    ["moneda (opcional)", "Déjalo vacío si fue en soles. Si fue en dólares, escribe USD."],
+    ["proyecto_codigo (opcional)", "El código de la obra si el gasto es de un proyecto específico, ej. PROY-001. Si no aplica, déjalo vacío."],
+    ["comprobante_tipo (opcional)", "FACTURA, BOLETA o RECIBO — elige de la lista, o déjalo vacío si no hay comprobante."],
+    ["comprobante_serie_numero (opcional)", "El número que aparece en la factura/boleta/recibo, ej. B001-00456."],
+  ].forEach((fila) => {
+    const row = instrucciones.addRow(fila);
+    row.getCell(2).alignment = { wrapText: true, vertical: "top" };
+  });
+  instrucciones.addRow([]);
+  const nota = instrucciones.addRow(["Importante", "No cambies los nombres de las columnas de la hoja \"Gastos\" (la primera fila) — el sistema los usa para saber qué es cada dato."]);
+  nota.getCell(1).font = { bold: true };
+  nota.getCell(2).alignment = { wrapText: true, vertical: "top" };
+
+  const sheet = workbook.addWorksheet("Gastos");
+  const headers = ["fecha", "categoria", "descripcion", "monto", "moneda", "proyecto_codigo", "comprobante_tipo", "comprobante_serie_numero"];
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell((cell) => Object.assign(cell, HEADER_STYLE));
+  sheet.addRow(["24/09/2026", "MATERIAL", "Cable solar 6mm para obra Fundo Vilca", 366.5, "", "", "", ""]);
+  sheet.getColumn(4).numFmt = "#,##0.00";
+  sheet.getColumn(3).width = 45;
+  headers.forEach((h, i) => { if (i !== 2) sheet.getColumn(i + 1).width = Math.max(h.length + 4, 16); });
+
+  const LAST_ROW = 200; // margen amplio para varias jornadas de carga sin tener que repetir el dropdown a mano
+  const categoriasFormula = `"${CATEGORIAS_VALIDAS.join(",")}"`;
+  const comprobantesFormula = `"${TIPOS_COMPROBANTE_VALIDOS.join(",")}"`;
+  for (let row = 2; row <= LAST_ROW; row++) {
+    sheet.getCell(`B${row}`).dataValidation = {
+      type: "list", allowBlank: true, formulae: [categoriasFormula],
+      showErrorMessage: true, errorStyle: "stop", errorTitle: "Categoría no válida", error: "Elige una opción de la lista desplegable.",
+    };
+    sheet.getCell(`G${row}`).dataValidation = {
+      type: "list", allowBlank: true, formulae: [comprobantesFormula],
+    };
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+module.exports = { registrarGasto, listGastos, importGastosXlsx, buildImportTemplate, CATEGORIAS_VALIDAS };
