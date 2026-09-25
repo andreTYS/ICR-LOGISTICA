@@ -179,4 +179,66 @@ async function buildRentabilidadPdf({ items, totales }, { estado } = {}) {
   return finalizarBuffer(doc);
 }
 
-module.exports = { buildBalanceGeneralPdf, buildEstadoResultadosPdf, buildCotizacionPdf, buildContratoPdf, buildRentabilidadPdf };
+async function buildOrdenCompraPdf(orden) {
+  const doc = crearDocumento();
+  const { empresa } = await getSettings();
+  renderEncabezado(doc, { titulo: "Orden de Compra", subtitulo: orden.numero, empresa });
+
+  renderInfoBlock(doc, [
+    ["Proveedor", orden.proveedor_nombre],
+    ["RUC", orden.proveedor_ruc || "-"],
+    ["Almacén destino", orden.almacen_nombre],
+    ["Fecha de emisión", fecha(orden.fecha_emision)],
+    ["Fecha esperada", fecha(orden.fecha_esperada)],
+    ["Estado", orden.estado],
+  ]);
+
+  const total = orden.items.reduce((sum, it) => sum + Number(it.cantidad_pedida) * Number(it.costo_unitario), 0);
+
+  renderTabla(doc, {
+    headers: ["Producto", "SKU", "Cantidad", "Costo Unit.", "Subtotal"],
+    rows: orden.items.map((it) => [
+      it.producto_nombre,
+      it.sku,
+      Number(it.cantidad_pedida).toLocaleString("es-PE"),
+      money(it.costo_unitario),
+      money(it.cantidad_pedida * it.costo_unitario),
+    ]),
+    widths: [175, 80, 60, 85, 90],
+    alignRight: [2, 3, 4],
+  });
+
+  renderTotalLine(doc, "Total", `${orden.moneda || "PEN"} ${money(total)}`);
+
+  if (orden.observaciones) {
+    doc.moveDown(1);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#00004C").text("Observaciones");
+    doc.font("Helvetica").fontSize(9).fillColor("#1e293b").text(orden.observaciones);
+  }
+
+  return finalizarBuffer(doc);
+}
+
+async function buildGastoPdf(gasto) {
+  const doc = crearDocumento();
+  const { empresa } = await getSettings();
+  renderEncabezado(doc, { titulo: "Comprobante de Gasto", subtitulo: fecha(gasto.fecha), empresa });
+
+  renderInfoBlock(doc, [
+    ["Categoría", gasto.categoria],
+    ["Descripción", gasto.descripcion],
+    ["Fecha", fecha(gasto.fecha)],
+    ["Proyecto", gasto.codigo_proyecto || "-"],
+    ["Reembolso a", gasto.empleado_nombre || "-"],
+    ["Comprobante", gasto.comprobante_tipo ? `${gasto.comprobante_tipo} ${gasto.comprobante_serie_numero || ""}` : "-"],
+  ]);
+
+  renderTotalLine(doc, "Monto", `${gasto.moneda || "PEN"} ${money(gasto.monto)}`);
+
+  return finalizarBuffer(doc);
+}
+
+module.exports = {
+  buildBalanceGeneralPdf, buildEstadoResultadosPdf, buildCotizacionPdf, buildContratoPdf, buildRentabilidadPdf,
+  buildOrdenCompraPdf, buildGastoPdf,
+};

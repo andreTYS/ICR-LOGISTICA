@@ -65,6 +65,30 @@ test("con un fetch inyectado, envía el PDF como documento al número correcto (
   whatsapp._setFetchForTests(null);
 });
 
+test("con mimetype de imagen, usa mediatype 'image' en vez de 'document'", async () => {
+  process.env.EVOLUTION_API_URL = "http://evolution.example.com";
+  process.env.EVOLUTION_API_KEY = "test-key";
+  process.env.EVOLUTION_INSTANCE = "icr";
+  const whatsapp = require("../src/services/whatsappService");
+
+  const llamadas = [];
+  whatsapp._setFetchForTests(async (url, options) => {
+    llamadas.push({ url, options });
+    return { ok: true };
+  });
+
+  await whatsapp.enviarDocumentoPorWhatsapp({
+    to: "51987654321", caption: "Foto de instalación",
+    filename: "foto.jpg", buffer: Buffer.from("fake-jpeg"), mimetype: "image/jpeg",
+  });
+
+  const body = JSON.parse(llamadas[0].options.body);
+  assert.equal(body.mediatype, "image");
+  assert.equal(body.mimetype, "image/jpeg");
+
+  whatsapp._setFetchForTests(null);
+});
+
 test("una respuesta no exitosa de Evolution API se traduce en WHATSAPP_SEND_FAILED", async () => {
   process.env.EVOLUTION_API_URL = "http://evolution.example.com";
   process.env.EVOLUTION_API_KEY = "test-key";

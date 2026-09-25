@@ -19,7 +19,10 @@ function isConfigured() {
 // (ej. 51987654321) — sin '+', espacios ni guiones.
 const PHONE_RE = /^\d{8,15}$/;
 
-async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer }) {
+// mimetype es opcional (por defecto PDF, el único caso usado hasta ahora en
+// Cotizaciones/Contratos) — Documentos adjuntos admite además JPEG/PNG/WebP,
+// que Evolution API espera como mediatype "image" en vez de "document".
+async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer, mimetype }) {
   const numero = String(to || "").replace(/[^\d]/g, "");
   if (!PHONE_RE.test(numero)) {
     throw new AppError(
@@ -36,6 +39,8 @@ async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer }) {
     );
   }
 
+  const tipoArchivo = mimetype || "application/pdf";
+  const mediatype = tipoArchivo.startsWith("image/") ? "image" : "document";
   const doFetch = fetchOverride || fetch;
   const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/+$/, "");
   const url = `${baseUrl}/message/sendMedia/${process.env.EVOLUTION_INSTANCE}`;
@@ -44,8 +49,8 @@ async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer }) {
     headers: { "Content-Type": "application/json", apikey: process.env.EVOLUTION_API_KEY },
     body: JSON.stringify({
       number: numero,
-      mediatype: "document",
-      mimetype: "application/pdf",
+      mediatype,
+      mimetype: tipoArchivo,
       media: buffer.toString("base64"),
       fileName: filename,
       caption: caption || "",

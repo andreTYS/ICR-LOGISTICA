@@ -61,6 +61,20 @@ test("listArchivos trae solo los adjuntos de esa entidad, más recientes primero
   assert.ok(lista.every((a) => a.entidad_tipo === "proyecto"));
 });
 
+test("getArchivo trae un archivo por id, y rechaza uno inexistente", async () => {
+  const pid = await proyectoId();
+  const { archivo } = await archivos.subirArchivo({ entidadTipo: "proyecto", entidadId: pid, nombre: "Contrato firmado", url: "/uploads/contrato.pdf", tipoArchivo: "application/pdf", usuarioId: SUPERVISOR, canal: "web" });
+
+  const encontrado = await archivos.getArchivo(archivo.archivo_id);
+  assert.equal(encontrado.nombre, "Contrato firmado");
+  assert.equal(encontrado.url, "/uploads/contrato.pdf");
+
+  await assert.rejects(
+    archivos.getArchivo("00000000-0000-0000-0000-000000009999"),
+    (err) => err.code === "DOCUMENT_NOT_FOUND"
+  );
+});
+
 test("eliminar un archivo funciona, y eliminar uno inexistente se rechaza", async () => {
   const pid = await proyectoId();
   const { archivo } = await archivos.subirArchivo({ entidadTipo: "proyecto", entidadId: pid, nombre: "Temporal", url: "/uploads/temporal.pdf", tipoArchivo: "application/pdf", usuarioId: SUPERVISOR, canal: "web" });

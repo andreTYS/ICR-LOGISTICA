@@ -33,6 +33,22 @@ test("registrar un gasto simple funciona y genera un asiento automático en BORR
   assert.equal(Number(generado.total), 500);
 });
 
+test("getGasto trae un gasto por id con el nombre del proyecto y del empleado, y rechaza uno inexistente", async () => {
+  const r = await gastos.registrarGasto({
+    categoria: "COMBUSTIBLE", descripcion: "Gasolina camioneta", monto: 150, proyectoCodigo: PROYECTO_CODIGO, empleadoId: EMPLEADO_ID,
+    comprobante: { tipo: "BOLETA", serie_numero: "B001-123" }, usuarioId: SUPERVISOR, canal: "web",
+  });
+  const encontrado = await gastos.getGasto(r.gasto.gasto_id);
+  assert.equal(encontrado.categoria, "COMBUSTIBLE");
+  assert.equal(encontrado.codigo_proyecto, PROYECTO_CODIGO);
+  assert.ok(encontrado.empleado_nombre, "debe traer el nombre del empleado, no solo su id");
+
+  await assert.rejects(
+    gastos.getGasto("00000000-0000-0000-0000-000000009999"),
+    (err) => err.code === "EXPENSE_NOT_FOUND"
+  );
+});
+
 test("una categoría inválida se rechaza", async () => {
   await assert.rejects(
     gastos.registrarGasto({ categoria: "NO_EXISTE", descripcion: "X", monto: 10, usuarioId: SUPERVISOR, canal: "web" }),
