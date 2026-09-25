@@ -160,6 +160,39 @@ test("actualizar un hito inexistente o con estado inválido se rechaza", async (
   );
 });
 
+test("extractDriveFolderId reconoce un link completo de Drive o deja el ID tal cual si ya viene pelado", () => {
+  assert.equal(proyectos.extractDriveFolderId("https://drive.google.com/drive/folders/1AbC-XyZ_123?usp=sharing"), "1AbC-XyZ_123");
+  assert.equal(proyectos.extractDriveFolderId("https://drive.google.com/open?id=1AbC-XyZ_123"), "1AbC-XyZ_123");
+  assert.equal(proyectos.extractDriveFolderId("1AbC-XyZ_123"), "1AbC-XyZ_123");
+  assert.equal(proyectos.extractDriveFolderId(""), null);
+  assert.equal(proyectos.extractDriveFolderId(null), null);
+});
+
+test("setDriveFolderId vincula la carpeta de un proyecto (por link o por ID) y getDriveFolderId la devuelve", async () => {
+  await proyectos.crearProyecto({ codigoProyecto: "PROY-DRIVE-01", nombre: "Proyecto con Drive", usuarioId: SUPERVISOR, canal: "web" });
+  const detalleAntes = await proyectos.getProyecto("PROY-DRIVE-01");
+  assert.equal(await proyectos.getDriveFolderId(detalleAntes.proyecto_id), null);
+
+  const r = await proyectos.setDriveFolderId({
+    codigoProyecto: "PROY-DRIVE-01",
+    driveFolderLink: "https://drive.google.com/drive/folders/1AbC-XyZ_123?usp=sharing",
+    usuarioId: SUPERVISOR, canal: "web",
+  });
+  assert.equal(r.proyecto.drive_folder_id, "1AbC-XyZ_123");
+  assert.equal(await proyectos.getDriveFolderId(r.proyecto.proyecto_id), "1AbC-XyZ_123");
+
+  // Vacío desvincula la carpeta
+  const sinCarpeta = await proyectos.setDriveFolderId({ codigoProyecto: "PROY-DRIVE-01", driveFolderLink: "", usuarioId: SUPERVISOR, canal: "web" });
+  assert.equal(sinCarpeta.proyecto.drive_folder_id, null);
+});
+
+test("setDriveFolderId rechaza un proyecto inexistente", async () => {
+  await assert.rejects(
+    proyectos.setDriveFolderId({ codigoProyecto: "PROY-QUE-NO-EXISTE", driveFolderLink: "1AbC", usuarioId: SUPERVISOR, canal: "web" }),
+    (err) => err.code === "PROJECT_NOT_FOUND"
+  );
+});
+
 after(async () => {
   await pool.end();
 });

@@ -19,8 +19,12 @@ function getServiceAccount() {
   }
 }
 
+// Solo exige la cuenta de servicio — la carpeta de destino ya no es fija:
+// puede venir por proyecto (proyectos.drive_folder_id) o, a falta de eso,
+// de GOOGLE_DRIVE_FOLDER_ID como respaldo. uploadFile es quien valida que
+// haya AL MENOS una de las dos disponible al momento de subir.
 function isConfigured() {
-  return !!getServiceAccount() && !!process.env.GOOGLE_DRIVE_FOLDER_ID;
+  return !!getServiceAccount();
 }
 
 async function getAccessToken() {
@@ -54,17 +58,22 @@ async function getAccessToken() {
 
 // Upload multipart simple (metadata + contenido en un solo request) —
 // suficiente para los tamaños que ya acepta uploads.js (hasta 10MB). El
-// archivo queda dentro de la carpeta GOOGLE_DRIVE_FOLDER_ID; controlar quién
-// puede verlo es responsabilidad de cómo se comparte esa carpeta en Drive
-// (a propósito no se hace público ningún archivo desde acá).
-async function uploadFile({ buffer, filename, mimeType }) {
+// archivo queda dentro de folderId si se pasa (la carpeta propia de un
+// proyecto, ver proyectosService.setDriveFolderId) o, si no, de la carpeta
+// global GOOGLE_DRIVE_FOLDER_ID; controlar quién puede verlo es
+// responsabilidad de cómo se comparte esa carpeta en Drive (a propósito no
+// se hace público ningún archivo desde acá).
+async function uploadFile({ buffer, filename, mimeType, folderId }) {
   if (!isConfigured()) {
-    throw new AppError("DRIVE_NOT_CONFIGURED", "Google Drive no está configurado en este servidor (faltan GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_DRIVE_FOLDER_ID)", 400);
+    throw new AppError("DRIVE_NOT_CONFIGURED", "Google Drive no está configurado en este servidor (falta GOOGLE_SERVICE_ACCOUNT_JSON)", 400);
+  }
+  const targetFolderId = folderId || process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!targetFolderId) {
+    throw new AppError("DRIVE_NOT_CONFIGURED", "No hay una carpeta de Drive configurada (ni GOOGLE_DRIVE_FOLDER_ID en el servidor, ni una carpeta propia en este proyecto)", 400);
   }
   const accessToken = await getAccessToken();
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   const boundary = `icr-drive-${Date.now()}`;
-  const metadata = { name: filename, parents: [folderId] };
+  const metadata = { name: filename, parents: [targetFolderId] };
 
   const head = Buffer.from(
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +

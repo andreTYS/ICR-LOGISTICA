@@ -21,7 +21,11 @@ function getIntegrationsStatus() {
     gemini: { configurado: !!process.env.GEMINI_API_KEY, variable: "GEMINI_API_KEY" },
     telegram_bot: { configurado: !!process.env.TELEGRAM_BOT_TOKEN, variable: "TELEGRAM_BOT_TOKEN" },
     telegram_webhook: { configurado: !!process.env.TELEGRAM_WEBHOOK_SECRET, variable: "TELEGRAM_WEBHOOK_SECRET" },
-    google_drive: { configurado: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON && !!process.env.GOOGLE_DRIVE_FOLDER_ID, variable: "GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_DRIVE_FOLDER_ID" },
+    // GOOGLE_DRIVE_FOLDER_ID ya no es obligatoria: es solo la carpeta de
+    // respaldo cuando un proyecto no tiene la suya propia vinculada (ver
+    // proyectosService.setDriveFolderId) — con la cuenta de servicio ya
+    // alcanza para que la integración funcione.
+    google_drive: { configurado: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON, variable: "GOOGLE_SERVICE_ACCOUNT_JSON (+ GOOGLE_DRIVE_FOLDER_ID opcional, como respaldo)" },
     correo: { configurado: !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS, variable: "SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS" },
     whatsapp: { configurado: !!process.env.EVOLUTION_API_URL && !!process.env.EVOLUTION_API_KEY && !!process.env.EVOLUTION_INSTANCE, variable: "EVOLUTION_API_URL / EVOLUTION_API_KEY / EVOLUTION_INSTANCE" },
   };
