@@ -27,7 +27,7 @@ const archivos = require("./services/archivosService");
 const calendario = require("./services/calendarioService");
 const openapi = require("./openapi");
 const driveService = require("./services/driveService");
-const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, uploadSpreadsheet } = require("./uploads");
+const { upload, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, readUploadedFile, uploadSpreadsheet } = require("./uploads");
 const navIcons = require("./services/navIconsService");
 const xlsxService = require("./services/xlsxService");
 const reportesPdf = require("./services/reportesPdfService");
@@ -591,6 +591,32 @@ router.get(
 );
 
 router.get(
+  "/purchases/orders/:numero/pdf",
+  requirePermission("purchases.query"),
+  handleBinary(async (req) => {
+    const orden = await compras.getOrdenCompra(req.params.numero);
+    const buffer = await reportesPdf.buildOrdenCompraPdf(orden);
+    return { buffer, filename: `${orden.numero}.pdf`, contentType: "application/pdf" };
+  })
+);
+
+router.post(
+  "/purchases/orders/:numero/send-whatsapp",
+  requirePermission("purchases.send"),
+  handle(async (req) => {
+    const orden = await compras.getOrdenCompra(req.params.numero);
+    const buffer = await reportesPdf.buildOrdenCompraPdf(orden);
+    await whatsapp.enviarDocumentoPorWhatsapp({
+      to: req.body?.to,
+      caption: `Orden de Compra ${orden.numero} — Inversiones ICR`,
+      filename: `${orden.numero}.pdf`,
+      buffer,
+    });
+    return { enviado_a: req.body?.to };
+  })
+);
+
+router.get(
   "/purchases/replenishment-suggestions",
   requirePermission("purchases.replenishment.get"),
   handle(async () => compras.getSugerenciasReabastecimiento())
@@ -1115,6 +1141,22 @@ router.get(
 );
 
 router.post(
+  "/expenses/:id/send-whatsapp",
+  requirePermission("expenses.register"),
+  handle(async (req) => {
+    const gasto = await gastos.getGasto(req.params.id);
+    const buffer = await reportesPdf.buildGastoPdf(gasto);
+    await whatsapp.enviarDocumentoPorWhatsapp({
+      to: req.body?.to,
+      caption: `Gasto (${gasto.categoria}): ${gasto.descripcion}`,
+      filename: `gasto-${gasto.gasto_id}.pdf`,
+      buffer,
+    });
+    return { enviado_a: req.body?.to };
+  })
+);
+
+router.post(
   "/expenses/import-xlsx",
   requirePermission("expenses.register"),
   uploadSpreadsheet.single("file"),
@@ -1489,6 +1531,23 @@ router.delete(
   "/documents/:id",
   requirePermission("documents.manage"),
   handle(async (req) => archivos.eliminarArchivo({ archivoId: req.params.id, usuarioId: req.user.usuario_id, canal: req.query.channel || "web" }))
+);
+
+router.post(
+  "/documents/:id/send-whatsapp",
+  requirePermission("documents.manage"),
+  handle(async (req) => {
+    const archivo = await archivos.getArchivo(req.params.id);
+    const buffer = await readUploadedFile(archivo.url);
+    await whatsapp.enviarDocumentoPorWhatsapp({
+      to: req.body?.to,
+      caption: archivo.nombre,
+      filename: archivo.nombre,
+      buffer,
+      mimetype: archivo.tipo_archivo,
+    });
+    return { enviado_a: req.body?.to };
+  })
 );
 
 // -------- Panel: tableros agregados --------

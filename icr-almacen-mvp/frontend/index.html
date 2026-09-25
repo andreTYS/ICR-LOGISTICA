@@ -1644,7 +1644,7 @@
               <th class="text-left font-semibold px-3 py-2.5">Fecha</th><th class="text-left font-semibold px-3 py-2.5">Categoría</th>
               <th class="text-left font-semibold px-3 py-2.5">Descripción</th><th class="text-left font-semibold px-3 py-2.5">Monto</th>
               <th class="text-left font-semibold px-3 py-2.5">Proyecto</th><th class="text-left font-semibold px-3 py-2.5">Reembolso a</th>
-              <th class="text-left font-semibold px-3 py-2.5">Comprobante</th>
+              <th class="text-left font-semibold px-3 py-2.5">Comprobante</th><th class="text-left font-semibold px-3 py-2.5">Acción</th>
             </tr></thead>
             <tbody id="expenses-body"></tbody>
           </table>
@@ -2927,6 +2927,8 @@
           <div id="oc-modal-subtitle" class="text-xs text-slate-500 mt-0.5">—</div>
         </div>
         <div class="flex items-center gap-2">
+          <button onclick="downloadOcPdf()" class="btn-secondary px-3 py-1.5 text-xs">Descargar PDF</button>
+          <button onclick="sendOcWhatsapp()" class="btn-secondary px-3 py-1.5 text-xs">Enviar por WhatsApp</button>
           <button id="oc-send-btn" onclick="sendOcAction()" class="btn-secondary px-3 py-1.5 text-xs">Enviar al proveedor</button>
           <button id="oc-cancel-btn" onclick="cancelOcAction()" class="btn-danger px-3 py-1.5 text-xs">Cancelar orden</button>
           <button onclick="closeOcModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">

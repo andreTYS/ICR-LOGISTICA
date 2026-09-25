@@ -96,6 +96,19 @@ async function listGastos({ categoria, proyectoCodigo, page, pageSize } = {}) {
   return { items: r.rows.map(({ total_count, ...row }) => row), total, page: p, pageSize: size };
 }
 
+async function getGasto(gastoId) {
+  const r = await pool.query(
+    `SELECT g.*, pr.codigo_proyecto, e.nombre_completo AS empleado_nombre
+     FROM gastos g
+     LEFT JOIN proyectos pr ON pr.proyecto_id = g.proyecto_id
+     LEFT JOIN empleados e ON e.empleado_id = g.empleado_id
+     WHERE g.gasto_id = $1`,
+    [gastoId]
+  );
+  if (r.rows.length === 0) throw new AppError("EXPENSE_NOT_FOUND", "El gasto indicado no existe", 404);
+  return r.rows[0];
+}
+
 // Importación masiva de gastos desde un .xlsx real (Excel/LibreOffice, no
 // solo CSV) — columnas: fecha, categoria, descripcion, monto (obligatorias);
 // moneda, proyecto_codigo, comprobante_tipo, comprobante_serie_numero
@@ -195,4 +208,4 @@ async function buildImportTemplate() {
   return workbook.xlsx.writeBuffer();
 }
 
-module.exports = { registrarGasto, listGastos, importGastosXlsx, buildImportTemplate, CATEGORIAS_VALIDAS };
+module.exports = { registrarGasto, listGastos, getGasto, importGastosXlsx, buildImportTemplate, CATEGORIAS_VALIDAS };

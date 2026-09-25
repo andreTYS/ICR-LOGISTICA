@@ -61,6 +61,12 @@ async function listArchivos({ entidadTipo, entidadId }) {
   return r.rows;
 }
 
+async function getArchivo(archivoId) {
+  const r = await pool.query("SELECT * FROM archivos_adjuntos WHERE archivo_id=$1", [archivoId]);
+  if (r.rows.length === 0) throw new AppError("DOCUMENT_NOT_FOUND", "El archivo indicado no existe", 404);
+  return r.rows[0];
+}
+
 async function eliminarArchivo({ archivoId, usuarioId, canal }) {
   const result = await withAuditedTransaction("documents.delete", usuarioId, canal, async (client) => {
     const r = await client.query("DELETE FROM archivos_adjuntos WHERE archivo_id=$1 RETURNING *", [archivoId]);
@@ -71,4 +77,4 @@ async function eliminarArchivo({ archivoId, usuarioId, canal }) {
   return result;
 }
 
-module.exports = { subirArchivo, listArchivos, eliminarArchivo, ENTIDAD_TIPOS_VALIDOS };
+module.exports = { subirArchivo, listArchivos, getArchivo, eliminarArchivo, ENTIDAD_TIPOS_VALIDOS };

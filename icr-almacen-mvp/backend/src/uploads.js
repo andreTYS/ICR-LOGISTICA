@@ -96,6 +96,24 @@ async function saveDocumentFile(file) {
   return { url: `/uploads/${filename}`, tipoArchivo: file.mimetype, tamanoBytes: file.buffer.length };
 }
 
+// Lee de vuelta un documento ya guardado en disco (para reenviarlo por
+// WhatsApp, por ejemplo) — solo sirve para archivos locales; uno guardado en
+// Drive (url es un webViewLink) no tiene sus bytes acá.
+async function readUploadedFile(url) {
+  if (!url || !url.startsWith("/uploads/")) {
+    throw new AppError(
+      "DOCUMENT_NOT_LOCAL",
+      "Este documento no está guardado en este servidor (está en Google Drive) — ábrelo con su link en vez de reenviarlo",
+      400
+    );
+  }
+  try {
+    return await fs.promises.readFile(path.join(uploadsDir, path.basename(url)));
+  } catch (err) {
+    throw new AppError("DOCUMENT_NOT_FOUND", "No se encontró el archivo en el servidor", 404);
+  }
+}
+
 async function deleteUploadedFile(url) {
   if (!url || !url.startsWith("/uploads/")) return;
   try {
@@ -124,4 +142,4 @@ const uploadSpreadsheet = multer({
   },
 });
 
-module.exports = { upload, uploadsDir, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, deleteUploadedFile, uploadSpreadsheet };
+module.exports = { upload, uploadsDir, processAndSaveImage, processAndSaveIcon, uploadDocument, saveDocumentFile, readUploadedFile, deleteUploadedFile, uploadSpreadsheet };

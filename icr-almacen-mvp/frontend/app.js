@@ -2157,6 +2157,20 @@ async function sendOcAction() {
   else toast(r.error.message, false);
 }
 
+async function downloadOcPdf() {
+  if (!currentOcNumero) return;
+  await downloadPdf(`/purchases/orders/${encodeURIComponent(currentOcNumero)}/pdf`, `${currentOcNumero}.pdf`);
+}
+
+async function sendOcWhatsapp() {
+  if (!currentOcNumero) return;
+  const to = prompt("Enviar orden de compra a este WhatsApp (código de país + número, ej. 51987654321):", "");
+  if (!to) return;
+  const r = await api(`/purchases/orders/${encodeURIComponent(currentOcNumero)}/send-whatsapp`, { method: "POST", body: JSON.stringify({ to }) });
+  if (r.status === "success") toast(`Orden enviada por WhatsApp a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
+}
+
 async function cancelOcAction() {
   if (!currentOcNumero) return;
   if (!confirm(`¿Cancelar la orden ${currentOcNumero}? Esta acción no se puede deshacer.`)) return;
@@ -3996,13 +4010,13 @@ document.getElementById("form-expense-create").addEventListener("submit", async 
 
 async function loadExpenses(page) {
   const body = document.getElementById("expenses-body");
-  body.innerHTML = `<tr><td colspan="7" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="8" class="${TD_EMPTY}">Cargando…</td></tr>`;
   const categoria = document.getElementById("expense-filter-categoria").value;
   const params = new URLSearchParams({ page: page || 1, page_size: 30 });
   if (categoria) params.set("categoria", categoria);
   const r = await api(`/expenses?${params.toString()}`);
   if (r.status !== "success") {
-    body.innerHTML = emptyRow(7, r.error?.message || "Tu rol no tiene permiso para ver gastos.", "lock");
+    body.innerHTML = emptyRow(8, r.error?.message || "Tu rol no tiene permiso para ver gastos.", "lock");
     document.getElementById("expenses-pager").innerHTML = "";
     return;
   }
@@ -4013,9 +4027,22 @@ async function loadExpenses(page) {
         <td class="${TD}">${g.descripcion}</td><td class="${TD}">${money(g.monto)}</td>
         <td class="${TD}">${g.codigo_proyecto || "—"}</td><td class="${TD}">${g.empleado_nombre || "—"}</td>
         <td class="${TD} text-xs text-slate-500">${g.comprobante_tipo ? `${g.comprobante_tipo} ${g.comprobante_serie_numero}` : "—"}</td>
+        <td class="${TD}">
+          <button class="btn-icon" title="Enviar por WhatsApp" onclick="sendExpenseWhatsapp('${g.gasto_id}')">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1a7 7 0 1 0 3.5-13Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M7.3 8.8c.3 1.7 1.8 3.2 3.5 3.5.4.1.9-.2 1-.6l.2-.6c.1-.3-.1-.6-.4-.7l-1-.4c-.2-.1-.5 0-.6.2l-.2.3a4 4 0 0 1-1.7-1.7l.3-.2c.2-.1.3-.4.2-.6l-.4-1c-.1-.3-.4-.5-.7-.4l-.6.2c-.4.1-.7.6-.6 1Z" fill="currentColor"/></svg>
+          </button>
+        </td>
       </tr>`).join("")
-    : emptyRow(7, "Sin gastos registrados todavía.", "inbox");
+    : emptyRow(8, "Sin gastos registrados todavía.", "inbox");
   renderPager("expenses-pager", r.data, (p) => loadExpenses(p));
+}
+
+async function sendExpenseWhatsapp(gastoId) {
+  const to = prompt("Enviar este gasto a este WhatsApp (código de país + número, ej. 51987654321):", "");
+  if (!to) return;
+  const r = await api(`/expenses/${encodeURIComponent(gastoId)}/send-whatsapp`, { method: "POST", body: JSON.stringify({ to }) });
+  if (r.status === "success") toast(`Gasto enviado por WhatsApp a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
 }
 
 // -------- Gastos: importación masiva desde Excel --------
@@ -5091,9 +5118,22 @@ async function loadDocumentsList() {
         <td class="${TD}"><a href="${d.url}" target="_blank" rel="noopener" class="text-accent-600 hover:underline">${d.nombre}</a></td>
         <td class="${TD}">${d.subido_por_nombre || "—"}</td>
         <td class="${TD}">${new Date(d.created_at).toLocaleDateString("es-PE")}</td>
-        <td class="${TD}"><button type="button" class="btn-danger px-2 py-1 text-xs" onclick="deleteDocumentAction('${d.archivo_id}')">Eliminar</button></td>
+        <td class="${TD} flex gap-1.5">
+          ${d.url && d.url.startsWith("/uploads/")
+            ? `<button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="sendDocumentWhatsapp('${d.archivo_id}')">WhatsApp</button>`
+            : ""}
+          <button type="button" class="btn-danger px-2 py-1 text-xs" onclick="deleteDocumentAction('${d.archivo_id}')">Eliminar</button>
+        </td>
       </tr>`).join("")
     : emptyRow(4, "Sin documentos adjuntos todavía.", "inbox");
+}
+
+async function sendDocumentWhatsapp(archivoId) {
+  const to = prompt("Enviar este documento a este WhatsApp (código de país + número, ej. 51987654321):", "");
+  if (!to) return;
+  const r = await api(`/documents/${encodeURIComponent(archivoId)}/send-whatsapp`, { method: "POST", body: JSON.stringify({ to }) });
+  if (r.status === "success") toast(`Documento enviado por WhatsApp a ${r.data.enviado_a}`);
+  else toast(r.error.message, false);
 }
 
 document.getElementById("form-document-upload").addEventListener("submit", async (e) => {
