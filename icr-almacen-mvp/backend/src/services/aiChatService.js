@@ -12,7 +12,12 @@ const cotizaciones = require("./cotizacionesService");
 const assets = require("./assetsService");
 const crm = require("./crmService");
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+// gemini-2.0-flash quedó fuera de servicio (setiembre 2026) — Google avisa el
+// modelo retirado con un mensaje de error en la respuesta de la API, no con
+// un aviso previo. generateContent (la API que sigue usando este servicio)
+// no está deprecada, así que no hace falta migrar a la Interactions API que
+// Google promociona para proyectos nuevos — solo actualizar el modelo.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const MAX_TOOL_CALLS = 4;
 
 // Catálogo de herramientas de solo lectura que el asistente puede invocar.
