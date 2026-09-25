@@ -12,27 +12,25 @@ function clearDriveEnv() {
   delete process.env.GOOGLE_DRIVE_FOLDER_ID;
 }
 
-test("isConfigured es false si falta cualquiera de las dos variables", () => {
+test("isConfigured es false sin GOOGLE_SERVICE_ACCOUNT_JSON", () => {
   const prevJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const prevFolder = process.env.GOOGLE_DRIVE_FOLDER_ID;
   try {
     clearDriveEnv();
     assert.equal(drive.isConfigured(), false);
-
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '{"client_email":"x","private_key":"y"}';
-    assert.equal(drive.isConfigured(), false, "sin GOOGLE_DRIVE_FOLDER_ID todavía no debe estar configurado");
   } finally {
     if (prevJson === undefined) delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON; else process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prevJson;
-    if (prevFolder === undefined) delete process.env.GOOGLE_DRIVE_FOLDER_ID; else process.env.GOOGLE_DRIVE_FOLDER_ID = prevFolder;
   }
 });
 
-test("isConfigured es true solo con ambas variables presentes y JSON válido", () => {
+// GOOGLE_DRIVE_FOLDER_ID ya no es obligatoria acá: es solo la carpeta de
+// respaldo cuando un proyecto no tiene la suya propia vinculada (ver
+// proyectosService.setDriveFolderId) — la resuelve uploadFile, no isConfigured.
+test("isConfigured es true con GOOGLE_SERVICE_ACCOUNT_JSON válido, aunque no haya GOOGLE_DRIVE_FOLDER_ID", () => {
   const prevJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   const prevFolder = process.env.GOOGLE_DRIVE_FOLDER_ID;
   try {
+    delete process.env.GOOGLE_DRIVE_FOLDER_ID;
     process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '{"client_email":"x","private_key":"y"}';
-    process.env.GOOGLE_DRIVE_FOLDER_ID = "folder123";
     assert.equal(drive.isConfigured(), true);
   } finally {
     if (prevJson === undefined) delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON; else process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prevJson;
@@ -42,22 +40,35 @@ test("isConfigured es true solo con ambas variables presentes y JSON válido", (
 
 test("un GOOGLE_SERVICE_ACCOUNT_JSON con JSON inválido se trata como no configurado", () => {
   const prevJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const prevFolder = process.env.GOOGLE_DRIVE_FOLDER_ID;
   try {
     process.env.GOOGLE_SERVICE_ACCOUNT_JSON = "esto-no-es-json";
-    process.env.GOOGLE_DRIVE_FOLDER_ID = "folder123";
     assert.equal(drive.isConfigured(), false);
+  } finally {
+    if (prevJson === undefined) delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON; else process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prevJson;
+  }
+});
+
+test("uploadFile rechaza con DRIVE_NOT_CONFIGURED si falta la cuenta de servicio, sin intentar red", async () => {
+  const prevJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const prevFolder = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  try {
+    clearDriveEnv();
+    await assert.rejects(
+      drive.uploadFile({ buffer: Buffer.from("x"), filename: "a.pdf", mimeType: "application/pdf" }),
+      (err) => err.code === "DRIVE_NOT_CONFIGURED"
+    );
   } finally {
     if (prevJson === undefined) delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON; else process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prevJson;
     if (prevFolder === undefined) delete process.env.GOOGLE_DRIVE_FOLDER_ID; else process.env.GOOGLE_DRIVE_FOLDER_ID = prevFolder;
   }
 });
 
-test("uploadFile rechaza con DRIVE_NOT_CONFIGURED si Drive no está configurado, sin intentar red", async () => {
+test("uploadFile rechaza con DRIVE_NOT_CONFIGURED si hay cuenta de servicio pero ninguna carpeta (ni por proyecto ni global)", async () => {
   const prevJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   const prevFolder = process.env.GOOGLE_DRIVE_FOLDER_ID;
   try {
-    clearDriveEnv();
+    delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '{"client_email":"x","private_key":"y"}';
     await assert.rejects(
       drive.uploadFile({ buffer: Buffer.from("x"), filename: "a.pdf", mimeType: "application/pdf" }),
       (err) => err.code === "DRIVE_NOT_CONFIGURED"

@@ -2375,6 +2375,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePayab
 // -------- Proyectos --------
 let currentProjectCodigo = null;
 let currentProjectId = null;
+let currentProjectDriveFolderId = null;
 
 document.getElementById("form-project-create").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2451,6 +2452,7 @@ async function openProjectModal(codigo) {
   }
   const p = r.data;
   currentProjectId = p.proyecto_id;
+  currentProjectDriveFolderId = p.drive_folder_id || null;
   document.getElementById("proj-modal-subtitle").innerHTML = `${p.nombre} ${p.cliente_nombre ? `· ${p.cliente_nombre}` : ""} · ${projectStatusBadge(p.estado)}`;
 
   const isTerminal = p.estado === "FINALIZADO" || p.estado === "CANCELADO";
@@ -2524,6 +2526,25 @@ async function openProjectModal(codigo) {
 function closeProjectModal() {
   document.getElementById("proj-modal").classList.add("hidden");
   currentProjectCodigo = null;
+}
+
+// Vincula la carpeta de Drive YA EXISTENTE de este proyecto (no crea una
+// carpeta nueva) — a partir de ahí, "Guardar en Google Drive" en Documentos
+// sube ahí en vez de la carpeta general del servidor.
+async function editProjectDriveFolder() {
+  if (!currentProjectCodigo) return;
+  const actual = currentProjectDriveFolderId ? `https://drive.google.com/drive/folders/${currentProjectDriveFolderId}` : "";
+  const input = prompt("Pega el link de la carpeta de Drive de este proyecto (vacío para quitarla):", actual);
+  if (input === null) return;
+  const r = await api(`/projects/${encodeURIComponent(currentProjectCodigo)}/drive-folder`, {
+    method: "POST", body: JSON.stringify({ channel: "web", drive_folder_link: input }),
+  });
+  if (r.status === "success") {
+    toast(input.trim() ? "Carpeta de Drive vinculada" : "Carpeta de Drive desvinculada");
+    openProjectModal(currentProjectCodigo);
+  } else {
+    toast(r.error.message, false);
+  }
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeProjectModal(); });
 

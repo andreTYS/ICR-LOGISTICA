@@ -2466,6 +2466,7 @@
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="setProjectStatus('FINALIZADO')">Finalizar</button>
           <button class="btn-danger px-3 py-1.5 text-xs" onclick="setProjectStatus('CANCELADO')">Cancelar</button>
           <button class="btn-secondary px-3 py-1.5 text-xs" onclick="openDocumentsModal('proyecto', currentProjectId, `Proyecto ${currentProjectCodigo}`)">Documentos</button>
+          <button class="btn-secondary px-3 py-1.5 text-xs" title="Los documentos que subas a Drive para este proyecto van a esta carpeta" onclick="editProjectDriveFolder()">Carpeta de Drive</button>
           <button onclick="closeProjectModal()" class="text-slate-400 hover:text-navy-950 transition p-1" aria-label="Cerrar">
             <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -2704,7 +2705,7 @@
           <label class="field-label flex-1 min-w-[160px]">Archivo (PDF, JPEG, PNG o WebP)
             <input type="file" name="archivo" accept="application/pdf,image/jpeg,image/png,image/webp" required class="field" />
           </label>
-          <label class="flex items-center gap-1.5 text-xs text-slate-500 mb-2.5" title="Requiere Google Drive configurado en el servidor (Administración → Integraciones)">
+          <label class="flex items-center gap-1.5 text-xs text-slate-500 mb-2.5" title="Requiere Google Drive configurado en el servidor (Administración → Integraciones). Si el proyecto tiene una carpeta de Drive vinculada (botón 'Carpeta de Drive'), va ahí; si no, a la carpeta general.">
             <input type="checkbox" name="guardar_en_drive" class="w-3.5 h-3.5" />
             Guardar en Google Drive
           </label>

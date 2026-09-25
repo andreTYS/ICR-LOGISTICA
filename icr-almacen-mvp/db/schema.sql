@@ -153,6 +153,11 @@ CREATE TABLE proyectos (
     fecha_inicio     DATE,
     fecha_fin        DATE,
     estado           TEXT NOT NULL DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO','PAUSADO','FINALIZADO','CANCELADO')),
+    -- Carpeta de Google Drive propia de este proyecto (una carpeta ya
+    -- existente de la empresa, no una que cree el ERP) — cuando se sube un
+    -- documento a Drive para este proyecto, va acá en vez de la carpeta
+    -- global GOOGLE_DRIVE_FOLDER_ID. NULL = usa esa carpeta global.
+    drive_folder_id  TEXT,
     activo           BOOLEAN NOT NULL DEFAULT true
 );
 

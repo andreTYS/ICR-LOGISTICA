@@ -642,6 +642,18 @@ router.post(
   }))
 );
 
+// Vincula la carpeta de Drive ya existente de este proyecto (no crea una
+// carpeta nueva) — a partir de ahí, subir un documento a Drive para este
+// proyecto va a esa carpeta en vez de la global GOOGLE_DRIVE_FOLDER_ID.
+router.post(
+  "/projects/:codigo/drive-folder",
+  requirePermission("projects.update_status"),
+  handle(async (req) => proyectos.setDriveFolderId({
+    codigoProyecto: req.params.codigo, driveFolderLink: req.body?.drive_folder_link || null,
+    usuarioId: req.user.usuario_id, canal: req.body?.channel || "web",
+  }))
+);
+
 router.post(
   "/projects/:codigo/labor",
   requirePermission("projects.labor.register"),
@@ -1447,7 +1459,13 @@ router.post(
     if (!req.file) throw new AppError("SCHEMA_INVALID", "No se recibió ningún archivo", 400);
     let url, tipoArchivo, tamanoBytes;
     if (req.body.destino === "drive") {
-      const drive = await driveService.uploadFile({ buffer: req.file.buffer, filename: req.body.nombre || req.file.originalname, mimeType: req.file.mimetype });
+      // Si el documento es de un proyecto con su propia carpeta vinculada
+      // (proyectos.setDriveFolderId), va ahí; si no, cae a la carpeta
+      // global GOOGLE_DRIVE_FOLDER_ID (ver driveService.uploadFile).
+      const folderId = req.body.entidad_tipo === "proyecto"
+        ? await proyectos.getDriveFolderId(req.body.entidad_id)
+        : null;
+      const drive = await driveService.uploadFile({ buffer: req.file.buffer, filename: req.body.nombre || req.file.originalname, mimeType: req.file.mimetype, folderId });
       url = drive.webViewLink;
       tipoArchivo = req.file.mimetype;
       tamanoBytes = req.file.buffer.length;

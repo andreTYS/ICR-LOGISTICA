@@ -311,7 +311,40 @@ async function getReporteRentabilidad({ estado } = {}) {
   return { items: r.rows, totales };
 }
 
+// Acepta tanto un link completo de Drive
+// (https://drive.google.com/drive/folders/<ID>...) como el ID de carpeta
+// pelado — así el usuario simplemente pega la URL que ve en el navegador,
+// sin tener que saber recortarla a mano.
+function extractDriveFolderId(input) {
+  if (!input) return null;
+  const value = String(input).trim();
+  if (!value) return null;
+  const match = value.match(/\/folders\/([a-zA-Z0-9_-]+)/) || value.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : value;
+}
+
+// Vincula (o desvincula, con driveFolderLink vacío) la carpeta de Drive ya
+// existente de este proyecto — no crea una carpeta nueva, solo guarda a cuál
+// de las que ya tiene la empresa deben ir los documentos que se suban acá.
+async function setDriveFolderId({ codigoProyecto, driveFolderLink, usuarioId, canal }) {
+  const driveFolderId = extractDriveFolderId(driveFolderLink);
+  return withAuditedTransaction("projects.update_status", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      "UPDATE proyectos SET drive_folder_id = $1 WHERE codigo_proyecto = $2 AND activo = true RETURNING *",
+      [driveFolderId, codigoProyecto]
+    );
+    if (r.rows.length === 0) throw new AppError("PROJECT_NOT_FOUND", `Proyecto '${codigoProyecto}' no existe o está inactivo`, 404);
+    return { entidad: "proyectos", entidadId: r.rows[0].proyecto_id, valorNuevo: { drive_folder_id: driveFolderId }, proyecto: r.rows[0] };
+  });
+}
+
+async function getDriveFolderId(proyectoId) {
+  const r = await pool.query("SELECT drive_folder_id FROM proyectos WHERE proyecto_id = $1", [proyectoId]);
+  return r.rows[0]?.drive_folder_id || null;
+}
+
 module.exports = {
   crearProyecto, actualizarEstado, registrarManoObra, crearHitoProyecto, actualizarHitoProyecto,
   listProyectos, getProyecto, listTecnicos, crearCliente, listClientes, getReporteRentabilidad,
+  setDriveFolderId, getDriveFolderId, extractDriveFolderId,
 };
