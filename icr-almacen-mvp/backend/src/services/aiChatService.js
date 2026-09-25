@@ -18,6 +18,16 @@ const crm = require("./crmService");
 // no está deprecada, así que no hace falta migrar a la Interactions API que
 // Google promociona para proyectos nuevos — solo actualizar el modelo.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+// Modelo de respaldo si el principal responde "sobrecargado" (503): Google
+// reparte la demanda distinto entre modelos, así que uno saturado no implica
+// que el otro también lo esté.
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash";
+// Configurable (GEMINI_RETRY_DELAYS_MS="ms,ms,...") sobre todo para que los
+// tests no esperen segundos reales por cada caso de saturación simulado.
+const OVERLOAD_RETRY_DELAYS_MS = (process.env.GEMINI_RETRY_DELAYS_MS || "400,1200")
+  .split(",")
+  .map((n) => Number(n.trim()))
+  .filter((n) => Number.isFinite(n) && n >= 0);
 const MAX_TOOL_CALLS = 4;
 
 // Catálogo de herramientas de solo lectura que el asistente puede invocar.
@@ -152,8 +162,20 @@ const SYSTEM_INSTRUCTION = {
   }],
 };
 
-async function callGeminiApi({ apiKey, contents, tools }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 503 (o el texto "overloaded"/"high demand" que Google manda con código 200
+// de transporte en algunos casos) significa que el modelo está saturado del
+// lado de Google, no que el pedido esté mal armado — vale la pena reintentar.
+function isOverloadError(err) {
+  if (err.geminiStatus === 503) return true;
+  return /overload|high demand|sobrecarg|unavailable/i.test(err.message || "");
+}
+
+async function callGeminiModel({ apiKey, contents, tools, model }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -162,9 +184,36 @@ async function callGeminiApi({ apiKey, contents, tools }) {
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const message = body?.error?.message || `Gemini respondió ${res.status}`;
-    throw new AppError("AI_UPSTREAM_ERROR", message, 502);
+    const err = new AppError("AI_UPSTREAM_ERROR", message, 502);
+    err.geminiStatus = res.status;
+    throw err;
   }
   return body;
+}
+
+// Reintenta con backoff en el modelo principal ante saturación (503); si
+// sigue saturado, cae una vez al modelo de respaldo antes de rendirse. Un
+// error que no sea de saturación (API key inválida, request mal formado)
+// se propaga de inmediato, sin reintentar.
+async function callGeminiApi({ apiKey, contents, tools }) {
+  const models = GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_MODEL
+    ? [GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
+    : [GEMINI_MODEL];
+  let lastErr;
+  for (let m = 0; m < models.length; m++) {
+    const isMainModel = m === 0;
+    const attempts = isMainModel ? OVERLOAD_RETRY_DELAYS_MS.length + 1 : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        return await callGeminiModel({ apiKey, contents, tools, model: models[m] });
+      } catch (err) {
+        lastErr = err;
+        if (!isOverloadError(err)) throw err;
+        if (attempt < attempts - 1) await sleep(OVERLOAD_RETRY_DELAYS_MS[attempt]);
+      }
+    }
+  }
+  throw lastErr;
 }
 
 // Conversación con function-calling: si Gemini pide ejecutar una
@@ -219,4 +268,4 @@ async function chat({ mensaje, historial, usuarioId, rolCodigo, canal }, deps = 
   throw new AppError("AI_TOO_MANY_TOOL_CALLS", "El asistente no pudo completar la respuesta en el límite de consultas permitido", 502);
 }
 
-module.exports = { chat, executeTool, toolsForRole, TOOLS };
+module.exports = { chat, executeTool, toolsForRole, TOOLS, callGeminiApi };
