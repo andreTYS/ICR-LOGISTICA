@@ -3,6 +3,9 @@
 // prueban sin llamar a la API real de Gemini — callGeminiApi se inyecta
 // como dependencia mockeada (deps.callGeminiApi), tal como espera chat().
 process.env.PGDATABASE = process.env.PGDATABASE || "icr_almacen_test";
+// Delays cortos para que los tests de reintento por saturación (503) no
+// esperen los ~1.6s reales que usa el servicio en producción.
+process.env.GEMINI_RETRY_DELAYS_MS = "5,5";
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
@@ -113,6 +116,84 @@ test("chat() corta con AI_TOO_MANY_TOOL_CALLS si el modelo insiste en pedir herr
     );
   } finally {
     delete process.env.GEMINI_API_KEY;
+  }
+});
+
+function fakeGeminiHttpResponse({ ok, status, body }) {
+  return { ok, status, json: async () => body };
+}
+
+test("callGeminiApi reintenta en el mismo modelo cuando Gemini responde 503 y luego funciona", async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(url);
+    if (calls.length === 1) {
+      return fakeGeminiHttpResponse({ ok: false, status: 503, body: { error: { message: "The model is overloaded. Please try again later." } } });
+    }
+    return fakeGeminiHttpResponse({ ok: true, status: 200, body: { candidates: [{ content: { parts: [{ text: "ok" }] } }] } });
+  };
+  try {
+    const body = await aiChat.callGeminiApi({ apiKey: "test-key", contents: [], tools: undefined });
+    assert.equal(body.candidates[0].content.parts[0].text, "ok");
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].includes("gemini-3.8-flash"), "primer intento usa el modelo principal");
+    assert.ok(calls[1].includes("gemini-3.8-flash"), "el reintento sigue en el modelo principal, no cae aún al de respaldo");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("callGeminiApi cae al modelo de respaldo si el principal sigue saturado tras los reintentos", async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(url);
+    if (url.includes("gemini-2.5-flash")) {
+      return fakeGeminiHttpResponse({ ok: true, status: 200, body: { candidates: [{ content: { parts: [{ text: "respaldo ok" }] } }] } });
+    }
+    return fakeGeminiHttpResponse({ ok: false, status: 503, body: { error: { message: "The model is overloaded. Please try again later." } } });
+  };
+  try {
+    const body = await aiChat.callGeminiApi({ apiKey: "test-key", contents: [], tools: undefined });
+    assert.equal(body.candidates[0].content.parts[0].text, "respaldo ok");
+    const mainAttempts = calls.filter((u) => u.includes("gemini-3.8-flash")).length;
+    assert.equal(mainAttempts, 3, "agota los 3 intentos (1 + 2 reintentos) en el modelo principal antes de cambiar");
+    assert.equal(calls.filter((u) => u.includes("gemini-2.5-flash")).length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("callGeminiApi propaga el error final si ambos modelos siguen saturados", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () =>
+    fakeGeminiHttpResponse({ ok: false, status: 503, body: { error: { message: "The model is overloaded. Please try again later." } } });
+  try {
+    await assert.rejects(
+      aiChat.callGeminiApi({ apiKey: "test-key", contents: [], tools: undefined }),
+      (err) => err.code === "AI_UPSTREAM_ERROR" && /overloaded/i.test(err.message)
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("callGeminiApi no reintenta ante un error que no es de saturación (p. ej. API key inválida)", async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(url);
+    return fakeGeminiHttpResponse({ ok: false, status: 400, body: { error: { message: "API key not valid" } } });
+  };
+  try {
+    await assert.rejects(
+      aiChat.callGeminiApi({ apiKey: "bad-key", contents: [], tools: undefined }),
+      (err) => err.code === "AI_UPSTREAM_ERROR" && err.message === "API key not valid"
+    );
+    assert.equal(calls.length, 1, "no reintenta ni cae a respaldo si el error no es de saturación");
+  } finally {
+    global.fetch = originalFetch;
   }
 });
 
