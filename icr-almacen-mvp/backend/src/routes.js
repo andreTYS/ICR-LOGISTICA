@@ -897,6 +897,14 @@ router.get(
 );
 
 router.get(
+  "/accounting/reports/cash-flow/movimientos",
+  requirePermission("accounting.query"),
+  handle(async (req) => contabilidad.getMovimientosCaja({
+    fechaDesde: req.query.fecha_desde || null, fechaHasta: req.query.fecha_hasta || null,
+  }))
+);
+
+router.get(
   "/accounting/reports/income-statement/pdf",
   requirePermission("accounting.query"),
   handleBinary(async (req) => {

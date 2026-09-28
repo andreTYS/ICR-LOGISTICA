@@ -83,6 +83,32 @@ test("getFlujoCaja fuera de rango de fechas no trae nada", async () => {
   assert.equal(flujo.totales.neto, 0);
 });
 
+test("getMovimientosCaja junta las mismas 4 fuentes movimiento por movimiento, con saldo acumulado", async () => {
+  const ledger = await contabilidad.getMovimientosCaja({ fechaDesde: HOY, fechaHasta: HOY });
+  assert.equal(ledger.items.length, 4, "los 4 movimientos del test anterior (mismo día)");
+  assert.equal(ledger.total_ingresos, 3500);
+  assert.equal(ledger.total_egresos, 950);
+  assert.equal(ledger.saldo_final, 3500 - 950);
+  // El orden intra-día entre fuentes distintas no está garantizado, pero el
+  // saldo acumulado del ÚLTIMO movimiento (en el orden que sea) siempre debe
+  // coincidir con el saldo final total — es una suma corrida.
+  assert.equal(ledger.items[ledger.items.length - 1].saldo_acumulado, ledger.saldo_final);
+  for (const item of ledger.items) {
+    assert.ok(["INGRESO", "EGRESO"].includes(item.tipo));
+    assert.ok(item.categoria, "cada movimiento trae una categoría/origen legible");
+    assert.ok(item.descripcion, "cada movimiento trae una descripción legible");
+  }
+  const gastoCombustible = ledger.items.find((i) => i.categoria === "COMBUSTIBLE");
+  assert.ok(gastoCombustible, "el gasto conserva su categoría real, no una genérica");
+  assert.equal(gastoCombustible.monto, 150);
+});
+
+test("getMovimientosCaja fuera de rango de fechas no trae nada", async () => {
+  const ledger = await contabilidad.getMovimientosCaja({ fechaDesde: "2000-01-01", fechaHasta: "2000-01-31" });
+  assert.equal(ledger.items.length, 0);
+  assert.equal(ledger.saldo_final, 0);
+});
+
 after(async () => {
   await pool.end();
 });

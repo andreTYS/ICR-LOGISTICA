@@ -1177,17 +1177,17 @@ async function goToCalendarEvent(tipo, entidadId, titulo) {
 // un rol sin acceso a alguno de estos módulos simplemente ve "—" ahí,
 // en vez de romper el resto del dashboard.
 async function loadDashboardModuleSummary() {
-  const [ocEnviada, ocParcial, proyectosActivos, asientosBorrador, cuentasPorCobrar] = await Promise.all([
+  const [ocEnviada, ocParcial, proyectosActivos, movimientosCaja, cuentasPorCobrar] = await Promise.all([
     api("/purchases/orders?estado=ENVIADA&page_size=1"),
     api("/purchases/orders?estado=PARCIAL&page_size=1"),
     api("/projects?estado=ACTIVO&page_size=1"),
-    api("/accounting/entries?estado=BORRADOR&page_size=1"),
+    api("/accounting/reports/cash-flow/movimientos"), // sin fecha_desde: saldo acumulado real, no solo del mes
     api("/sales-receivables"),
   ]);
   const purchasesPending = (ocEnviada.status === "success" ? ocEnviada.data.total : 0) + (ocParcial.status === "success" ? ocParcial.data.total : 0);
   document.getElementById("kpi-purchases-pending").textContent = (ocEnviada.status === "success") ? purchasesPending : "—";
   document.getElementById("kpi-projects-active").textContent = proyectosActivos.status === "success" ? proyectosActivos.data.total : "—";
-  document.getElementById("kpi-accounting-draft").textContent = asientosBorrador.status === "success" ? asientosBorrador.data.total : "—";
+  document.getElementById("kpi-cash-balance").textContent = movimientosCaja.status === "success" ? `S/ ${money(movimientosCaja.data.saldo_final)}` : "—";
   document.getElementById("kpi-sales-receivables").textContent = cuentasPorCobrar.status === "success" ? cuentasPorCobrar.data.items.length : "—";
 }
 
@@ -2967,6 +2967,43 @@ async function loadCashFlow() {
         <td class="${TD} font-semibold ${it.neto >= 0 ? "text-emerald-600" : "text-rose-600"}">${money(it.neto)}</td>
       </tr>`).join("")
     : emptyRow(8, "Sin movimientos de caja en el rango seleccionado.", "inbox");
+
+  await loadCashLedger();
+}
+
+// Movimiento por movimiento con saldo acumulado (seguimiento y control día a
+// día, como la planilla manual de caja) — usa el mismo rango de fechas que
+// el resumen por período de arriba.
+function fetchCashLedger() {
+  const desde = document.getElementById("cash-flow-desde").value;
+  const hasta = document.getElementById("cash-flow-hasta").value;
+  const params = new URLSearchParams();
+  if (desde) params.set("fecha_desde", desde);
+  if (hasta) params.set("fecha_hasta", hasta);
+  return api(`/accounting/reports/cash-flow/movimientos?${params.toString()}`);
+}
+
+async function loadCashLedger() {
+  const body = document.getElementById("cash-ledger-body");
+  body.innerHTML = `<tr><td colspan="6" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  const r = await fetchCashLedger();
+  if (r.status !== "success") {
+    body.innerHTML = emptyRow(6, r.error?.message || "Tu rol no tiene permiso para ver los movimientos de caja.", "lock");
+    document.getElementById("cash-ledger-saldo-final").textContent = "—";
+    return;
+  }
+  const d = r.data;
+  document.getElementById("cash-ledger-saldo-final").textContent = `PEN ${money(d.saldo_final)}`;
+  body.innerHTML = d.items.length
+    ? d.items.map((it) => `<tr class="${TR}">
+        <td class="${TD}">${new Date(it.fecha).toLocaleDateString("es-PE")}</td>
+        <td class="${TD}">${it.tipo === "INGRESO" ? badge("Ingreso", "ingreso") : badge("Egreso", "salida")}</td>
+        <td class="${TD}">${it.categoria}</td>
+        <td class="${TD}">${it.descripcion}</td>
+        <td class="${TD} text-right ${it.tipo === "INGRESO" ? "text-emerald-600" : "text-rose-600"}">${it.tipo === "INGRESO" ? "+" : "−"}${money(it.monto)}</td>
+        <td class="${TD} text-right font-semibold">${money(it.saldo_acumulado)}</td>
+      </tr>`).join("")
+    : emptyRow(6, "Sin movimientos de caja en el rango seleccionado.", "inbox");
 }
 
 async function exportCashFlowCsv() {
