@@ -412,11 +412,67 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
   return { agrupacion: unidad === "month" ? "mes" : "semana", fecha_desde: desde, fecha_hasta: hasta, items, totales };
 }
 
+// Ledger de caja movimiento por movimiento, con saldo acumulado — el
+// equivalente digital de la planilla manual de flujo de caja que ya llevaba
+// el negocio (fecha, quién/qué, categoría, monto, "SALDO CTA CTE"). Junta
+// las mismas 4 fuentes que getFlujoCaja, pero sin agrupar por semana/mes: es
+// la vista de "seguimiento y control" día a día que pidió el negocio, en vez
+// de asientos contables formales de debe/haber.
+async function getMovimientosCaja({ fechaDesde, fechaHasta } = {}) {
+  const desde = fechaDesde || "1970-01-01";
+  const hasta = fechaHasta || new Date().toISOString().slice(0, 10);
+
+  const r = await pool.query(
+    `SELECT ch.fecha_pago AS fecha, 'INGRESO' AS tipo, 'Cobro de hito' AS categoria,
+            COALESCE('Proyecto ' || p.codigo_proyecto || ' — ' || ch.descripcion, ch.descripcion) AS descripcion,
+            ch.monto_pagado AS monto
+     FROM contrato_hitos ch
+     LEFT JOIN contratos c ON c.contrato_id = ch.contrato_id
+     LEFT JOIN proyectos p ON p.proyecto_id = c.proyecto_id
+     WHERE ch.estado='PAGADO' AND ch.fecha_pago BETWEEN $1 AND $2
+     UNION ALL
+     SELECT fecha_venta, 'INGRESO', 'Venta tienda', COALESCE('Venta ' || codigo || ' — ' || descripcion, descripcion), monto_total
+     FROM ventas_tienda WHERE fecha_venta BETWEEN $1 AND $2
+     UNION ALL
+     SELECT fecha, 'EGRESO', categoria, descripcion, monto FROM gastos WHERE fecha BETWEEN $1 AND $2
+     UNION ALL
+     SELECT pp.fecha_pago, 'EGRESO', 'Pago a proveedor', COALESCE(pr.razon_social || ' — factura ' || fp.codigo, fp.codigo), pp.monto
+     FROM pagos_proveedor pp
+     JOIN facturas_proveedor fp ON fp.factura_proveedor_id = pp.factura_proveedor_id
+     LEFT JOIN proveedores pr ON pr.proveedor_id = fp.proveedor_id
+     WHERE pp.fecha_pago BETWEEN $1 AND $2
+     ORDER BY fecha`,
+    [desde, hasta]
+  );
+
+  let saldo = 0;
+  const items = r.rows.map((row) => {
+    const monto = Number(row.monto);
+    saldo += row.tipo === "INGRESO" ? monto : -monto;
+    return {
+      fecha: row.fecha.toISOString().slice(0, 10),
+      tipo: row.tipo,
+      categoria: row.categoria,
+      descripcion: row.descripcion,
+      monto,
+      saldo_acumulado: saldo,
+    };
+  });
+
+  const totalIngresos = items.filter((i) => i.tipo === "INGRESO").reduce((s, i) => s + i.monto, 0);
+  const totalEgresos = items.filter((i) => i.tipo === "EGRESO").reduce((s, i) => s + i.monto, 0);
+
+  return {
+    fecha_desde: desde, fecha_hasta: hasta, items,
+    total_ingresos: totalIngresos, total_egresos: totalEgresos, saldo_final: saldo,
+  };
+}
+
 module.exports = {
   crearCuenta, listCuentas,
   crearParametroFiscal, listParametrosFiscales, getParametroFiscalVigente,
   crearRegla, listReglas, setReglaActiva,
   crearAsientoManual, generarAsientoAutomatico, contabilizarAsiento, anularAsiento,
   listAsientos, getAsiento,
-  getEstadoResultados, getBalanceGeneral, getFlujoCaja,
+  getEstadoResultados, getBalanceGeneral, getFlujoCaja, getMovimientosCaja,
 };
