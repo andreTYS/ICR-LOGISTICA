@@ -2280,6 +2280,33 @@
       <section class="view" id="view-integrations">
         <p class="text-sm text-slate-500 mb-5 max-w-2xl">Estado de las integraciones opcionales. Nunca se muestran los valores reales de las claves — solo si están configuradas como variable de entorno del backend.</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="integrations-cards"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          <form class="form-card" id="form-drive-config">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Configurar Google Drive</h3>
+            <p class="text-xs text-slate-500 mb-3">Pega acá el contenido completo del archivo .json de la cuenta de servicio de Google Cloud. Se guarda en este servidor — nunca se vuelve a mostrar, ni siquiera acá.</p>
+            <label class="text-xs font-semibold text-slate-500 mb-1 block">Cuenta de servicio (.json completo)</label>
+            <textarea name="google_service_account_json" rows="4" class="field font-mono text-xs mb-3" placeholder='{"type": "service_account", "client_email": "...", ...}'></textarea>
+            <label class="text-xs font-semibold text-slate-500 mb-1 block">Carpeta de Drive de respaldo (opcional)</label>
+            <input name="google_drive_folder_id" class="field mb-3" placeholder="Pega el link de la carpeta o su ID" />
+            <button type="submit" class="btn-primary">Guardar</button>
+            <div id="drive-config-result" class="mt-3"></div>
+          </form>
+
+          <form class="form-card" id="form-whatsapp-config">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Configurar WhatsApp (Evolution API)</h3>
+            <p class="text-xs text-slate-500 mb-3">Los datos de tu propia instancia de Evolution API, ya con un número de WhatsApp real vinculado.</p>
+            <label class="text-xs font-semibold text-slate-500 mb-1 block">URL base</label>
+            <input name="evolution_api_url" class="field mb-3" placeholder="https://tu-evolution.tudominio.com" />
+            <label class="text-xs font-semibold text-slate-500 mb-1 block">API Key</label>
+            <input name="evolution_api_key" type="password" class="field mb-3" placeholder="apikey" />
+            <label class="text-xs font-semibold text-slate-500 mb-1 block">Nombre de la instancia</label>
+            <input name="evolution_instance" class="field mb-3" placeholder="ej. icr" />
+            <button type="submit" class="btn-primary">Guardar</button>
+            <div id="whatsapp-config-result" class="mt-3"></div>
+          </form>
+        </div>
+
         <div class="form-card max-w-lg">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Documentación para integradores</h3>
           <p class="text-xs text-slate-500 mb-3">Spec OpenAPI 3.0 de todos los endpoints, generada en vivo desde las rutas reales del backend — útil para mapear payloads al armar workflows de N8N.</p>

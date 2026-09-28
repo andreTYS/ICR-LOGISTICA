@@ -21,6 +21,7 @@ const aiChat = require("./services/aiChatService");
 const telegram = require("./services/telegramService");
 const chatbot = require("./services/chatbotService");
 const admin = require("./services/adminService");
+const integracionesConfig = require("./services/integracionesConfigService");
 const n8nWebhooks = require("./services/n8nWebhooksService");
 const crm = require("./services/crmService");
 const archivos = require("./services/archivosService");
@@ -1640,6 +1641,15 @@ router.get(
   "/admin/integrations-status",
   requirePermission("users.manage"),
   handle(async () => admin.getIntegrationsStatus())
+);
+
+// Google Drive y WhatsApp se pueden configurar acá mismo (sin entrar por
+// SSH a editar el .env): el valor se guarda en la tabla `parametros` y
+// integracionesConfigService lo prioriza sobre la variable de entorno.
+router.post(
+  "/admin/integrations-config",
+  requirePermission("settings.manage"),
+  handle(async (req) => integracionesConfig.setConfigValue({ clave: req.body?.clave, valor: req.body?.valor }))
 );
 
 // -------- Tokens de servicio para integraciones (N8N y similares, solo ADMIN) --------

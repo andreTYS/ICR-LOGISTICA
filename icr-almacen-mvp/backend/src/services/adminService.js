@@ -3,6 +3,7 @@ const { pool } = require("../db");
 const { AppError } = require("../errors");
 const { withAuditedTransaction } = require("./inventoryService");
 const { ROLE_PERMISSIONS, hashApiToken, API_TOKEN_PREFIX } = require("../auth");
+const integracionesConfig = require("./integracionesConfigService");
 
 // Solo lectura, pensado para las pantallas de Administración → Roles y
 // permisos / Integraciones. ROLE_PERMISSIONS vive hardcodeado en auth.js
@@ -16,7 +17,16 @@ function getRolePermissions() {
 // Nunca devuelve los valores de las variables de entorno — solo si están
 // configuradas o no, para que Administración → Integraciones pueda avisar
 // "falta GEMINI_API_KEY" sin exponer secretos en la respuesta de la API.
-function getIntegrationsStatus() {
+// google_drive y whatsapp se resuelven vía integracionesConfigService (panel
+// o variable de entorno, lo que haya) — las demás siguen solo por variable
+// de entorno, no editables desde el panel todavía.
+async function getIntegrationsStatus() {
+  const [driveJson, evoUrl, evoKey, evoInstance] = await Promise.all([
+    integracionesConfig.getConfigValue("GOOGLE_SERVICE_ACCOUNT_JSON"),
+    integracionesConfig.getConfigValue("EVOLUTION_API_URL"),
+    integracionesConfig.getConfigValue("EVOLUTION_API_KEY"),
+    integracionesConfig.getConfigValue("EVOLUTION_INSTANCE"),
+  ]);
   return {
     gemini: { configurado: !!process.env.GEMINI_API_KEY, variable: "GEMINI_API_KEY" },
     telegram_bot: { configurado: !!process.env.TELEGRAM_BOT_TOKEN, variable: "TELEGRAM_BOT_TOKEN" },
@@ -25,9 +35,9 @@ function getIntegrationsStatus() {
     // respaldo cuando un proyecto no tiene la suya propia vinculada (ver
     // proyectosService.setDriveFolderId) — con la cuenta de servicio ya
     // alcanza para que la integración funcione.
-    google_drive: { configurado: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON, variable: "GOOGLE_SERVICE_ACCOUNT_JSON (+ GOOGLE_DRIVE_FOLDER_ID opcional, como respaldo)" },
+    google_drive: { configurado: !!driveJson, variable: "GOOGLE_SERVICE_ACCOUNT_JSON (+ GOOGLE_DRIVE_FOLDER_ID opcional, como respaldo)", editable_desde_panel: true },
     correo: { configurado: !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS, variable: "SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS" },
-    whatsapp: { configurado: !!process.env.EVOLUTION_API_URL && !!process.env.EVOLUTION_API_KEY && !!process.env.EVOLUTION_INSTANCE, variable: "EVOLUTION_API_URL / EVOLUTION_API_KEY / EVOLUTION_INSTANCE" },
+    whatsapp: { configurado: !!evoUrl && !!evoKey && !!evoInstance, variable: "EVOLUTION_API_URL / EVOLUTION_API_KEY / EVOLUTION_INSTANCE", editable_desde_panel: true },
   };
 }
 

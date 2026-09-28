@@ -1,16 +1,17 @@
 const jwt = require("jsonwebtoken");
 const { AppError } = require("../errors");
+const { getConfigValue } = require("./integracionesConfigService");
 
-// Groundwork de Google Drive: como con Gemini/Telegram, no hay credenciales
-// reales en este entorno de desarrollo (no hay cuenta de servicio de Google
-// Cloud configurada), así que esto no se puede probar de punta a punta acá
-// — sí está construido y listo para activar en un servidor real con dos
-// variables de entorno. Implementado con jsonwebtoken (ya es dependencia
-// del proyecto) en vez de la librería oficial "googleapis" a propósito:
-// evita sumar una dependencia pesada solo para dos llamadas HTTP simples
-// (pedir un access token y hacer un upload multipart).
-function getServiceAccount() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+// Groundwork de Google Drive: implementado con jsonwebtoken (ya es
+// dependencia del proyecto) en vez de la librería oficial "googleapis" a
+// propósito: evita sumar una dependencia pesada solo para dos llamadas HTTP
+// simples (pedir un access token y hacer un upload multipart).
+//
+// GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_DRIVE_FOLDER_ID se resuelven vía
+// integracionesConfigService: primero lo guardado desde Administración →
+// Integraciones, si no, la variable de entorno del servidor.
+async function getServiceAccount() {
+  const raw = await getConfigValue("GOOGLE_SERVICE_ACCOUNT_JSON");
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -23,12 +24,12 @@ function getServiceAccount() {
 // puede venir por proyecto (proyectos.drive_folder_id) o, a falta de eso,
 // de GOOGLE_DRIVE_FOLDER_ID como respaldo. uploadFile es quien valida que
 // haya AL MENOS una de las dos disponible al momento de subir.
-function isConfigured() {
-  return !!getServiceAccount();
+async function isConfigured() {
+  return !!(await getServiceAccount());
 }
 
 async function getAccessToken() {
-  const sa = getServiceAccount();
+  const sa = await getServiceAccount();
   if (!sa) throw new AppError("DRIVE_NOT_CONFIGURED", "Google Drive no está configurado (falta GOOGLE_SERVICE_ACCOUNT_JSON)", 400);
 
   const now = Math.floor(Date.now() / 1000);
@@ -64,10 +65,10 @@ async function getAccessToken() {
 // responsabilidad de cómo se comparte esa carpeta en Drive (a propósito no
 // se hace público ningún archivo desde acá).
 async function uploadFile({ buffer, filename, mimeType, folderId }) {
-  if (!isConfigured()) {
+  if (!(await isConfigured())) {
     throw new AppError("DRIVE_NOT_CONFIGURED", "Google Drive no está configurado en este servidor (falta GOOGLE_SERVICE_ACCOUNT_JSON)", 400);
   }
-  const targetFolderId = folderId || process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const targetFolderId = folderId || (await getConfigValue("GOOGLE_DRIVE_FOLDER_ID"));
   if (!targetFolderId) {
     throw new AppError("DRIVE_NOT_CONFIGURED", "No hay una carpeta de Drive configurada (ni GOOGLE_DRIVE_FOLDER_ID en el servidor, ni una carpeta propia en este proyecto)", 400);
   }

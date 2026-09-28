@@ -4608,6 +4608,58 @@ async function loadIntegrationsStatus() {
   }).join("");
 }
 
+// Google Drive y WhatsApp se configuran acá mismo, sin entrar por SSH a
+// editar el .env — el valor se guarda en la base y se prioriza sobre la
+// variable de entorno del servidor (integracionesConfigService). Cada
+// pantalla guarda varias claves en secuencia; si una falla se corta ahí
+// (no tiene sentido, por ejemplo, guardar la API key de Evolution sin la
+// URL) y se muestra ese error.
+async function saveIntegrationConfigs(pares) {
+  for (const [clave, valor] of pares) {
+    const r = await api("/admin/integrations-config", { method: "POST", body: JSON.stringify({ clave, valor }) });
+    if (r.status !== "success") return r;
+  }
+  return { status: "success" };
+}
+
+document.getElementById("form-drive-config").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const json = (f.get("google_service_account_json") || "").trim();
+  const folderId = (f.get("google_drive_folder_id") || "").trim();
+  if (!json && !folderId) { toast("Completa al menos un campo", false); return; }
+  const pares = [];
+  if (json) pares.push(["GOOGLE_SERVICE_ACCOUNT_JSON", json]);
+  if (folderId) pares.push(["GOOGLE_DRIVE_FOLDER_ID", folderId]);
+  setFormLoading(e.target, true);
+  try {
+    const r = await saveIntegrationConfigs(pares);
+    renderResult("drive-config-result", r);
+    if (r.status === "success") { e.target.reset(); loadIntegrationsStatus(); }
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
+document.getElementById("form-whatsapp-config").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const url = (f.get("evolution_api_url") || "").trim();
+  const apiKey = (f.get("evolution_api_key") || "").trim();
+  const instance = (f.get("evolution_instance") || "").trim();
+  if (!url || !apiKey || !instance) { toast("Completa los 3 campos", false); return; }
+  setFormLoading(e.target, true);
+  try {
+    const r = await saveIntegrationConfigs([
+      ["EVOLUTION_API_URL", url], ["EVOLUTION_API_KEY", apiKey], ["EVOLUTION_INSTANCE", instance],
+    ]);
+    renderResult("whatsapp-config-result", r);
+    if (r.status === "success") { e.target.reset(); loadIntegrationsStatus(); }
+  } finally {
+    setFormLoading(e.target, false);
+  }
+});
+
 // -------- Tokens de servicio (N8N y similares) --------
 document.getElementById("form-api-token-create").addEventListener("submit", async (e) => {
   e.preventDefault();

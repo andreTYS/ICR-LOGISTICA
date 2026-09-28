@@ -1,9 +1,14 @@
 const { AppError } = require("../errors");
+const { getConfigValue } = require("./integracionesConfigService");
 
 // Evolution API (instancia propia en el VPS, no la API oficial de Meta):
 // expone un REST simple por instancia — POST {URL}/message/sendMedia/{instancia}
 // con el apikey en un header. mediatype "document" adjunta el PDF tal cual
 // se genera para "Exportar PDF"/"Enviar por correo", sin duplicar lógica.
+//
+// EVOLUTION_API_URL/KEY/INSTANCE se resuelven vía integracionesConfigService:
+// primero lo guardado desde Administración → Integraciones, si no, la
+// variable de entorno del servidor.
 
 // Inyectable solo para tests — evita una llamada de red real.
 let fetchOverride = null;
@@ -11,8 +16,18 @@ function _setFetchForTests(fn) {
   fetchOverride = fn;
 }
 
-function isConfigured() {
-  return !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
+async function getEvolutionConfig() {
+  const [url, apiKey, instance] = await Promise.all([
+    getConfigValue("EVOLUTION_API_URL"),
+    getConfigValue("EVOLUTION_API_KEY"),
+    getConfigValue("EVOLUTION_INSTANCE"),
+  ]);
+  return { url, apiKey, instance };
+}
+
+async function isConfigured() {
+  const { url, apiKey, instance } = await getEvolutionConfig();
+  return !!(url && apiKey && instance);
 }
 
 // WhatsApp identifica números como código de país + número, solo dígitos
@@ -31,7 +46,8 @@ async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer, mimet
       400
     );
   }
-  if (!isConfigured()) {
+  const { url: rawBaseUrl, apiKey, instance } = await getEvolutionConfig();
+  if (!rawBaseUrl || !apiKey || !instance) {
     throw new AppError(
       "WHATSAPP_NOT_CONFIGURED",
       "El envío por WhatsApp no está configurado en este servidor (faltan EVOLUTION_API_URL/EVOLUTION_API_KEY/EVOLUTION_INSTANCE)",
@@ -42,11 +58,11 @@ async function enviarDocumentoPorWhatsapp({ to, caption, filename, buffer, mimet
   const tipoArchivo = mimetype || "application/pdf";
   const mediatype = tipoArchivo.startsWith("image/") ? "image" : "document";
   const doFetch = fetchOverride || fetch;
-  const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/+$/, "");
-  const url = `${baseUrl}/message/sendMedia/${process.env.EVOLUTION_INSTANCE}`;
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/message/sendMedia/${instance}`;
   const res = await doFetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", apikey: process.env.EVOLUTION_API_KEY },
+    headers: { "Content-Type": "application/json", apikey: apiKey },
     body: JSON.stringify({
       number: numero,
       mediatype,
