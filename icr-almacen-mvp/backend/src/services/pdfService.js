@@ -78,12 +78,21 @@ function renderPiePagina(doc) {
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
+    // El pie va DENTRO del margen inferior a propósito (+10 más abajo del
+    // límite de texto normal) — con el margen inferior real puesto, PDFKit
+    // interpreta ese .text() como que no entra en la página y agrega una
+    // página nueva en blanco solo para el pie (por eso todo PDF de este
+    // sistema salía con una página 2 vacía de más). Se pone el margen en 0
+    // solo mientras se dibuja el pie, así no dispara el salto de página.
+    const margenInferior = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc.font("Helvetica").fontSize(8).fillColor(COLORS.muted).text(
       `Página ${i + 1} de ${range.count} — generado el ${new Date().toLocaleString("es-PE")}`,
       doc.page.margins.left,
-      doc.page.height - doc.page.margins.bottom + 10,
+      doc.page.height - margenInferior + 10,
       { width: doc.page.width - doc.page.margins.left - doc.page.margins.right, align: "center" }
     );
+    doc.page.margins.bottom = margenInferior;
   }
 }
 
