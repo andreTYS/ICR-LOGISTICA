@@ -31,7 +31,12 @@ services:
       PORT: 4000
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el .env antes de desplegar}
-      ALLOWED_ORIGIN: https://${DOMAIN:-almacen.icr.example.com}
+      # Uno o varios orígenes separados por coma (ver CORS más abajo). Por
+      # defecto solo el propio dominio del ERP — para que otra app en un
+      # subdominio distinto (la tienda pública, Cotizador ICR, etc.) pueda
+      # llamar a esta API directo desde el navegador, agrega su origen acá
+      # en el .env, ej.: ALLOWED_ORIGIN=https://erp.inversionesicr.com,https://cotizador.inversionesicr.com
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-https://${DOMAIN:-almacen.icr.example.com}}
       # Integraciones opcionales — todas se leen desde el .env de este mismo
       # directorio (docker compose lo carga solo). Sin definir, cada una
       # responde "no configurado" en vez de fallar (ver README).
