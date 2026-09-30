@@ -78,7 +78,12 @@ const ROLE_PERMISSIONS = {
     "calendar.query",
   ],
   VENTAS: [
-    "inventory.reserve", "inventory.release_reservation",
+    // dispatch_reservation/return_loan se sumaron para que el token de
+    // servicio del Cotizador ICR (app de campo, actúa como un usuario
+    // VENTAS) pueda además despachar reservas y cerrar préstamos de
+    // herramientas al confirmar entregas/devoluciones de Almacén, sin
+    // depender de una cuenta ALMACENERO separada solo para eso.
+    "inventory.reserve", "inventory.release_reservation", "inventory.dispatch_reservation", "inventory.return_loan",
     "inventory.stock.get", "inventory.stock.search", "inventory.query",
     "projects.query", "accounting.query",
     "rrhh.attendance.mark", "rrhh.query",
