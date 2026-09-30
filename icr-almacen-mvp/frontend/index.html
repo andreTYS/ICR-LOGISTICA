@@ -1582,27 +1582,36 @@
             <label class="field-label sm:col-span-2">Descripción
               <input name="descripcion" required placeholder="ej. Combustible camioneta — visita a obra" class="field" />
             </label>
-            <label class="field-label">Fecha (opcional)
+            <label class="field-label">Fecha (opcional, hoy si se deja vacío)
               <input name="fecha" type="date" class="field" />
             </label>
-            <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
-            </label>
-            <label class="field-label">Empleado a reembolsar (opcional)
-              <select name="empleado_id" class="field attendance-employee-select"><option value="">— No aplica —</option></select>
-            </label>
-            <label class="field-label">Tipo de comprobante (opcional)
-              <select name="comprobante_tipo" class="field">
-                <option value="">— Sin comprobante —</option>
-                <option value="FACTURA">Factura</option>
-                <option value="BOLETA">Boleta</option>
-                <option value="RECIBO">Recibo</option>
-              </select>
-            </label>
-            <label class="field-label">Serie-número del comprobante
-              <input name="comprobante_serie_numero" placeholder="ej. B001-00456" class="field" />
-            </label>
           </div>
+          <!-- Igual que el Excel de Milagros: categoría, monto, descripción y fecha
+               alcanzan para la mayoría de gastos — esto queda plegado y no pide
+               nada más salvo que de verdad se necesite (reembolso, comprobante,
+               vincular a una obra). -->
+          <details class="mb-4">
+            <summary class="text-xs font-semibold text-slate-500 cursor-pointer select-none">+ Más detalles (proyecto, comprobante, reembolso a empleado)</summary>
+            <div class="grid sm:grid-cols-2 gap-4 mt-3">
+              <label class="field-label">Proyecto vinculado (opcional)
+                <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
+              </label>
+              <label class="field-label">Empleado a reembolsar (opcional)
+                <select name="empleado_id" class="field attendance-employee-select"><option value="">— No aplica —</option></select>
+              </label>
+              <label class="field-label">Tipo de comprobante (opcional)
+                <select name="comprobante_tipo" class="field">
+                  <option value="">— Sin comprobante —</option>
+                  <option value="FACTURA">Factura</option>
+                  <option value="BOLETA">Boleta</option>
+                  <option value="RECIBO">Recibo</option>
+                </select>
+              </label>
+              <label class="field-label">Serie-número del comprobante
+                <input name="comprobante_serie_numero" placeholder="ej. B001-00456" class="field" />
+              </label>
+            </div>
+          </details>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar gasto</span></button>
         </form>
         <div id="expense-create-result" class="result-box mb-5"></div>
