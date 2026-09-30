@@ -300,6 +300,14 @@ router.post(
   handle(async (req) => inventory.setProductCategoria(req.params.sku, req.body?.categoria))
 );
 
+// Baja lógica (activo=false) — ver comentario en inventoryService.deactivateProduct
+// sobre por qué nunca es un DELETE real.
+router.delete(
+  "/inventory/products/:sku",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.deactivateProduct(req.params.sku))
+);
+
 // -------- Kits ("cajas de herramientas") --------
 
 router.post(
@@ -638,6 +646,18 @@ router.post(
   })
 );
 
+router.post(
+  "/purchases/suppliers/:ruc",
+  requirePermission("purchases.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return compras.actualizarProveedor({
+      ruc: req.params.ruc, razonSocial: b.razon_social || null, contacto: b.contacto || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
 // -------- Proyectos --------
 
 router.post(
@@ -756,6 +776,18 @@ router.post(
   handle(async (req) => {
     const b = req.body;
     return proyectos.crearCliente({ ruc: b.ruc || null, dni: b.dni || null, telefono: b.telefono || null, razonSocial: b.razon_social, contacto: b.contacto || null, usuarioId: req.user.usuario_id, canal: b.channel || "web" });
+  })
+);
+
+router.post(
+  "/projects-clients/:identificador",
+  requirePermission("projects.create"),
+  handle(async (req) => {
+    const b = req.body;
+    return proyectos.actualizarCliente({
+      identificador: req.params.identificador, razonSocial: b.razon_social || null, telefono: b.telefono || null, contacto: b.contacto || null,
+      usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
   })
 );
 

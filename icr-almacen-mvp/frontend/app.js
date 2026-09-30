@@ -615,19 +615,53 @@ function resolveProjectIdentifier(val) {
 async function loadSkuOptions() {
   const r = await api("/inventory/products?q=&page_size=500");
   const items = r.data?.items || [];
-  const list = document.getElementById("sku-list");
   productCatalogBySku = Object.fromEntries(items.map((p) => [p.sku, p]));
   productCatalogByName = Object.fromEntries(items.map((p) => [(p.nombre || "").toLowerCase(), p]));
-  if (list) {
-    const opts = [];
-    for (const p of items) {
-      const costoTxt = p.costo_unitario != null ? " · Costo: S/ " + p.costo_unitario : "";
-      opts.push('<option value="' + p.sku + '">' + p.nombre + costoTxt + '</option>');
-      if (p.nombre) opts.push('<option value="' + p.nombre + '">' + p.sku + costoTxt + '</option>');
-    }
-    list.innerHTML = opts.join("");
-  }
+  renderSkuListOptions(items);
+  populateCategoriaFilters(items);
   initSkuAutocompleteAndQuantityDefault();
+}
+
+// La categoría va en el texto visible de cada opción (además del nombre)
+// para que la búsqueda nativa del datalist también encuentre productos
+// tecleando la categoría (ej. "paneles") y no solo el SKU o el nombre
+// exacto — Chrome/Firefox filtran por substring sobre el texto mostrado.
+function renderSkuListOptions(items) {
+  const list = document.getElementById("sku-list");
+  if (!list) return;
+  const opts = [];
+  for (const p of items) {
+    const costoTxt = p.costo_unitario != null ? " · Costo: S/ " + p.costo_unitario : "";
+    const catTxt = p.categoria ? " · " + p.categoria : "";
+    opts.push('<option value="' + p.sku + '">' + p.nombre + catTxt + costoTxt + '</option>');
+    if (p.nombre) opts.push('<option value="' + p.nombre + '">' + p.sku + catTxt + costoTxt + '</option>');
+  }
+  list.innerHTML = opts.join("");
+}
+
+// Los <select> con esta clase (ej. #quote-line-categoria) filtran, al
+// elegir una categoría, la misma lista de opciones del datalist de
+// productos a solo esa categoría — para poder buscar "todos los paneles"
+// en vez de tener que saber ya el SKU o nombre exacto.
+function populateCategoriaFilters(items) {
+  const categorias = [...new Set(items.map((p) => p.categoria).filter(Boolean))].sort();
+  document.querySelectorAll("select.categoria-filter-sku").forEach((select) => {
+    const actual = select.value;
+    select.innerHTML =
+      '<option value="">Todas las categorías</option>' +
+      categorias.map((c) => `<option value="${c}">${c}</option>`).join("");
+    select.value = categorias.includes(actual) ? actual : "";
+  });
+}
+
+// prefix identifica tanto el <select> de categoría como el input de
+// SKU/nombre asociado (ej. "quote-line" -> #quote-line-categoria y
+// #quote-line-sku), para reusar esto en cualquier formulario que tenga
+// ambos campos.
+function filterSkuListByCategoria(prefix) {
+  const categoria = document.getElementById(`${prefix}-categoria`)?.value || "";
+  const items = Object.values(productCatalogBySku);
+  renderSkuListOptions(categoria ? items.filter((p) => p.categoria === categoria) : items);
 }
 
 function fillQuoteLineFromSku(prefix) {
@@ -921,7 +955,7 @@ async function loadDashboard() {
     ? movRows.map((m) => `<tr class="${TR}">
         <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
         <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td>
-        <td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
+        <td class="${TD}">${m.sku}</td><td class="${TD}">${qty(m.cantidad)}</td>
       </tr>`).join("")
     : emptyRow(4, "Sin movimientos todavía.", "inbox");
 
@@ -933,7 +967,7 @@ async function loadDashboard() {
     alertBody.innerHTML = topAlerts.length
       ? topAlerts.map((a) => `<tr class="${TR}">
           <td class="${TD}">${a.sku}</td><td class="${TD}">${a.producto_nombre}</td>
-          <td class="${TD}">${badge(`${a.nivel_actual} / ${a.nivel_minimo}`, "low")}</td>
+          <td class="${TD}">${badge(`${qty(a.nivel_actual)} / ${qty(a.nivel_minimo)}`, "low")}</td>
         </tr>`).join("")
       : emptyRow(3, "Sin alertas activas.", "check");
   }
@@ -1538,6 +1572,13 @@ function projectStatusBadge(estado) {
 function money(n) {
   return Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Cantidades/stock vienen del backend como NUMERIC (ej. "5.00", string, para
+// no perder precisión) — se muestran como enteros cuando no tienen parte
+// decimal real (la inmensa mayoría, unidad "UND"), y con hasta 2 decimales
+// solo cuando sí la tienen (ej. metros de cable, kg).
+function qty(n) {
+  return Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
 
 const ENTRY_STATUS_TONES = { BORRADOR: "devolucion", CONTABILIZADO: "ok", ANULADO: "low" };
 function entryStatusBadge(estado) {
@@ -1560,9 +1601,9 @@ function stockRowHtml(row) {
   return `<tr class="${TR} row-clickable" onclick="openKardex('${row.sku}')" title="Ver Kardex de ${row.sku}">
       <td class="${TD}">${row.sku}</td><td class="${TD}">${row.producto_nombre}</td>
       <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
-      <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
-      <td class="${TD}">${badge(row.stock_disponible, low ? "low" : "ok")}</td>
-      <td class="${TD}">${row.punto_reorden}</td>
+      <td class="${TD}">${qty(row.stock_fisico)}</td><td class="${TD}">${qty(row.stock_reservado)}</td>
+      <td class="${TD}">${badge(qty(row.stock_disponible), low ? "low" : "ok")}</td>
+      <td class="${TD}">${qty(row.punto_reorden)}</td>
     </tr>`;
 }
 
@@ -1717,7 +1758,7 @@ async function loadProducts(page = 1) {
       <td class="${TD}">${productThumbHtml(p)}</td>
       <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}${p.retornable ? ` ${badge("RETORNABLE", "ok")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.categoria || "—"}</td>
-      <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${p.punto_reorden}</td>
+      <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${qty(p.punto_reorden)}</td>
       <td class="${TD}">${p.precio_venta != null ? money(p.precio_venta) : "—"}</td>
       <td class="${TD} flex gap-1.5">
         <button class="btn-icon" title="Subir foto" onclick="event.stopPropagation(); triggerPhotoUpload('${p.sku}')">
@@ -1728,6 +1769,9 @@ async function loadProducts(page = 1) {
         </button>
         <button class="btn-icon" title="Editar categoría" onclick="event.stopPropagation(); editProductCategoria('${p.sku}', ${JSON.stringify(p.categoria ?? null)})">
           <svg viewBox="0 0 20 20" fill="none"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h3l1.5 2h6.5A1.5 1.5 0 0 1 17 7.5v7A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5v-9Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="btn-icon" title="Eliminar producto" onclick="event.stopPropagation(); deleteProduct('${p.sku}', ${JSON.stringify(p.nombre)})">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 6h12M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6m-7 0 .7 9.1a1.5 1.5 0 0 0 1.5 1.4h5.6a1.5 1.5 0 0 0 1.5-1.4L15 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </td>
     </tr>`).join("")
@@ -1750,6 +1794,16 @@ async function editProductCategoria(sku, actual) {
   const categoria = input.trim() === "" ? null : input.trim();
   const r = await api(`/inventory/products/${encodeURIComponent(sku)}/categoria`, { method: "POST", body: JSON.stringify({ channel: "web", categoria }) });
   if (r.status === "success") { toast(`Categoría de ${sku} actualizada`); loadProducts(); }
+  else toast(r.error.message, false);
+}
+
+// Baja lógica: el producto deja de aparecer en el catálogo/búsquedas, pero
+// su historial de movimientos, reservas y préstamos pasados se conserva
+// intacto (ver comentario en inventoryService.deactivateProduct).
+async function deleteProduct(sku, nombre) {
+  if (!confirm(`¿Eliminar "${nombre}" (${sku})? Dejará de aparecer en el catálogo. El historial de movimientos ya registrado no se borra.`)) return;
+  const r = await api(`/inventory/products/${encodeURIComponent(sku)}`, { method: "DELETE" });
+  if (r.status === "success") { toast(`${sku} eliminado`); loadProducts(); }
   else toast(r.error.message, false);
 }
 
@@ -1810,7 +1864,7 @@ document.getElementById("product-q").addEventListener("keydown", (e) => { if (e.
 function movRowHtml(m) {
   return `<tr class="${TR}">
       <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
-      <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.sku}</td><td class="${TD}">${m.cantidad}</td>
+      <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.sku}</td><td class="${TD}">${qty(m.cantidad)}</td>
       <td class="${TD}">${m.almacen_origen_codigo || "—"}</td><td class="${TD}">${m.almacen_destino_codigo || "—"}</td>
     </tr>`;
 }
@@ -1866,7 +1920,7 @@ async function loadAlerts() {
   (r.data || []).forEach((a) => {
     body.innerHTML += `<tr class="${TR}">
       <td class="${TD}">${a.sku}</td><td class="${TD}">${a.producto_nombre}</td><td class="${TD}">${a.almacen_codigo}</td>
-      <td class="${TD}">${a.nivel_actual}</td><td class="${TD}">${a.nivel_minimo}</td>
+      <td class="${TD}">${qty(a.nivel_actual)}</td><td class="${TD}">${qty(a.nivel_minimo)}</td>
       <td class="${TD}">${badge(a.estado, a.estado === "PENDIENTE" ? "low" : "ok")}</td>
     </tr>`;
   });
@@ -2053,7 +2107,7 @@ async function loadReplenishmentSuggestions() {
     ? items.map((s) => `<tr class="${TR}">
         <td class="${TD}">${s.sku}</td><td class="${TD}">${s.producto_nombre}</td>
         <td class="${TD}">${s.almacen_codigo}</td><td class="${TD}">${badge(s.stock_disponible, "low")}</td>
-        <td class="${TD}">${s.punto_reorden}</td><td class="${TD}">${s.cantidad_sugerida}</td>
+        <td class="${TD}">${qty(s.punto_reorden)}</td><td class="${TD}">${qty(s.cantidad_sugerida)}</td>
         <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="prefillOcFromSuggestion('${s.sku}', ${s.cantidad_sugerida})">Agregar a la orden</button></td>
       </tr>`).join("")
     : emptyRow(7, "Todo el stock está por encima del punto de reorden.", "check");
@@ -2125,7 +2179,7 @@ async function openOcModal(numero) {
   const itemsBody = document.getElementById("oc-items-body");
   itemsBody.innerHTML = (oc.items || []).map((it) => `<tr class="${TR}">
       <td class="${TD}">${it.sku}</td><td class="${TD}">${it.producto_nombre}</td>
-      <td class="${TD}">${it.cantidad_pedida}</td><td class="${TD}">${it.cantidad_recibida}</td>
+      <td class="${TD}">${qty(it.cantidad_pedida)}</td><td class="${TD}">${qty(it.cantidad_recibida)}</td>
       <td class="${TD}">${it.cantidad_pendiente}</td>
       <td class="${TD}">${canReceive && Number(it.cantidad_pendiente) > 0
         ? `<input type="number" min="0" max="${it.cantidad_pendiente}" step="0.01" class="field oc-receive-qty" data-sku="${it.sku}" placeholder="0" />`
@@ -2138,7 +2192,7 @@ async function openOcModal(numero) {
         <td class="${TD}">${new Date(rec.created_at).toLocaleString("es-PE")}</td>
         <td class="${TD}">${rec.numero_documento ? `${rec.tipo_documento} ${rec.numero_documento}` : "—"}</td>
         <td class="${TD}">${rec.usuario_nombre}</td>
-        <td class="${TD}">${rec.items.map((i) => `${i.sku} ×${i.cantidad}`).join(", ")}</td>
+        <td class="${TD}">${rec.items.map((i) => `${i.sku} ×${qty(i.cantidad)}`).join(", ")}</td>
       </tr>`).join("")
     : emptyRow(4, "Sin recepciones registradas todavía.", "inbox");
 }
@@ -2235,8 +2289,26 @@ async function loadSuppliers() {
   }
   const items = r.data || [];
   body.innerHTML = items.length
-    ? items.map((s) => `<tr class="${TR}"><td class="${TD}">${s.ruc}</td><td class="${TD}">${s.razon_social}</td><td class="${TD}">${s.contacto || "—"}</td></tr>`).join("")
-    : emptyRow(3, "Sin proveedores registrados.", "inbox");
+    ? items.map((s) => `<tr class="${TR}">
+        <td class="${TD}">${s.ruc}</td><td class="${TD}">${s.razon_social}</td><td class="${TD}">${s.contacto || "—"}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="editSupplier('${s.ruc}', ${JSON.stringify(s.razon_social)}, ${JSON.stringify(s.contacto)})">Editar</button></td>
+      </tr>`).join("")
+    : emptyRow(4, "Sin proveedores registrados.", "inbox");
+}
+
+// Igual que editProductPrecioVenta/editProductCategoria: dos prompts en
+// cadena en vez de un modal aparte, para un ajuste rápido de 2 campos.
+async function editSupplier(ruc, razonActual, contactoActual) {
+  const razon_social = prompt(`Razón social de ${ruc}:`, razonActual ?? "");
+  if (razon_social === null) return;
+  const contacto = prompt(`Contacto de ${ruc} (vacío para quitarlo):`, contactoActual ?? "");
+  if (contacto === null) return;
+  const r = await api(`/purchases/suppliers/${encodeURIComponent(ruc)}`, {
+    method: "POST",
+    body: JSON.stringify({ channel: "web", razon_social: razon_social.trim() || null, contacto: contacto.trim() || null }),
+  });
+  if (r.status === "success") { toast(`Proveedor ${ruc} actualizado`); loadSuppliers(); loadSupplierOptions(); }
+  else toast(r.error.message, false);
 }
 
 // -------- Compras: cuentas por pagar --------
@@ -2664,9 +2736,29 @@ async function loadClients() {
     ? items.map((c) => `<tr class="${TR}">
         <td class="${TD}">${c.ruc || c.dni || "—"}</td><td class="${TD}">${c.razon_social}</td>
         <td class="${TD}">${c.telefono || "—"}</td><td class="${TD}">${c.contacto || "—"}</td>
-        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="openDocumentsModal('cliente', '${c.cliente_id}', '${c.razon_social.replace(/'/g, "\\'")}')">Documentos</button></td>
+        <td class="${TD} whitespace-nowrap">
+          <button type="button" class="btn-secondary px-2 py-1 text-xs mr-1.5" onclick="editClient(${JSON.stringify(c.ruc || c.dni)}, ${JSON.stringify(c.razon_social)}, ${JSON.stringify(c.telefono)}, ${JSON.stringify(c.contacto)})">Editar</button>
+          <button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="openDocumentsModal('cliente', '${c.cliente_id}', '${c.razon_social.replace(/'/g, "\\'")}')">Documentos</button>
+        </td>
       </tr>`).join("")
     : emptyRow(5, "Sin clientes registrados.", "inbox");
+}
+
+// Igual que editSupplier: prompts en cadena para un ajuste rápido, sin un
+// modal aparte solo para 3 campos.
+async function editClient(identificador, razonActual, telefonoActual, contactoActual) {
+  const razon_social = prompt(`Razón social / nombre de ${identificador}:`, razonActual ?? "");
+  if (razon_social === null) return;
+  const telefono = prompt(`Teléfono de ${identificador} (vacío para quitarlo):`, telefonoActual ?? "");
+  if (telefono === null) return;
+  const contacto = prompt(`Contacto de ${identificador} (vacío para quitarlo):`, contactoActual ?? "");
+  if (contacto === null) return;
+  const r = await api(`/projects-clients/${encodeURIComponent(identificador)}`, {
+    method: "POST",
+    body: JSON.stringify({ channel: "web", razon_social: razon_social.trim() || null, telefono: telefono.trim() || null, contacto: contacto.trim() || null }),
+  });
+  if (r.status === "success") { toast(`Cliente ${identificador} actualizado`); loadClients(); }
+  else toast(r.error.message, false);
 }
 
 // -------- Proyectos: rentabilidad --------
@@ -4353,7 +4445,7 @@ async function loadReservations() {
         return `<tr class="${TR}">
         <td class="${TD}">${new Date(res.fecha_reserva).toLocaleString("es-PE")}</td>
         <td class="${TD}">${res.sku}</td><td class="${TD}">${res.almacen_codigo}</td>
-        <td class="${TD}">${res.cantidad}</td><td class="${TD}">${destino}</td><td class="${TD}">${res.solicitante}</td>
+        <td class="${TD}">${qty(res.cantidad)}</td><td class="${TD}">${destino}</td><td class="${TD}">${res.solicitante}</td>
         <td class="${TD}">${badge(res.estado, res.estado === "ACTIVA" ? "ok" : "devolucion")}</td>
         <td class="${TD} whitespace-nowrap">${res.estado === "ACTIVA" ? `
           <button class="btn-primary px-3 py-1.5 text-xs mr-1.5" onclick="dispatchReservationAction('${res.reserva_id}', ${res.cantidad})">Despachar a obra</button>
@@ -4405,7 +4497,7 @@ async function loadLoans() {
         return `<tr class="${TR}">
         <td class="${TD}">${new Date(p.fecha_prestamo).toLocaleString("es-PE")}</td>
         <td class="${TD}">${p.sku}</td><td class="${TD}">${p.almacen_codigo}</td>
-        <td class="${TD}">${p.cantidad}</td><td class="${TD}">${destino}</td><td class="${TD}">${p.solicitante}</td>
+        <td class="${TD}">${qty(p.cantidad)}</td><td class="${TD}">${destino}</td><td class="${TD}">${p.solicitante}</td>
         <td class="${TD}">${badge(p.estado, p.estado === "PRESTADO" ? "ajuste" : "ok")}</td>
         <td class="${TD}">${p.estado === "PRESTADO" ? `<button class="btn-primary px-3 py-1.5 text-xs" onclick="returnLoanAction('${p.prestamo_id}')">Registrar retorno</button>` : ""}</td>
       </tr>`;
@@ -4458,8 +4550,8 @@ async function loadAdjustments() {
     ? items.map((a) => `<tr class="${TR}">
         <td class="${TD}">${new Date(a.created_at).toLocaleString("es-PE")}</td>
         <td class="${TD}">${a.sku}</td><td class="${TD}">${a.almacen_codigo}</td>
-        <td class="${TD}">${a.cantidad_sistema}</td><td class="${TD}">${a.cantidad_fisica}</td>
-        <td class="${TD}">${a.diferencia}</td><td class="${TD}">${a.solicitante}</td>
+        <td class="${TD}">${qty(a.cantidad_sistema)}</td><td class="${TD}">${qty(a.cantidad_fisica)}</td>
+        <td class="${TD}">${qty(a.diferencia)}</td><td class="${TD}">${a.solicitante}</td>
         <td class="${TD}">${badge(a.estado, a.estado === "PENDIENTE" ? "low" : a.estado === "APROBADO" ? "ok" : "devolucion")}</td>
         <td class="${TD}">${a.estado === "PENDIENTE" ? `
           <div class="flex gap-1.5">
@@ -4903,8 +4995,8 @@ async function openKardex(sku) {
         const low = Number(row.stock_disponible) <= Number(row.punto_reorden);
         return `<tr class="${TR}">
           <td class="${TD}">${row.almacen_codigo}</td><td class="${TD}">${row.codigo_ubicacion || "—"}</td>
-          <td class="${TD}">${row.stock_fisico}</td><td class="${TD}">${row.stock_reservado}</td>
-          <td class="${TD}">${badge(row.stock_disponible, low ? "low" : "ok")}</td>
+          <td class="${TD}">${qty(row.stock_fisico)}</td><td class="${TD}">${qty(row.stock_reservado)}</td>
+          <td class="${TD}">${badge(qty(row.stock_disponible), low ? "low" : "ok")}</td>
         </tr>`;
       }).join("")
     : emptyRow(5, "Sin stock registrado para este producto.", "inbox");
@@ -4914,7 +5006,7 @@ async function openKardex(sku) {
   movBody.innerHTML = movItems.length
     ? movItems.map((m) => `<tr class="${TR}">
         <td class="${TD}">${new Date(m.created_at).toLocaleString("es-PE")}</td>
-        <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${m.cantidad}</td>
+        <td class="${TD}">${movTypeBadge(m.tipo_movimiento)}</td><td class="${TD}">${qty(m.cantidad)}</td>
         <td class="${TD}">${m.almacen_origen_codigo || "—"}</td><td class="${TD}">${m.almacen_destino_codigo || "—"}</td>
       </tr>`).join("")
     : emptyRow(5, "Sin movimientos registrados.", "inbox");
@@ -4956,7 +5048,7 @@ async function loadKitItems(sku) {
   const items = r.data || [];
   body.innerHTML = items.length
     ? items.map((it) => `<tr class="${TR}">
-        <td class="${TD}">${it.sku}</td><td class="${TD}">${it.nombre}</td><td class="${TD}">${it.cantidad}</td>
+        <td class="${TD}">${it.sku}</td><td class="${TD}">${it.nombre}</td><td class="${TD}">${qty(it.cantidad)}</td>
         <td class="${TD}"><button class="btn-danger px-2.5 py-1 text-xs" onclick="removeKitItemAction('${sku}','${it.sku}')">Quitar</button></td>
       </tr>`).join("")
     : emptyRow(4, "Este producto todavía no es un kit.", "inbox");

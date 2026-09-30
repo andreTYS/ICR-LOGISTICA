@@ -440,6 +440,21 @@ async function setProductRetornable(sku, retornable) {
   return r.rows[0];
 }
 
+// Baja lógica (activo=false), nunca DELETE real: hay movimientos, stock,
+// reservas, préstamos, etc. con referencia a este producto (ON DELETE
+// RESTRICT en la mayoría de esas foreign keys) — borrarlo de verdad
+// rompería ese historial. "Eliminar" en la pantalla de Productos significa
+// esto: deja de aparecer en el catálogo/búsquedas activas, pero su rastro
+// en movimientos e informes pasados se mantiene intacto.
+async function deactivateProduct(sku) {
+  const r = await pool.query(
+    "UPDATE productos SET activo=false WHERE sku=$1 AND activo=true RETURNING *",
+    [sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o ya está inactivo`, 404);
+  return r.rows[0];
+}
+
 // Parser de CSV mínimo (RFC 4180: campos entre comillas, comas y saltos de
 // línea escapados con "" dentro de la comilla) — no se suma una librería
 // externa solo para esto, es una gramática chica y estable.
@@ -1068,7 +1083,7 @@ module.exports = {
   returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, deactivateProduct, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
   requireIntegerIfUnidadDiscreta,

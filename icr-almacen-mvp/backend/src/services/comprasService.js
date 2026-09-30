@@ -228,6 +228,24 @@ async function crearProveedor({ ruc, razonSocial, contacto, usuarioId, canal }) 
   });
 }
 
+// contacto sí se puede vaciar (pasando null/""); razon_social no, porque la
+// columna es NOT NULL — por eso va con asignación directa y no COALESCE,
+// a diferencia de un update parcial: acá el llamador siempre manda los dos
+// campos, así que null en contacto significa "bórralo", no "no lo toques".
+async function actualizarProveedor({ ruc, razonSocial, contacto, usuarioId, canal }) {
+  if (!razonSocial) {
+    throw new AppError("SCHEMA_INVALID", "razonSocial es obligatorio", 400);
+  }
+  return withAuditedTransaction("purchases.supplier.update", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      `UPDATE proveedores SET razon_social = $2, contacto = $3 WHERE ruc = $1 AND activo = true RETURNING *`,
+      [ruc, razonSocial, contacto || null]
+    );
+    if (r.rows.length === 0) throw new AppError("SUPPLIER_NOT_FOUND", `Proveedor con RUC '${ruc}' no existe o está inactivo`, 404);
+    return { entidad: "proveedores", entidadId: r.rows[0].proveedor_id, valorNuevo: { razonSocial, contacto }, proveedor: r.rows[0] };
+  });
+}
+
 async function listProveedores() {
   const r = await pool.query("SELECT * FROM proveedores WHERE activo = true ORDER BY razon_social");
   return r.rows;
@@ -302,9 +320,14 @@ async function getOrdenCompra(numero) {
 // está definido; si no, el doble del punto de reorden).
 async function getSugerenciasReabastecimiento() {
   const r = await pool.query(
+    // Piso de 1 en vez de 0: un producto que nunca tuvo punto_reorden/
+    // stock_maximo configurado (quedan en 0 por defecto) y ya está en
+    // stock 0 sigue apareciendo acá (stock_disponible <= punto_reorden es
+    // 0 <= 0), pero la fórmula daba una cantidad sugerida de 0 — una orden
+    // de compra armada desde esa sugerencia terminaba pidiendo 0 unidades.
     `SELECT sku, producto_nombre, almacen_codigo, almacen_nombre,
             stock_disponible, punto_reorden, stock_maximo,
-            GREATEST(COALESCE(stock_maximo, punto_reorden * 2) - stock_disponible, 0) AS cantidad_sugerida
+            GREATEST(COALESCE(stock_maximo, punto_reorden * 2) - stock_disponible, 1) AS cantidad_sugerida
      FROM vw_stock_bajo
      ORDER BY producto_nombre`
   );
@@ -313,5 +336,5 @@ async function getSugerenciasReabastecimiento() {
 
 module.exports = {
   crearOrdenCompra, enviarOrdenCompra, cancelarOrdenCompra, recibirOrdenCompra,
-  getOrdenesCompra, getOrdenCompra, getSugerenciasReabastecimiento, listProveedores, crearProveedor,
+  getOrdenesCompra, getOrdenCompra, getSugerenciasReabastecimiento, listProveedores, crearProveedor, actualizarProveedor,
 };
