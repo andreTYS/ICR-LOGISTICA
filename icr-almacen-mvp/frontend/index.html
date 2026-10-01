@@ -1007,10 +1007,13 @@
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Nuevo proveedor</h3>
           <div class="grid sm:grid-cols-2 gap-4 mb-5">
             <label class="field-label">RUC
-              <input name="ruc" required placeholder="ej. 20100047218" class="field" />
+              <div class="flex gap-1.5">
+                <input name="ruc" required placeholder="ej. 20100047218" class="field" id="supplier-ruc-input" />
+                <button type="button" class="btn-secondary px-2.5 text-xs whitespace-nowrap" onclick="lookupClientIdentifier('supplier')">Consultar</button>
+              </div>
             </label>
             <label class="field-label">Razón social
-              <input name="razon_social" required placeholder="ej. JA Solar Perú Distribuidora S.A.C." class="field" />
+              <input name="razon_social" required placeholder="ej. JA Solar Perú Distribuidora S.A.C." class="field" id="supplier-nombre-input" />
             </label>
             <label class="field-label sm:col-span-2">Contacto (opcional)
               <input name="contacto" placeholder="ej. ventas@proveedor.example" class="field" />
@@ -1023,7 +1026,7 @@
           <table class="w-full border-collapse text-sm">
             <thead><tr class="bg-navy-950 text-white text-[12.5px]">
               <th class="text-left font-semibold px-3 py-2.5">RUC</th><th class="text-left font-semibold px-3 py-2.5">Razón social</th>
-              <th class="text-left font-semibold px-3 py-2.5">Contacto</th>
+              <th class="text-left font-semibold px-3 py-2.5">Contacto</th><th class="text-left font-semibold px-3 py-2.5"></th>
             </tr></thead>
             <tbody id="suppliers-body"></tbody>
           </table>
@@ -1361,6 +1364,11 @@
             </label>
           </div>
           <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label w-36">Categoría
+              <select id="quote-line-categoria" class="categoria-filter-sku field" onchange="filterSkuListByCategoria('quote-line')">
+                <option value="">Todas las categorías</option>
+              </select>
+            </label>
             <label class="field-label w-40">Producto del catálogo (opcional)
               <input id="quote-line-sku" list="sku-list" placeholder="buscar por SKU o nombre…" class="field" onchange="fillQuoteLineFromSku('quote-line')" oninput="fillQuoteLineFromSku('quote-line')" autocomplete="off" />
             </label>
@@ -1574,27 +1582,36 @@
             <label class="field-label sm:col-span-2">Descripción
               <input name="descripcion" required placeholder="ej. Combustible camioneta — visita a obra" class="field" />
             </label>
-            <label class="field-label">Fecha (opcional)
+            <label class="field-label">Fecha (opcional, hoy si se deja vacío)
               <input name="fecha" type="date" class="field" />
             </label>
-            <label class="field-label">Proyecto vinculado (opcional)
-              <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
-            </label>
-            <label class="field-label">Empleado a reembolsar (opcional)
-              <select name="empleado_id" class="field attendance-employee-select"><option value="">— No aplica —</option></select>
-            </label>
-            <label class="field-label">Tipo de comprobante (opcional)
-              <select name="comprobante_tipo" class="field">
-                <option value="">— Sin comprobante —</option>
-                <option value="FACTURA">Factura</option>
-                <option value="BOLETA">Boleta</option>
-                <option value="RECIBO">Recibo</option>
-              </select>
-            </label>
-            <label class="field-label">Serie-número del comprobante
-              <input name="comprobante_serie_numero" placeholder="ej. B001-00456" class="field" />
-            </label>
           </div>
+          <!-- Igual que el Excel de Milagros: categoría, monto, descripción y fecha
+               alcanzan para la mayoría de gastos — esto queda plegado y no pide
+               nada más salvo que de verdad se necesite (reembolso, comprobante,
+               vincular a una obra). -->
+          <details class="mb-4">
+            <summary class="text-xs font-semibold text-slate-500 cursor-pointer select-none">+ Más detalles (proyecto, comprobante, reembolso a empleado)</summary>
+            <div class="grid sm:grid-cols-2 gap-4 mt-3">
+              <label class="field-label">Proyecto vinculado (opcional)
+                <input name="proyecto_codigo" list="project-list" placeholder="ej. PROY-001 o nombre…" class="field" autocomplete="off" />
+              </label>
+              <label class="field-label">Empleado a reembolsar (opcional)
+                <select name="empleado_id" class="field attendance-employee-select"><option value="">— No aplica —</option></select>
+              </label>
+              <label class="field-label">Tipo de comprobante (opcional)
+                <select name="comprobante_tipo" class="field">
+                  <option value="">— Sin comprobante —</option>
+                  <option value="FACTURA">Factura</option>
+                  <option value="BOLETA">Boleta</option>
+                  <option value="RECIBO">Recibo</option>
+                </select>
+              </label>
+              <label class="field-label">Serie-número del comprobante
+                <input name="comprobante_serie_numero" placeholder="ej. B001-00456" class="field" />
+              </label>
+            </div>
+          </details>
           <button class="btn-primary btn-loading" type="submit"><span class="btn-label">Registrar gasto</span></button>
         </form>
         <div id="expense-create-result" class="result-box mb-5"></div>
@@ -2802,6 +2819,11 @@
         <div id="lead-convert-section">
           <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Convertir en cotización</h3>
           <div class="flex flex-wrap items-end gap-2 mb-2">
+            <label class="field-label w-32">Categoría
+              <select id="lead-quote-line-categoria" class="categoria-filter-sku field" onchange="filterSkuListByCategoria('lead-quote-line')">
+                <option value="">Todas las categorías</option>
+              </select>
+            </label>
             <label class="field-label w-36">Producto (opcional)
               <input id="lead-quote-line-sku" list="sku-list" placeholder="buscar por SKU o nombre…" class="field" onchange="fillQuoteLineFromSku('lead-quote-line')" oninput="fillQuoteLineFromSku('lead-quote-line')" autocomplete="off" />
             </label>

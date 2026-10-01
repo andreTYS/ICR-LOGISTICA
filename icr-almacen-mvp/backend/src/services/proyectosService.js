@@ -230,6 +230,28 @@ async function crearCliente({ ruc, dni, telefono, razonSocial, contacto, usuario
   });
 }
 
+// Se identifica por ruc o dni (el que se haya usado al crearlo) igual que
+// el resto del sistema busca clientes — ver comentario en schema.sql sobre
+// por qué "RUC" en la API acepta indistintamente uno u otro. telefono/
+// contacto sí se pueden vaciar (asignación directa, no COALESCE): el
+// llamador siempre manda los tres campos, así que null ahí significa
+// "bórralo", no "no lo toques". razon_social es NOT NULL, por eso se valida
+// en vez de dejar que la fila se quede con lo que traía.
+async function actualizarCliente({ identificador, razonSocial, telefono, contacto, usuarioId, canal }) {
+  if (!razonSocial) {
+    throw new AppError("SCHEMA_INVALID", "razonSocial es obligatorio", 400);
+  }
+  return withAuditedTransaction("projects.client.update", usuarioId, canal, async (client) => {
+    const r = await client.query(
+      `UPDATE clientes SET razon_social = $2, telefono = $3, contacto = $4
+       WHERE (ruc = $1 OR dni = $1) AND activo = true RETURNING *`,
+      [identificador, razonSocial, telefono || null, contacto || null]
+    );
+    if (r.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${identificador}' no existe o está inactivo`, 404);
+    return { entidad: "clientes", entidadId: r.rows[0].cliente_id, valorNuevo: { razonSocial, telefono, contacto }, cliente: r.rows[0] };
+  });
+}
+
 async function listClientes() {
   const r = await pool.query("SELECT * FROM clientes WHERE activo = true ORDER BY razon_social");
   return r.rows;
@@ -345,6 +367,6 @@ async function getDriveFolderId(proyectoId) {
 
 module.exports = {
   crearProyecto, actualizarEstado, registrarManoObra, crearHitoProyecto, actualizarHitoProyecto,
-  listProyectos, getProyecto, listTecnicos, crearCliente, listClientes, getReporteRentabilidad,
+  listProyectos, getProyecto, listTecnicos, crearCliente, actualizarCliente, listClientes, getReporteRentabilidad,
   setDriveFolderId, getDriveFolderId, extractDriveFolderId,
 };

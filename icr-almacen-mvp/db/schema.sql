@@ -142,6 +142,27 @@ CREATE TABLE clientes (
     CONSTRAINT clientes_ruc_o_dni CHECK (ruc IS NOT NULL OR dni IS NOT NULL)
 );
 
+-- Cuenta de autoservicio de un visitante de la tienda online (ICR-TIENDA):
+-- login/registro con correo+contraseña, independiente de `clientes` (que es
+-- el cliente FORMAL del negocio, cargado por un vendedor, sin correo ni
+-- contraseña). ruc/dni acá son opcionales y solo sirven para, si coinciden
+-- con un `clientes.ruc`/`clientes.dni` ya existente, mostrarle a este
+-- usuario sus cotizaciones/contratos reales como "historial de pedidos" —
+-- ver tiendaAuthService.obtenerPedidos. Sin ese cruce (recién registrado, o
+-- un RUC/DNI que ningún vendedor cargó todavía) el historial queda vacío,
+-- no es un error.
+CREATE TABLE clientes_tienda (
+    cliente_tienda_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre             TEXT NOT NULL,
+    correo             TEXT NOT NULL UNIQUE,
+    password_hash      TEXT NOT NULL,
+    telefono           TEXT,
+    empresa            TEXT,
+    ruc                TEXT,
+    dni                TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE proyectos (
     proyecto_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     codigo_proyecto  TEXT NOT NULL UNIQUE,
@@ -249,6 +270,10 @@ CREATE TABLE productos (
     -- hace que una tabla de categorías separada sea prematura por ahora.
     categoria       TEXT,
     imagen_url      TEXT,
+    -- Selección manual para la sección "Productos destacados" de la tienda
+    -- online (home) — no es un cálculo (más vendidos, mejor margen, etc.),
+    -- lo marca un vendedor/admin a criterio propio desde el ERP.
+    destacado       BOOLEAN NOT NULL DEFAULT false,
     es_kit          BOOLEAN NOT NULL DEFAULT false,
     -- Herramientas, equipos y cajas ("cajas de herramientas") que se prestan
     -- para un trabajo y deben volver al almacén, a diferencia de un material

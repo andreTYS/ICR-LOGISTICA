@@ -411,6 +411,18 @@ async function setProductCategoria(sku, categoria) {
   return r.rows[0];
 }
 
+// Selección manual para "Productos destacados" del home de la tienda online
+// — ver comentario en schema.sql. Mismo criterio granular que
+// setProductCategoria/setProductRetornable.
+async function setProductDestacado(sku, destacado) {
+  const r = await pool.query(
+    "UPDATE productos SET destacado=$1 WHERE sku=$2 AND activo=true RETURNING *",
+    [destacado === true || destacado === "true", sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
+  return r.rows[0];
+}
+
 // Precio público/de lista de venta — distinto de costo_unitario (interno, se
 // usa para costeo y márgenes). Sin definir, el producto se muestra "a
 // cotizar" en la tienda en vez de con un precio fijo. Mismo criterio
@@ -437,6 +449,21 @@ async function setProductRetornable(sku, retornable) {
     [!!retornable, sku]
   );
   if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
+  return r.rows[0];
+}
+
+// Baja lógica (activo=false), nunca DELETE real: hay movimientos, stock,
+// reservas, préstamos, etc. con referencia a este producto (ON DELETE
+// RESTRICT en la mayoría de esas foreign keys) — borrarlo de verdad
+// rompería ese historial. "Eliminar" en la pantalla de Productos significa
+// esto: deja de aparecer en el catálogo/búsquedas activas, pero su rastro
+// en movimientos e informes pasados se mantiene intacto.
+async function deactivateProduct(sku) {
+  const r = await pool.query(
+    "UPDATE productos SET activo=false WHERE sku=$1 AND activo=true RETURNING *",
+    [sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o ya está inactivo`, 404);
   return r.rows[0];
 }
 
@@ -1068,7 +1095,7 @@ module.exports = {
   returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, setProductDestacado, deactivateProduct, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
   requireIntegerIfUnidadDiscreta,
