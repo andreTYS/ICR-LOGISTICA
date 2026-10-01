@@ -411,6 +411,18 @@ async function setProductCategoria(sku, categoria) {
   return r.rows[0];
 }
 
+// Selección manual para "Productos destacados" del home de la tienda online
+// — ver comentario en schema.sql. Mismo criterio granular que
+// setProductCategoria/setProductRetornable.
+async function setProductDestacado(sku, destacado) {
+  const r = await pool.query(
+    "UPDATE productos SET destacado=$1 WHERE sku=$2 AND activo=true RETURNING *",
+    [destacado === true || destacado === "true", sku]
+  );
+  if (r.rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND", `Producto con SKU '${sku}' no existe o está inactivo`, 404);
+  return r.rows[0];
+}
+
 // Precio público/de lista de venta — distinto de costo_unitario (interno, se
 // usa para costeo y márgenes). Sin definir, el producto se muestra "a
 // cotizar" en la tienda en vez de con un precio fijo. Mismo criterio
@@ -1083,7 +1095,7 @@ module.exports = {
   returnLoan, getLoans,
   adjustCreate, adjustDecide, getAdjustments,
   getAuditLog,
-  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, deactivateProduct, addKitItem, removeKitItem, getKitItems,
+  setProductPhoto, setProductRetornable, setProductPrecioVenta, setProductCategoria, setProductDestacado, deactivateProduct, addKitItem, removeKitItem, getKitItems,
   // Helpers internos reutilizados por comprasService (misma base de datos, mismos invariantes)
   withAuditedTransaction, findProductBySku, findWarehouseByCode, lockOrCreateStockRow, findOrCreateDocumento,
   requireIntegerIfUnidadDiscreta,

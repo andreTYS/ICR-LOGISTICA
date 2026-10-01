@@ -24,6 +24,7 @@ const admin = require("./services/adminService");
 const integracionesConfig = require("./services/integracionesConfigService");
 const n8nWebhooks = require("./services/n8nWebhooksService");
 const crm = require("./services/crmService");
+const tiendaAuth = require("./services/tiendaAuthService");
 const archivos = require("./services/archivosService");
 const calendario = require("./services/calendarioService");
 const openapi = require("./openapi");
@@ -36,7 +37,7 @@ const mail = require("./services/mailService");
 const whatsapp = require("./services/whatsappService");
 const rucService = require("./services/rucService");
 const { AppError, translatePgError } = require("./errors");
-const { login, requireAuth, requirePermission } = require("./auth");
+const { login, requireAuth, requirePermission, requireTiendaCustomer } = require("./auth");
 
 // Máximo 10 intentos de login por IP cada 15 minutos, para frenar fuerza bruta
 const loginLimiter = rateLimit({
@@ -298,6 +299,12 @@ router.post(
   "/inventory/products/:sku/categoria",
   requirePermission("inventory.product.update"),
   handle(async (req) => inventory.setProductCategoria(req.params.sku, req.body?.categoria))
+);
+
+router.post(
+  "/inventory/products/:sku/destacado",
+  requirePermission("inventory.product.update"),
+  handle(async (req) => inventory.setProductDestacado(req.params.sku, req.body?.destacado))
 );
 
 // Baja lógica (activo=false) — ver comentario en inventoryService.deactivateProduct
@@ -1478,6 +1485,39 @@ router.get(
   "/crm/leads/:codigo",
   requirePermission("crm.query"),
   handle(async (req) => crm.getLead(req.params.codigo))
+);
+
+// -------- Tienda online: cuentas de autoservicio --------
+// Login/registro/historial de los visitantes de ICR-TIENDA. Igual que
+// /crm/leads, el único llamador real es el servidor de Next.js de la tienda
+// (nunca el navegador directo), con el token de servicio del usuario VENTAS
+// — por eso registro/login piden el mismo permiso "crm.manage". El
+// historial, en cambio, viaja con el JWT propio del cliente de tienda
+// (tipo:'tienda', emitido por registro/login), no con el token de servicio
+// — ver requireTiendaCustomer en auth.js.
+
+router.post(
+  "/tienda-auth/registro",
+  requirePermission("crm.manage"),
+  handle(async (req) => tiendaAuth.registrarCliente(req.body || {}))
+);
+
+router.post(
+  "/tienda-auth/login",
+  requirePermission("crm.manage"),
+  handle(async (req) => tiendaAuth.loginCliente(req.body || {}))
+);
+
+router.post(
+  "/tienda-auth/perfil",
+  requireTiendaCustomer,
+  handle(async (req) => tiendaAuth.actualizarPerfil(req.user.cliente_tienda_id, req.body || {}))
+);
+
+router.get(
+  "/tienda-auth/pedidos",
+  requireTiendaCustomer,
+  handle(async (req) => tiendaAuth.obtenerPedidos(req.user.cliente_tienda_id))
 );
 
 // -------- Chatbot (administración del chatbot externo, vía N8N) --------

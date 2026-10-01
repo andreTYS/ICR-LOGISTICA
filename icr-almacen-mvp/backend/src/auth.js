@@ -215,4 +215,15 @@ function requirePermission(action) {
   };
 }
 
-module.exports = { login, requireAuth, requirePermission, can, ROLE_PERMISSIONS, hashApiToken, API_TOKEN_PREFIX, verifyApiToken };
+// Middleware: exige que el JWT ya verificado por requireAuth sea de una
+// cuenta de tienda online (tipo:'tienda', ver tiendaAuthService.emitirSesion)
+// y no un usuario interno del ERP ni un token de servicio — se encadena
+// SIEMPRE después de requireAuth, nunca solo.
+function requireTiendaCustomer(req, res, next) {
+  if (!req.user || req.user.tipo !== "tienda") {
+    return res.status(401).json({ status: "error", data: null, error: { code: "AUTH_INVALID", message: "Se requiere una sesión de cliente de tienda" } });
+  }
+  next();
+}
+
+module.exports = { login, requireAuth, requirePermission, requireTiendaCustomer, can, ROLE_PERMISSIONS, hashApiToken, API_TOKEN_PREFIX, verifyApiToken };

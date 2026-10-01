@@ -1756,7 +1756,7 @@ async function loadProducts(page = 1) {
   body.innerHTML = items.length
     ? items.map((p) => `<tr class="${TR} row-clickable" onclick="openKardex('${p.sku}')" title="Ver Kardex de ${p.sku}">
       <td class="${TD}">${productThumbHtml(p)}</td>
-      <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}${p.retornable ? ` ${badge("RETORNABLE", "ok")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
+      <td class="${TD}">${p.sku}${p.es_kit ? ` ${badge("KIT", "transferencia")}` : ""}${p.retornable ? ` ${badge("RETORNABLE", "ok")}` : ""}${p.destacado ? ` ${badge("DESTACADO", "ok")}` : ""}</td><td class="${TD}">${p.nombre}</td><td class="${TD}">${p.marca || "—"}</td>
       <td class="${TD}">${p.categoria || "—"}</td>
       <td class="${TD}">${p.tipo_control}</td><td class="${TD}">${qty(p.punto_reorden)}</td>
       <td class="${TD}">${p.precio_venta != null ? money(p.precio_venta) : "—"}</td>
@@ -1769,6 +1769,9 @@ async function loadProducts(page = 1) {
         </button>
         <button class="btn-icon" title="Editar categoría" onclick="event.stopPropagation(); editProductCategoria('${p.sku}', ${JSON.stringify(p.categoria ?? null)})">
           <svg viewBox="0 0 20 20" fill="none"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h3l1.5 2h6.5A1.5 1.5 0 0 1 17 7.5v7A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5v-9Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="btn-icon" title="${p.destacado ? "Quitar de destacados" : "Marcar como destacado (home de la tienda)"}" onclick="event.stopPropagation(); toggleProductDestacado('${p.sku}', ${p.destacado === true})">
+          <svg viewBox="0 0 20 20" fill="${p.destacado ? "currentColor" : "none"}"><path d="M10 2.5l2.3 4.9 5.2.7-3.8 3.8.9 5.4L10 14.8l-4.6 2.5.9-5.4-3.8-3.8 5.2-.7L10 2.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
         </button>
         <button class="btn-icon" title="Eliminar producto" onclick="event.stopPropagation(); deleteProduct('${p.sku}', ${JSON.stringify(p.nombre)})">
           <svg viewBox="0 0 20 20" fill="none"><path d="M4 6h12M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6m-7 0 .7 9.1a1.5 1.5 0 0 0 1.5 1.4h5.6a1.5 1.5 0 0 0 1.5-1.4L15 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1794,6 +1797,12 @@ async function editProductCategoria(sku, actual) {
   const categoria = input.trim() === "" ? null : input.trim();
   const r = await api(`/inventory/products/${encodeURIComponent(sku)}/categoria`, { method: "POST", body: JSON.stringify({ channel: "web", categoria }) });
   if (r.status === "success") { toast(`Categoría de ${sku} actualizada`); loadProducts(); }
+  else toast(r.error.message, false);
+}
+
+async function toggleProductDestacado(sku, actual) {
+  const r = await api(`/inventory/products/${encodeURIComponent(sku)}/destacado`, { method: "POST", body: JSON.stringify({ channel: "web", destacado: !actual }) });
+  if (r.status === "success") { toast(!actual ? `${sku} agregado a destacados` : `${sku} quitado de destacados`); loadProducts(); }
   else toast(r.error.message, false);
 }
 
