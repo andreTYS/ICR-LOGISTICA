@@ -40,8 +40,7 @@ function tagFor(routePath) {
 // webhook de Telegram (se autentica con su propio secret_token, no un JWT).
 const PUBLIC_ROUTES = new Set(["POST /auth/login", "GET /settings", "POST /telegram/webhook", "GET /openapi.json"]);
 
-function extractRoutes() {
-  const src = fs.readFileSync(path.join(__dirname, "routes.js"), "utf8");
+function extractRoutesFromSource(src) {
   const callRe = /router\.(get|post|patch|delete|put)\(/g;
   let m;
   const results = [];
@@ -60,6 +59,15 @@ function extractRoutes() {
     results.push({ method: m[1].toUpperCase(), routePath: pathMatch[1], permission: permMatch ? permMatch[1] : null });
   }
   return results;
+}
+
+// Cada dominio vive en su propio archivo bajo routes/ (ver routes.js) — acá
+// se leen todos para que esta introspección siga sin poder quedar
+// desactualizada, igual que antes de la separación.
+function extractRoutes() {
+  const routesDir = path.join(__dirname, "routes");
+  const files = fs.readdirSync(routesDir).filter((f) => f.endsWith(".js") && f !== "_shared.js");
+  return files.flatMap((f) => extractRoutesFromSource(fs.readFileSync(path.join(routesDir, f), "utf8")));
 }
 
 function toOpenApiPath(routePath) {
