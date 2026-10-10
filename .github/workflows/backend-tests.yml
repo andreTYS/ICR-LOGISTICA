@@ -1,0 +1,62 @@
+name: Backend tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "icr-almacen-mvp/backend/**"
+      - "icr-almacen-mvp/db/**"
+      - ".github/workflows/backend-tests.yml"
+  pull_request:
+    paths:
+      - "icr-almacen-mvp/backend/**"
+      - "icr-almacen-mvp/db/**"
+      - ".github/workflows/backend-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: icr-almacen-mvp/backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # El script "test" de package.json pasa un glob entre comillas
+          # (`node --test "test/*.test.js"`) para que lo expanda el propio
+          # test runner de Node, no la shell — ese soporte de glob recién
+          # es confiable desde Node 22; con Node 20 lo toma como un path
+          # literal y falla con "Could not find ... test/*.test.js".
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: icr-almacen-mvp/backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Correr tests (recrea la DB de test con schema.sql + seed.sql + migraciones en cada corrida)
+        run: npm test

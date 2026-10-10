@@ -5,6 +5,7 @@ const path = require("path");
 const routes = require("./routes");
 const { uploadsDir } = require("./uploads");
 const { reloadModuleAccessCache } = require("./services/moduleAccessService");
+const { runMigrations } = require("./runMigrations");
 
 const app = express();
 
@@ -33,9 +34,23 @@ app.use(express.static(path.join(__dirname, "..", "..", "frontend")));
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 const PORT = process.env.PORT || 4000;
-reloadModuleAccessCache()
-  .catch((err) => console.error("No se pudo cargar el switch de módulos al arrancar (se asume todo habilitado)", err))
-  .finally(() => {
+
+// Las migraciones corren ANTES de aceptar tráfico, y si fallan el proceso
+// no arranca — mejor un deploy que no levanta (se ve en los logs de
+// inmediato) que un backend sirviendo contra un schema a medio migrar.
+// Antes esto era un paso manual (psql a mano en el VPS); ver
+// backend/migrations/README.md.
+runMigrations()
+  .catch((err) => {
+    console.error("Fallo al migrar la base de datos al arrancar, el backend no va a levantar:", err);
+    process.exit(1);
+  })
+  .then(() =>
+    reloadModuleAccessCache().catch((err) =>
+      console.error("No se pudo cargar el switch de módulos al arrancar (se asume todo habilitado)", err)
+    )
+  )
+  .then(() => {
     app.listen(PORT, () => {
       console.log(`ICR Almacén backend escuchando en puerto ${PORT}`);
     });
