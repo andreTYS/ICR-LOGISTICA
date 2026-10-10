@@ -19,6 +19,7 @@ router.post(
       categoria: b.categoria, descripcion: b.descripcion, monto: Number(b.monto), moneda: b.moneda || null,
       fecha: b.fecha || null, proyectoCodigo: b.proyecto_codigo || null, empleadoId: b.empleado_id || null,
       comprobante: b.comprobante ? { tipo: b.comprobante.tipo, serie_numero: b.comprobante.serie_numero } : null,
+      personaTexto: b.persona_texto || null, ciudad: b.ciudad || null,
       usuarioId: req.user.usuario_id, canal: b.channel || "web",
     });
   })

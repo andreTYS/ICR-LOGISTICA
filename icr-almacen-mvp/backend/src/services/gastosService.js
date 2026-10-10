@@ -29,7 +29,7 @@ function paginationParams(page, pageSize, defaultSize, maxSize) {
 // a materiales y mano de obra); uno ligado a un empleado es un reembolso.
 // Dispara, best-effort después del commit, el asiento contable automático
 // para el evento 'expenses.register' — mismo patrón que Compras y Ventas.
-async function registrarGasto({ categoria, descripcion, monto, moneda, fecha, proyectoCodigo, empleadoId, comprobante, usuarioId, canal }) {
+async function registrarGasto({ categoria, descripcion, monto, moneda, fecha, proyectoCodigo, empleadoId, comprobante, personaTexto, ciudad, usuarioId, canal }) {
   if (!categoria || !CATEGORIAS_VALIDAS.includes(categoria)) {
     throw new AppError("SCHEMA_INVALID", `categoria debe ser una de: ${CATEGORIAS_VALIDAS.join(", ")}`, 400);
   }
@@ -53,10 +53,10 @@ async function registrarGasto({ categoria, descripcion, monto, moneda, fecha, pr
     }
 
     const r = await client.query(
-      `INSERT INTO gastos (categoria, descripcion, monto, moneda, fecha, proyecto_id, empleado_id, comprobante_tipo, comprobante_serie_numero, registrado_por)
-       VALUES ($1,$2,$3,COALESCE($4,'PEN'),COALESCE($5,CURRENT_DATE),$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO gastos (categoria, descripcion, monto, moneda, fecha, proyecto_id, empleado_id, comprobante_tipo, comprobante_serie_numero, persona_texto, ciudad, registrado_por)
+       VALUES ($1,$2,$3,COALESCE($4,'PEN'),COALESCE($5,CURRENT_DATE),$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [categoria, descripcion, monto, moneda || null, fecha || null, proyectoId, empleadoId || null,
-        comprobante?.tipo || null, comprobante?.serie_numero || null, usuarioId]
+        comprobante?.tipo || null, comprobante?.serie_numero || null, personaTexto || null, ciudad || null, usuarioId]
     );
     return { entidad: "gastos", entidadId: r.rows[0].gasto_id, valorNuevo: { categoria, monto }, gasto: r.rows[0] };
   });

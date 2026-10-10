@@ -344,11 +344,12 @@ async function getBalanceGeneral({ fechaCorte } = {}) {
 }
 
 // Control de caja real (no contable/devengado): junta el dinero que
-// efectivamente entró — cobros de hitos de contrato de Proyectos y ventas
-// de Tienda — contra el que efectivamente salió — gastos operativos y pagos
-// a proveedor — agrupado por semana o mes. Es la vista que responde
-// "cuánto entró por ambos lados y cuánto salió", para reportes periódicos
-// sin tener que sumar cuatro pantallas distintas a mano.
+// efectivamente entró — cobros de hitos de contrato de Proyectos, ventas de
+// Tienda e ingresos de caja manuales de ICR Finanzas/Caja de Obra — contra
+// el que efectivamente salió — gastos operativos y pagos a proveedor —
+// agrupado por semana o mes. Es la vista que responde "cuánto entró por
+// todos los lados y cuánto salió", para reportes periódicos sin tener que
+// sumar varias pantallas distintas a mano.
 async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
   const unidad = agrupacion === "mes" ? "month" : "week";
   const desde = fechaDesde || "1970-01-01";
@@ -360,6 +361,8 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
        FROM contrato_hitos WHERE estado='PAGADO' AND fecha_pago IS NOT NULL
        UNION ALL
        SELECT fecha_venta, 'INGRESO', 'TIENDA', monto_total FROM ventas_tienda
+       UNION ALL
+       SELECT fecha, 'INGRESO', 'CAJA', monto FROM ingresos_caja
        UNION ALL
        SELECT fecha, 'EGRESO', 'GASTOS', monto FROM gastos
        UNION ALL
@@ -378,7 +381,7 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
     const key = row.periodo.toISOString().slice(0, 10);
     if (!porPeriodo.has(key)) {
       porPeriodo.set(key, {
-        periodo: key, ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_total: 0,
+        periodo: key, ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_caja: 0, ingresos_total: 0,
         egresos_gastos: 0, egresos_compras: 0, egresos_total: 0, neto: 0,
       });
     }
@@ -386,11 +389,12 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
     const monto = Number(row.total);
     if (row.tipo === "INGRESO" && row.origen === "PROYECTOS") bucket.ingresos_proyectos += monto;
     if (row.tipo === "INGRESO" && row.origen === "TIENDA") bucket.ingresos_tienda += monto;
+    if (row.tipo === "INGRESO" && row.origen === "CAJA") bucket.ingresos_caja += monto;
     if (row.tipo === "EGRESO" && row.origen === "GASTOS") bucket.egresos_gastos += monto;
     if (row.tipo === "EGRESO" && row.origen === "COMPRAS") bucket.egresos_compras += monto;
   }
   const items = [...porPeriodo.values()].map((b) => {
-    b.ingresos_total = b.ingresos_proyectos + b.ingresos_tienda;
+    b.ingresos_total = b.ingresos_proyectos + b.ingresos_tienda + b.ingresos_caja;
     b.egresos_total = b.egresos_gastos + b.egresos_compras;
     b.neto = b.ingresos_total - b.egresos_total;
     return b;
@@ -400,13 +404,14 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
     (acc, i) => ({
       ingresos_proyectos: acc.ingresos_proyectos + i.ingresos_proyectos,
       ingresos_tienda: acc.ingresos_tienda + i.ingresos_tienda,
+      ingresos_caja: acc.ingresos_caja + i.ingresos_caja,
       ingresos_total: acc.ingresos_total + i.ingresos_total,
       egresos_gastos: acc.egresos_gastos + i.egresos_gastos,
       egresos_compras: acc.egresos_compras + i.egresos_compras,
       egresos_total: acc.egresos_total + i.egresos_total,
       neto: acc.neto + i.neto,
     }),
-    { ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_total: 0, egresos_gastos: 0, egresos_compras: 0, egresos_total: 0, neto: 0 }
+    { ingresos_proyectos: 0, ingresos_tienda: 0, ingresos_caja: 0, ingresos_total: 0, egresos_gastos: 0, egresos_compras: 0, egresos_total: 0, neto: 0 }
   );
 
   return { agrupacion: unidad === "month" ? "mes" : "semana", fecha_desde: desde, fecha_hasta: hasta, items, totales };
@@ -415,7 +420,7 @@ async function getFlujoCaja({ fechaDesde, fechaHasta, agrupacion } = {}) {
 // Ledger de caja movimiento por movimiento, con saldo acumulado — el
 // equivalente digital de la planilla manual de flujo de caja que ya llevaba
 // el negocio (fecha, quién/qué, categoría, monto, "SALDO CTA CTE"). Junta
-// las mismas 4 fuentes que getFlujoCaja, pero sin agrupar por semana/mes: es
+// las mismas 5 fuentes que getFlujoCaja, pero sin agrupar por semana/mes: es
 // la vista de "seguimiento y control" día a día que pidió el negocio, en vez
 // de asientos contables formales de debe/haber.
 async function getMovimientosCaja({ fechaDesde, fechaHasta } = {}) {
@@ -433,6 +438,12 @@ async function getMovimientosCaja({ fechaDesde, fechaHasta } = {}) {
      UNION ALL
      SELECT fecha_venta, 'INGRESO', 'Venta tienda', COALESCE('Venta ' || codigo || ' — ' || descripcion, descripcion), monto_total
      FROM ventas_tienda WHERE fecha_venta BETWEEN $1 AND $2
+     UNION ALL
+     SELECT ic.fecha, 'INGRESO', 'Ingreso de caja (' || ic.tipo || ')',
+            COALESCE('Proyecto ' || p2.codigo_proyecto || ' — ' || ic.detalle, ic.detalle), ic.monto
+     FROM ingresos_caja ic
+     LEFT JOIN proyectos p2 ON p2.proyecto_id = ic.proyecto_id
+     WHERE ic.fecha BETWEEN $1 AND $2
      UNION ALL
      SELECT fecha, 'EGRESO', categoria, descripcion, monto FROM gastos WHERE fecha BETWEEN $1 AND $2
      UNION ALL

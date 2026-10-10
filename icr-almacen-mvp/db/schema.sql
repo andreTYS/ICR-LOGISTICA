@@ -782,8 +782,34 @@ CREATE TABLE gastos (
     empleado_id                UUID REFERENCES empleados(empleado_id),
     comprobante_tipo           TEXT CHECK (comprobante_tipo IN ('FACTURA','BOLETA','RECIBO')),
     comprobante_serie_numero   TEXT,
+    -- persona_texto/ciudad: libres (no FKs) a propósito — los llena ICR
+    -- Finanzas (app de Caja de Obra) desde el OCR de un comprobante de campo
+    -- (Yape/boleta/transferencia), donde la persona casi nunca es un
+    -- empleado real de empleados ni el gasto tiene por qué estar ligado a un
+    -- proyecto con ciudad propia.
+    persona_texto              TEXT,
+    ciudad                     TEXT,
     registrado_por             UUID NOT NULL REFERENCES usuarios(usuario_id),
     created_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ingresos de caja manuales (ICR Finanzas / Caja de Obra): dinero que entra
+-- en efectivo o por Yape/transferencia sin pasar por un hito de contrato
+-- (Proyectos) ni una venta de mostrador (Tienda) — p.ej. un adelanto de obra
+-- cobrado en campo. Es la contraparte de "gastos" para el lado de ingresos:
+-- misma forma (tipo libre controlado por CHECK, proyecto opcional, auditado
+-- por registrado_por), y entra a getFlujoCaja/getMovimientosCaja como una
+-- fuente más junto a contrato_hitos y ventas_tienda.
+CREATE TABLE ingresos_caja (
+    ingreso_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo             TEXT NOT NULL CHECK (tipo IN ('OBRA_PROYECTO','VENTA','OTRO')),
+    detalle          TEXT NOT NULL,
+    monto            NUMERIC(14,2) NOT NULL CHECK (monto > 0),
+    moneda           TEXT DEFAULT 'PEN',
+    fecha            DATE NOT NULL DEFAULT CURRENT_DATE,
+    proyecto_id      UUID REFERENCES proyectos(proyecto_id),
+    registrado_por   UUID NOT NULL REFERENCES usuarios(usuario_id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------- CONTABILIDAD ----------
