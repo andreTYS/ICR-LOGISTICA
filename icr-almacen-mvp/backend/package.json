@@ -8,6 +8,7 @@
     "dev": "node --watch src/index.js",
     "seed:demo": "node scripts/seed-demo.js",
     "import:productos-tienda": "node scripts/import-productos-tienda.js",
+    "migrate": "node -e \"require('./src/runMigrations').runMigrations().then(() => process.exit(0)).catch((err) => { console.error(err); process.exit(1); })\"",
     "test": "PGDATABASE=icr_almacen_test node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "express-rate-limit": "^8.6.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
+    "node-pg-migrate": "^9.0.0",
     "nodemailer": "^10.0.10",
     "pdfkit": "^0.20.2",
     "pg": "^8.12.0",

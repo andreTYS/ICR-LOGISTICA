@@ -34,6 +34,12 @@ async function resetTestDatabase() {
   await client.query(schema);
   await client.query(seed);
   await client.end();
+
+  // Mismo camino que producción: schema.sql da el estado base, las
+  // migraciones (migrations/) aplican lo que vino después — así la suite
+  // también prueba que cada migración nueva corre limpia.
+  const { runMigrations } = require("../src/runMigrations");
+  await runMigrations();
 }
 
 module.exports = { resetTestDatabase };
