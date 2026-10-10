@@ -12,6 +12,7 @@ const MODULES = [
   { code: "projects", label: "Proyectos" },
   { code: "sales", label: "Ventas" },
   { code: "expenses", label: "Gastos" },
+  { code: "income", label: "Ingresos de caja" },
   { code: "accounting", label: "Contabilidad" },
   { code: "rrhh", label: "RR.HH." },
   { code: "payables", label: "Cuentas por pagar" },
