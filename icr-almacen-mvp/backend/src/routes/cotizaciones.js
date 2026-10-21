@@ -23,6 +23,19 @@ router.post(
 );
 
 router.post(
+  "/quotes/:codigo",
+  requirePermission("quotes.manage"),
+  handle(async (req) => {
+    const b = req.body;
+    return cotizaciones.editarCotizacion({
+      codigo: req.params.codigo, clienteRuc: b.cliente_ruc || null, proyectoCodigo: b.proyecto_codigo !== undefined ? b.proyecto_codigo : undefined,
+      moneda: b.moneda || null, fechaEmision: b.fecha_emision || null, validezDias: b.validez_dias ? Number(b.validez_dias) : null,
+      items: b.items || [], usuarioId: req.user.usuario_id, canal: b.channel || "web",
+    });
+  })
+);
+
+router.post(
   "/quotes/:codigo/status",
   requirePermission("quotes.manage"),
   handle(async (req) => cotizaciones.actualizarEstado({ codigo: req.params.codigo, estado: req.body.estado, usuarioId: req.user.usuario_id, canal: req.body?.channel || "web" }))

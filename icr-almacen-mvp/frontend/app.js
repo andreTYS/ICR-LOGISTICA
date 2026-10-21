@@ -3679,12 +3679,16 @@ async function loadCotizaciones(page) {
   renderPager("quotes-pager", r.data, (p) => loadCotizaciones(p));
 }
 
+let currentQuote = null;
+let quoteEditItems = null; // null = modo lectura; array = editando (borrador de ítems)
+
 async function openQuoteModal(codigo) {
   currentQuoteCodigo = codigo;
+  quoteEditItems = null;
   const modal = document.getElementById("quote-modal");
   document.getElementById("quote-modal-title").textContent = codigo;
   document.getElementById("quote-modal-subtitle").textContent = "Cargando…";
-  document.getElementById("quote-items-body").innerHTML = `<tr><td colspan="4" class="${TD_EMPTY}">Cargando…</td></tr>`;
+  document.getElementById("quote-items-body").innerHTML = `<tr><td colspan="5" class="${TD_EMPTY}">Cargando…</td></tr>`;
   document.getElementById("quote-total-line").textContent = "";
   document.getElementById("quote-convert-result").innerHTML = "";
   modal.classList.remove("hidden");
@@ -3695,6 +3699,7 @@ async function openQuoteModal(codigo) {
     return;
   }
   const c = r.data;
+  currentQuote = c;
   currentQuoteContacto = c.cliente_contacto || null;
   currentQuoteTelefono = c.cliente_telefono || null;
   document.getElementById("quote-modal-subtitle").innerHTML = `${c.cliente_nombre || "—"} ${c.codigo_proyecto ? `· Proyecto ${c.codigo_proyecto}` : ""} · ${quoteStatusBadge(c.estado)}`;
@@ -3705,19 +3710,98 @@ async function openQuoteModal(codigo) {
   actions.querySelector("button[onclick=\"setQuoteStatus('ACEPTADA')\"]").classList.toggle("hidden", isTerminal || c.estado === "ACEPTADA");
   actions.querySelector("button[onclick=\"setQuoteStatus('RECHAZADA')\"]").classList.toggle("hidden", isTerminal);
   actions.querySelector("button[onclick=\"convertQuote()\"]").classList.toggle("hidden", c.estado !== "ACEPTADA");
+  document.getElementById("quote-edit-btn").classList.toggle("hidden", c.estado === "CONVERTIDA");
 
+  renderQuoteItemsReadonly(c);
+}
+
+function renderQuoteItemsReadonly(c) {
   document.getElementById("quote-items-body").innerHTML = (c.items || []).length
     ? c.items.map((it) => `<tr class="${TR}">
         <td class="${TD}">${it.descripcion}</td><td class="${TD}">${it.cantidad}</td>
-        <td class="${TD}">${money(it.precio_unitario)}</td><td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td>
+        <td class="${TD}">${money(it.precio_unitario)}</td><td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td><td class="${TD}"></td>
       </tr>`).join("")
-    : emptyRow(4, "Sin ítems.", "inbox");
+    : emptyRow(5, "Sin ítems.", "inbox");
   document.getElementById("quote-total-line").textContent = `Total: ${c.moneda || "PEN"} ${money(c.total)}`;
+}
+
+// Edición de ítems de una cotización ya creada (BORRADOR/ENVIADA/ACEPTADA/
+// RECHAZADA — cualquiera menos CONVERTIDA, bloqueada por el backend). Solo
+// los ítems son editables acá; cliente y proyecto se mantienen igual
+// (POST /quotes/:codigo los deja sin cambios si no se envían).
+function startEditQuote() {
+  if (!currentQuote) return;
+  quoteEditItems = (currentQuote.items || []).map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), sku: it.sku || null }));
+  document.getElementById("quote-edit-add-row").classList.remove("hidden");
+  document.getElementById("quote-edit-save-row").classList.remove("hidden");
+  renderQuoteItemsEditable();
+}
+
+function cancelEditQuote() {
+  quoteEditItems = null;
+  document.getElementById("quote-edit-add-row").classList.add("hidden");
+  document.getElementById("quote-edit-save-row").classList.add("hidden");
+  renderQuoteItemsReadonly(currentQuote);
+}
+
+function renderQuoteItemsEditable() {
+  const body = document.getElementById("quote-items-body");
+  body.innerHTML = quoteEditItems.length
+    ? quoteEditItems.map((it, i) => `<tr class="${TR}">
+        <td class="${TD}">${it.descripcion}</td>
+        <td class="${TD}"><input type="number" min="0" step="0.01" class="field" style="width:80px" value="${it.cantidad}" onchange="updateQuoteEditItem(${i}, 'cantidad', this.value)" /></td>
+        <td class="${TD}"><input type="number" min="0" step="0.01" class="field" style="width:100px" value="${it.precio_unitario}" onchange="updateQuoteEditItem(${i}, 'precio_unitario', this.value)" /></td>
+        <td class="${TD}">${money(it.cantidad * it.precio_unitario)}</td>
+        <td class="${TD}"><button type="button" class="btn-secondary px-2 py-1 text-xs" onclick="removeQuoteEditItem(${i})">Quitar</button></td>
+      </tr>`).join("")
+    : emptyRow(5, "Agrega al menos un ítem.", "inbox");
+  const total = quoteEditItems.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+  document.getElementById("quote-total-line").textContent = `Total: ${currentQuote.moneda || "PEN"} ${money(total)}`;
+}
+
+function updateQuoteEditItem(i, campo, valor) {
+  quoteEditItems[i][campo] = Number(valor || 0);
+  renderQuoteItemsEditable();
+}
+
+function removeQuoteEditItem(i) {
+  quoteEditItems.splice(i, 1);
+  renderQuoteItemsEditable();
+}
+
+function addQuoteEditItem() {
+  const descripcion = document.getElementById("quote-edit-descripcion").value.trim();
+  const cantidad = Number(document.getElementById("quote-edit-cantidad").value || 0);
+  const precio_unitario = Number(document.getElementById("quote-edit-precio").value || 0);
+  if (!descripcion || cantidad <= 0 || precio_unitario < 0) { toast("Ingresa descripción, cantidad (>0) y precio unitario (>=0) del ítem", false); return; }
+  quoteEditItems.push({ descripcion, cantidad, precio_unitario, sku: null });
+  document.getElementById("quote-edit-descripcion").value = "";
+  document.getElementById("quote-edit-cantidad").value = "";
+  document.getElementById("quote-edit-precio").value = "";
+  renderQuoteItemsEditable();
+}
+
+async function saveQuoteEdit() {
+  if (!currentQuoteCodigo || !quoteEditItems) return;
+  if (quoteEditItems.length === 0) { toast("Agrega al menos un ítem", false); return; }
+  const r = await api(`/quotes/${encodeURIComponent(currentQuoteCodigo)}`, { method: "POST", body: JSON.stringify({ channel: "web", items: quoteEditItems }) });
+  if (r.status === "success") {
+    toast("Cotización actualizada");
+    quoteEditItems = null;
+    document.getElementById("quote-edit-add-row").classList.add("hidden");
+    document.getElementById("quote-edit-save-row").classList.add("hidden");
+    openQuoteModal(currentQuoteCodigo);
+    loadCotizaciones(1);
+  } else {
+    toast(r.error.message, false);
+  }
 }
 
 function closeQuoteModal() {
   document.getElementById("quote-modal").classList.add("hidden");
   currentQuoteCodigo = null;
+  currentQuote = null;
+  quoteEditItems = null;
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeQuoteModal(); });
 

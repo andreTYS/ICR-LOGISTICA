@@ -322,6 +322,12 @@ Catorceava tanda, junto con avance de proyectos, Tienda y Flujo de Caja: ampliac
   - El KPI del Panel que mostraba "Asientos contables en borrador" (un concepto que ya no aparece en el menú) se reemplazó por **"Saldo de caja acumulado"**, tomado del mismo `getMovimientosCaja` sin filtro de fecha — el número que de verdad responde "cuánto hay en caja ahora", en vez de un conteo de borradores contables que el negocio nunca revisaba.
   - Cubierto por 2 tests nuevos en `cashFlow.test.js` (junta las 4 fuentes con saldo acumulado correcto; fuera de rango no trae nada). Verificado end-to-end con Playwright contra datos reales: el ledger de movimientos coincide centavo a centavo con los totales de `getFlujoCaja` ya probados.
 
+- **Veintiochoava tanda — editar una cotización ya creada** (reportado: "no permite editar cotizaciones" — hasta ahora, un ítem con la cantidad o el precio mal tipeado solo se podía corregir borrando todo y creando una cotización nueva): nueva `cotizacionesService.editarCotizacion()` y `POST /quotes/:codigo`, mismo permiso `quotes.manage` que crear.
+  - Reemplaza los ítems completos (se borran y se insertan de nuevo, con las mismas reglas que al crear: SKU opcional enlazado al catálogo, cantidad entera obligatoria si el producto es de unidad discreta `UND`) y opcionalmente cliente/proyecto/moneda/fecha de emisión/validez — cualquier campo que no se envíe queda igual que estaba.
+  - Bloqueada únicamente si la cotización ya quedó `CONVERTIDA` en un contrato de Ventas (`QUOTE_ALREADY_CONVERTED`), igual criterio que cambiar su estado.
+  - En el panel: botón **Editar** en el detalle de la cotización (oculto si ya está `CONVERTIDA`) que vuelve editables la cantidad y el precio de cada ítem en la misma tabla, con fila para agregar uno nuevo y botón para quitar — "Guardar cambios" o "Cancelar".
+  - Cubierto por 3 tests nuevos en `cotizaciones.test.js` (reemplaza ítems y recalcula el total, rechazo sin ítems, rechazo si ya está `CONVERTIDA`) y verificado end-to-end con Playwright contra el backend real: crear una cotización, editarla subiendo una cantidad y agregando un ítem nuevo, y confirmar contra la API que el total recalculado es el correcto.
+
 ### N8N (automatización de comandos de escritura vía workflows)
 
 La automatización conversacional de movimientos vía Telegram + N8N (Fase 4 del roadmap) **no se construye dentro de este repositorio** — requiere tu propia instancia de N8N, que no existe en este entorno de desarrollo. Lo que sí está listo desde el día uno es el contrato para conectarla:

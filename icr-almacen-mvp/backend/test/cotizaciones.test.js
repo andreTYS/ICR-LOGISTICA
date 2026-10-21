@@ -97,6 +97,38 @@ test("convertir una cotización ACEPTADA crea un contrato de Ventas con el monto
   );
 });
 
+test("editar una cotización reemplaza sus ítems y recalcula el total", async () => {
+  const { cotizacion } = await cotizaciones.crearCotizacion({ clienteRuc: CLIENTE_RUC, items: ITEMS, usuarioId: VENTAS_USER, canal: "web" });
+  await cotizaciones.editarCotizacion({
+    codigo: cotizacion.codigo,
+    items: [{ descripcion: "Panel solar 550W x30", cantidad: 30, precio_unitario: 700 }],
+    usuarioId: VENTAS_USER, canal: "web",
+  });
+  const detalle = await cotizaciones.getCotizacion(cotizacion.codigo);
+  assert.equal(detalle.items.length, 1);
+  assert.equal(detalle.total, 30 * 700);
+});
+
+test("editar una cotización sin ítems se rechaza", async () => {
+  const { cotizacion } = await cotizaciones.crearCotizacion({ clienteRuc: CLIENTE_RUC, items: ITEMS, usuarioId: VENTAS_USER, canal: "web" });
+  await assert.rejects(
+    cotizaciones.editarCotizacion({ codigo: cotizacion.codigo, items: [], usuarioId: VENTAS_USER, canal: "web" }),
+    (err) => err.code === "SCHEMA_INVALID"
+  );
+});
+
+test("editar una cotización ya convertida se rechaza", async () => {
+  const { cotizacion } = await cotizaciones.crearCotizacion({ clienteRuc: CLIENTE_RUC, proyectoCodigo: PROYECTO_CODIGO, items: ITEMS, usuarioId: VENTAS_USER, canal: "web" });
+  await cotizaciones.actualizarEstado({ codigo: cotizacion.codigo, estado: "ENVIADA", usuarioId: VENTAS_USER, canal: "web" });
+  await cotizaciones.actualizarEstado({ codigo: cotizacion.codigo, estado: "ACEPTADA", usuarioId: VENTAS_USER, canal: "web" });
+  await cotizaciones.convertirAContrato({ codigo: cotizacion.codigo, usuarioId: VENTAS_USER, canal: "web" });
+
+  await assert.rejects(
+    cotizaciones.editarCotizacion({ codigo: cotizacion.codigo, items: ITEMS, usuarioId: VENTAS_USER, canal: "web" }),
+    (err) => err.code === "QUOTE_ALREADY_CONVERTED"
+  );
+});
+
 test("el listado de cotizaciones pagina y filtra por estado", async () => {
   const r = await cotizaciones.listCotizaciones({ estado: "BORRADOR" });
   assert.ok(r.items.every((c) => c.estado === "BORRADOR"));

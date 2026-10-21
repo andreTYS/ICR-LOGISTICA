@@ -67,6 +67,69 @@ async function crearCotizacion({ clienteRuc, proyectoCodigo, moneda, fechaEmisio
   });
 }
 
+// Reemplaza cliente/proyecto/moneda/fechas e ítems de una cotización que
+// todavía no se convirtió en contrato — ej. el cliente pidió un ítem más o
+// un descuento antes de aceptarla. Los ítems se reemplazan completos (se
+// borran y se insertan de nuevo), igual que hace el Cotizador ICR al editar
+// con clave: más simple que calcular un diff, y no hay historial de ítems
+// que preservar (el total ya recalculado es lo único que importa).
+async function editarCotizacion({ codigo, clienteRuc, proyectoCodigo, moneda, fechaEmision, validezDias, items, usuarioId, canal }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new AppError("SCHEMA_INVALID", "al menos un ítem es obligatorio", 400);
+  }
+  return withAuditedTransaction("quotes.edit", usuarioId, canal, async (client) => {
+    const cot = await client.query("SELECT * FROM cotizaciones WHERE codigo=$1 FOR UPDATE", [codigo]);
+    if (cot.rows.length === 0) throw new AppError("QUOTE_NOT_FOUND", `Cotización '${codigo}' no existe`, 404);
+    if (cot.rows[0].estado === "CONVERTIDA") {
+      throw new AppError("QUOTE_ALREADY_CONVERTED", `La cotización '${codigo}' ya fue convertida en contrato, no se puede editar`, 400);
+    }
+    const cotizacionId = cot.rows[0].cotizacion_id;
+
+    let clienteId = cot.rows[0].cliente_id;
+    if (clienteRuc) {
+      const cli = await client.query("SELECT cliente_id FROM clientes WHERE (ruc=$1 OR dni=$1 OR LOWER(razon_social)=LOWER($1)) AND activo=true", [clienteRuc]);
+      if (cli.rows.length === 0) throw new AppError("CLIENT_NOT_FOUND", `Cliente con RUC/DNI '${clienteRuc}' no existe o está inactivo`, 404);
+      clienteId = cli.rows[0].cliente_id;
+    }
+
+    let proyectoId = cot.rows[0].proyecto_id;
+    if (proyectoCodigo !== undefined) {
+      if (proyectoCodigo === null) {
+        proyectoId = null;
+      } else {
+        const pr = await client.query("SELECT proyecto_id FROM proyectos WHERE codigo_proyecto=$1 AND activo=true", [proyectoCodigo]);
+        if (pr.rows.length === 0) throw new AppError("PROJECT_NOT_FOUND", `Proyecto '${proyectoCodigo}' no existe o está inactivo`, 404);
+        proyectoId = pr.rows[0].proyecto_id;
+      }
+    }
+
+    await client.query(
+      `UPDATE cotizaciones SET cliente_id=$1, proyecto_id=$2, moneda=COALESCE($3,moneda), fecha_emision=COALESCE($4,fecha_emision), validez_dias=COALESCE($5,validez_dias)
+       WHERE cotizacion_id=$6`,
+      [clienteId, proyectoId, moneda || null, fechaEmision || null, validezDias || null, cotizacionId]
+    );
+
+    await client.query("DELETE FROM cotizacion_items WHERE cotizacion_id=$1", [cotizacionId]);
+    for (const [i, it] of items.entries()) {
+      if (!it.descripcion || !it.cantidad || it.cantidad <= 0 || it.precio_unitario == null || it.precio_unitario < 0) {
+        throw new AppError("SCHEMA_INVALID", "cada ítem requiere descripcion, cantidad (>0) y precio_unitario (>=0)", 400);
+      }
+      let productoId = null;
+      if (it.sku) {
+        const producto = await findProductBySku(client, it.sku);
+        requireIntegerIfUnidadDiscreta(producto, it.cantidad);
+        productoId = producto.producto_id;
+      }
+      await client.query(
+        `INSERT INTO cotizacion_items (cotizacion_id, producto_id, descripcion, cantidad, precio_unitario, orden) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [cotizacionId, productoId, it.descripcion, it.cantidad, it.precio_unitario, i + 1]
+      );
+    }
+
+    return { entidad: "cotizaciones", entidadId: cotizacionId, valorNuevo: { codigo, items: items.length }, cotizacion: cot.rows[0] };
+  });
+}
+
 async function actualizarEstado({ codigo, estado, usuarioId, canal }) {
   if (!ESTADOS_VALIDOS.includes(estado) || estado === "CONVERTIDA") {
     throw new AppError("SCHEMA_INVALID", `estado debe ser uno de: BORRADOR, ENVIADA, ACEPTADA, RECHAZADA`, 400);
@@ -152,4 +215,4 @@ async function getCotizacion(codigo) {
   return { ...cotizacion, items: itemsR.rows, total: totalCotizacion(itemsR.rows) };
 }
 
-module.exports = { crearCotizacion, actualizarEstado, convertirAContrato, listCotizaciones, getCotizacion };
+module.exports = { crearCotizacion, editarCotizacion, actualizarEstado, convertirAContrato, listCotizaciones, getCotizacion };
