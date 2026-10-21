@@ -22,25 +22,18 @@ exports.up = (pgm) => {
     ALTER TABLE cotizacion_items ADD COLUMN IF NOT EXISTS producto_id UUID REFERENCES productos(producto_id);
   `);
 
-  // --- e40c887: 3 CHECK de formato/validación que faltaban ---
-  pgm.sql(`
-    DO $$ BEGIN
-      ALTER TABLE plan_cuentas ADD CONSTRAINT plan_cuentas_codigo_formato CHECK (codigo ~ '^[0-9]+(\\.[0-9]+)*$');
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END $$;
-  `);
-  pgm.sql(`
-    DO $$ BEGIN
-      ALTER TABLE parametros_fiscales ADD CONSTRAINT parametros_fiscales_valor_no_negativo CHECK (valor >= 0);
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END $$;
-  `);
-  pgm.sql(`
-    DO $$ BEGIN
-      ALTER TABLE reglas_imputacion ADD CONSTRAINT reglas_imputacion_evento_formato CHECK (evento ~ '^[a-zA-Z][a-zA-Z0-9_.]*$');
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END $$;
-  `);
+  // --- e40c887 también traía 3 CHECK de formato (plan_cuentas.codigo,
+  // parametros_fiscales.valor, reglas_imputacion.evento) que en el primer
+  // intento de este backfill tumbaron el backend entero: producción ya
+  // tiene filas en plan_cuentas con un codigo que no matchea
+  // '^[0-9]+(\.[0-9]+)*$' (ver incidente — el backend quedó en loop de
+  // reinicio porque node-pg-migrate corre todo el up() en una sola
+  // transacción, y un ALTER que falla revierte TODO, incluido producto_id).
+  // Se sacan los 3 de acá a propósito: son validación extra, no arreglan
+  // ningún bug reportado, y no está probado que los datos reales de
+  // parametros_fiscales/reglas_imputacion los cumplan tampoco. Quedan
+  // pendientes como su propia migración, después de limpiar/revisar los
+  // datos existentes contra cada regex en production.
 
   // --- Carpeta de Drive propia por proyecto ---
   pgm.sql(`
