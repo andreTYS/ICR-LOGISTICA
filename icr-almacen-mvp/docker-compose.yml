@@ -64,6 +64,11 @@ services:
       - traefik_public
     labels:
       - "traefik.enable=true"
+      # Debe ser el nombre REAL de la red de Docker (traefik-network, la del
+      # Traefik activo traefik-n0do) — el contenedor tiene dos redes
+      # (icr_internal + esta), así que Traefik necesita el nombre explícito
+      # para saber cuál usar.
+      - "traefik.docker.network=traefik-network"
       - "traefik.http.routers.icr-almacen.rule=Host(`${DOMAIN:-almacen.icr.example.com}`)"
       - "traefik.http.routers.icr-almacen.entrypoints=websecure"
       - "traefik.http.routers.icr-almacen.tls.certresolver=letsencrypt"
@@ -83,6 +88,8 @@ networks:
   icr_internal:
     external: true
   traefik_public:
-    name: n8n_default
+    name: traefik-network
     external: true
-    # Debe coincidir con el nombre de la red externa que ya usa Traefik en el VPS
+    # Debe coincidir con el nombre de la red externa que ya usa el Traefik
+    # activo en el VPS (proyecto traefik-n0do, no el de n8n_default — ese
+    # quedó huérfano, sin red real conectada)
