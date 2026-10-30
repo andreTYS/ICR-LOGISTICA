@@ -27,6 +27,7 @@ router.post(
     const b = req.body;
     return settings.setEmpresaInfo({
       razonSocial: b.razon_social, ruc: b.ruc, direccion: b.direccion, telefono: b.telefono,
+      correo: b.correo, banco: b.banco, numeroCuenta: b.numero_cuenta, cci: b.cci,
     });
   })
 );

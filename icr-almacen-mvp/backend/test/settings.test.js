@@ -18,18 +18,22 @@ const settings = require("../src/services/settingsService");
 test("getSettings sin configurar devuelve empresa con campos en null", async () => {
   const r = await settings.getSettings();
   assert.equal(r.logo_url, null);
-  assert.deepEqual(r.empresa, { razon_social: null, ruc: null, direccion: null, telefono: null });
+  assert.deepEqual(r.empresa, {
+    razon_social: null, ruc: null, direccion: null, telefono: null, correo: null, banco: null, numero_cuenta: null, cci: null,
+  });
 });
 
 test("setEmpresaInfo guarda los campos y getSettings los refleja", async () => {
   const r = await settings.setEmpresaInfo({
     razonSocial: "Inversiones ICR S.A.C.", ruc: "20605309489", direccion: "Av. Ejemplo 123, Arequipa", telefono: "054-123456",
+    correo: "proyectos@inversionesicr.com", banco: "BCP", numeroCuenta: "123456789", cci: "00212300123456789012",
   });
   assert.equal(r.razon_social, "Inversiones ICR S.A.C.");
 
   const settingsResult = await settings.getSettings();
   assert.deepEqual(settingsResult.empresa, {
     razon_social: "Inversiones ICR S.A.C.", ruc: "20605309489", direccion: "Av. Ejemplo 123, Arequipa", telefono: "054-123456",
+    correo: "proyectos@inversionesicr.com", banco: "BCP", numero_cuenta: "123456789", cci: "00212300123456789012",
   });
 });
 

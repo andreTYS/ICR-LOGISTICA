@@ -5033,6 +5033,10 @@ async function loadEmpresaSettings() {
   form.ruc.value = empresa.ruc || "";
   form.telefono.value = empresa.telefono || "";
   form.direccion.value = empresa.direccion || "";
+  form.correo.value = empresa.correo || "";
+  form.banco.value = empresa.banco || "";
+  form.numero_cuenta.value = empresa.numero_cuenta || "";
+  form.cci.value = empresa.cci || "";
 }
 
 document.getElementById("form-empresa").addEventListener("submit", async (e) => {
@@ -5041,6 +5045,8 @@ document.getElementById("form-empresa").addEventListener("submit", async (e) => 
   const payload = {
     razon_social: f.get("razon_social") || null, ruc: f.get("ruc") || null,
     telefono: f.get("telefono") || null, direccion: f.get("direccion") || null,
+    correo: f.get("correo") || null, banco: f.get("banco") || null,
+    numero_cuenta: f.get("numero_cuenta") || null, cci: f.get("cci") || null,
   };
   setFormLoading(e.target, true);
   try {

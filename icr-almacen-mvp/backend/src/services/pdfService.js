@@ -1,10 +1,45 @@
+const fs = require("fs");
+const path = require("path");
 const PDFDocument = require("pdfkit");
+const { uploadsDir } = require("../uploads");
 
 // Paleta compartida con el resto del panel (#00004C / #000073 / #00B7C2)
 const COLORS = { navy: "#00004C", text: "#1e293b", muted: "#64748b", line: "#cbd5e1", zebra: "#f1f5f9" };
 
-function crearDocumento() {
-  return new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
+// Fondo de página (franjas superior/inferior + textura) para el PDF de
+// cotizaciones, con el formato de marca que ya usa el equipo de ventas —
+// extraído de una cotización real (ver assets/cotizacion-fondo.png).
+const FONDO_COTIZACION = path.join(__dirname, "..", "..", "assets", "cotizacion-fondo.png");
+
+/** Dibuja el fondo a página completa (A4) — llamarlo ANTES de cualquier otro contenido. */
+function renderFondoCotizacion(doc) {
+  doc.image(FONDO_COTIZACION, 0, 0, { width: doc.page.width, height: doc.page.height });
+}
+
+// Trae la foto de un producto como Buffer para incrustarla en el PDF — local
+// (/uploads/..., la mayoría) vía disco, o una URL externa vía fetch. Nunca
+// lanza: una foto que no carga deja esa celda en blanco en vez de romper
+// todo el documento (puede ser un archivo borrado, una URL caída, un
+// formato que PDFKit no soporta, etc.).
+async function cargarImagenProducto(url) {
+  if (!url) return null;
+  try {
+    if (url.startsWith("/uploads/")) {
+      return await fs.promises.readFile(path.join(uploadsDir, path.basename(url)));
+    }
+    if (/^https?:\/\//.test(url)) {
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      return Buffer.from(await resp.arrayBuffer());
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function crearDocumento({ margins } = {}) {
+  return new PDFDocument({ size: "A4", margins: margins || { top: 50, bottom: 50, left: 50, right: 50 }, bufferPages: true });
 }
 
 // `empresa` es opcional (viene de settingsService.getSettings().empresa):
@@ -96,15 +131,21 @@ function renderPiePagina(doc) {
   }
 }
 
-function finalizarBuffer(doc) {
+// `sinPiePagina`: el PDF de cotizaciones ya trae su propio pie de marca
+// (parte del fondo, franja navy con contacto) — el "Página X de Y" genérico
+// quedaría encima, ilegible sobre esa franja.
+function finalizarBuffer(doc, { sinPiePagina = false } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    renderPiePagina(doc);
+    if (!sinPiePagina) renderPiePagina(doc);
     doc.end();
   });
 }
 
-module.exports = { crearDocumento, renderEncabezado, renderInfoBlock, renderTabla, renderTotalLine, finalizarBuffer, COLORS };
+module.exports = {
+  crearDocumento, renderEncabezado, renderInfoBlock, renderTabla, renderTotalLine, finalizarBuffer, COLORS,
+  renderFondoCotizacion, cargarImagenProducto,
+};

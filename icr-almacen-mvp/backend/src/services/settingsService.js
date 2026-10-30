@@ -11,6 +11,13 @@ const EMPRESA_KEYS = {
   ruc: "EMPRESA_RUC",
   direccion: "EMPRESA_DIRECCION",
   telefono: "EMPRESA_TELEFONO",
+  correo: "EMPRESA_CORREO",
+  // Para el bloque "Razón social / Banco / N° de cuenta / CCI" del pie del
+  // PDF de cotizaciones — opcionales, igual que el resto: sin configurar no
+  // aparecen, nunca rompen el documento.
+  banco: "EMPRESA_BANCO",
+  numero_cuenta: "EMPRESA_NUMERO_CUENTA",
+  cci: "EMPRESA_CCI",
 };
 
 async function getSettings() {
@@ -34,8 +41,11 @@ async function setLogoUrl(url) {
   return { logo_url: url };
 }
 
-async function setEmpresaInfo({ razonSocial, ruc, direccion, telefono }) {
-  const values = { razon_social: razonSocial, ruc, direccion, telefono };
+async function setEmpresaInfo({ razonSocial, ruc, direccion, telefono, correo, banco, numeroCuenta, cci }) {
+  const values = {
+    razon_social: razonSocial, ruc, direccion, telefono, correo,
+    banco, numero_cuenta: numeroCuenta, cci,
+  };
   for (const [field, key] of Object.entries(EMPRESA_KEYS)) {
     if (values[field] === undefined) continue;
     await pool.query(

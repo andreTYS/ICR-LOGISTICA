@@ -201,17 +201,27 @@ async function listCotizaciones({ estado, page, pageSize } = {}) {
 
 async function getCotizacion(codigo) {
   const coR = await pool.query(
-    `SELECT co.*, c.razon_social AS cliente_nombre, c.ruc AS cliente_ruc, c.contacto AS cliente_contacto, c.telefono AS cliente_telefono, pr.codigo_proyecto
+    `SELECT co.*, c.razon_social AS cliente_nombre, c.ruc AS cliente_ruc, c.contacto AS cliente_contacto, c.telefono AS cliente_telefono,
+            pr.codigo_proyecto, u.nombre_completo AS responsable_nombre, u.email AS responsable_email
      FROM cotizaciones co
      LEFT JOIN clientes c ON c.cliente_id = co.cliente_id
      LEFT JOIN proyectos pr ON pr.proyecto_id = co.proyecto_id
+     LEFT JOIN usuarios u ON u.usuario_id = co.responsable_id
      WHERE co.codigo = $1`,
     [codigo]
   );
   if (coR.rows.length === 0) throw new AppError("QUOTE_NOT_FOUND", `Cotización '${codigo}' no existe`, 404);
   const cotizacion = coR.rows[0];
 
-  const itemsR = await pool.query("SELECT * FROM cotizacion_items WHERE cotizacion_id=$1 ORDER BY orden", [cotizacion.cotizacion_id]);
+  // p.imagen_url/p.sku solo cuando el ítem viene del catálogo (producto_id no
+  // nulo) — un ítem de texto libre no tiene foto, el PDF deja esa celda en blanco.
+  const itemsR = await pool.query(
+    `SELECT ci.*, p.imagen_url AS producto_imagen_url, p.sku AS producto_sku
+     FROM cotizacion_items ci
+     LEFT JOIN productos p ON p.producto_id = ci.producto_id
+     WHERE ci.cotizacion_id=$1 ORDER BY ci.orden`,
+    [cotizacion.cotizacion_id]
+  );
   return { ...cotizacion, items: itemsR.rows, total: totalCotizacion(itemsR.rows) };
 }
 
