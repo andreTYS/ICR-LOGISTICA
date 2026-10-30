@@ -287,7 +287,7 @@ async function getOrdenCompra(numero) {
   const oc = ocR.rows[0];
 
   const itemsR = await pool.query(
-    `SELECT oci.*, p.sku, p.nombre AS producto_nombre,
+    `SELECT oci.*, p.sku, p.nombre AS producto_nombre, p.imagen_url AS producto_imagen_url,
             (oci.cantidad_pedida - oci.cantidad_recibida) AS cantidad_pendiente
      FROM orden_compra_items oci
      JOIN productos p ON p.producto_id = oci.producto_id
